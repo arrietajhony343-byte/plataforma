@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Evitar scroll horizontal y problemas de zoom en móvil */
+html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+    -webkit-text-size-adjust: 100%;
+}
+
+/* Asegurar que el contenido principal no cause overflow */
+#app {
+    overflow-x: hidden;
+    max-width: 100vw;
+}
