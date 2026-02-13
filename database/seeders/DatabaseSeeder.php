@@ -38,5 +38,12 @@ class DatabaseSeeder extends Seeder
             'email' => 'estudiante@colegio.com',
         ]);
         $estudiante->assignRole('estudiante');
+
+        // Crear padre de ejemplo
+        $padre = User::factory()->create([
+            'name' => 'María López',
+            'email' => 'padre@colegio.com',
+        ]);
+        $padre->assignRole('padre');
     }
 }

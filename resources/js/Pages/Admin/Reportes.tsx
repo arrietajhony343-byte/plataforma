@@ -1,14 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head } from '@inertiajs/react';
 import { useState } from 'react';
-
-const menuItems = [
-    { icon: '📊', label: 'Dashboard', href: '/admin/dashboard' },
-    { icon: '👥', label: 'Usuarios (Altas/Bajas)', href: '/admin/usuarios' },
-    { icon: '📚', label: 'Cursos & Materias', href: '/admin/cursos' },
-    { icon: '⚙️', label: 'Configuración de Periodos', href: '/admin/periodos' },
-    { icon: '📈', label: 'Reportes Globales', href: '/admin/reportes', active: true },
-];
+import { adminMenuItems } from '@/Config/adminMenu';
 
 export default function Reportes() {
     const [selectedReport, setSelectedReport] = useState('rendimiento');
@@ -30,7 +23,7 @@ export default function Reportes() {
     ];
 
     return (
-        <SidebarLayout menuItems={menuItems} title="Reportes Globales">
+        <SidebarLayout menuItems={adminMenuItems} title="Reportes Globales">
             <Head title="Reportes" />
 
             <div className="space-y-6">
@@ -53,7 +46,7 @@ export default function Reportes() {
                             onClick={() => setSelectedReport(report.id)}
                             className={`p-3 sm:p-4 rounded-xl text-left transition-all ${
                                 selectedReport === report.id
-                                    ? 'bg-[#2196F3] text-white shadow-lg'
+                                    ? 'bg-[#293577] text-white shadow-lg'
                                     : 'bg-white text-gray-800 shadow-sm hover:shadow-md'
                             }`}
                         >
@@ -96,7 +89,7 @@ export default function Reportes() {
                         </select>
                     </div>
                     <div className="flex items-end">
-                        <button className="bg-[#2196F3] text-white px-6 py-2 rounded-lg hover:bg-[#1976D2]">
+                        <button className="bg-[#293577] text-white px-6 py-2 rounded-lg hover:bg-[#181b49]">
                             🔍 Generar Reporte
                         </button>
                     </div>
@@ -108,7 +101,7 @@ export default function Reportes() {
                         {/* Estadísticas generales */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div className="bg-white rounded-xl shadow-sm p-4 text-center">
-                                <p className="text-3xl font-bold text-[#1e3a5f]">4.0</p>
+                                <p className="text-3xl font-bold text-[#181b49]">4.0</p>
                                 <p className="text-gray-600 text-sm">Promedio General</p>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm p-4 text-center">
@@ -116,7 +109,7 @@ export default function Reportes() {
                                 <p className="text-gray-600 text-sm">Tasa de Aprobación</p>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm p-4 text-center">
-                                <p className="text-3xl font-bold text-[#2196F3]">125</p>
+                                <p className="text-3xl font-bold text-[#293577]">125</p>
                                 <p className="text-gray-600 text-sm">Estudiantes Evaluados</p>
                             </div>
                             <div className="bg-white rounded-xl shadow-sm p-4 text-center">
@@ -223,7 +216,7 @@ export default function Reportes() {
                                     </div>
                                 </div>
                             </div>
-                            <button className="w-full bg-[#2196F3] text-white py-3 rounded-lg hover:bg-[#1976D2] font-medium">
+                            <button className="w-full bg-[#293577] text-white py-3 rounded-lg hover:bg-[#181b49] font-medium">
                                 🚀 Generar 125 Boletines
                             </button>
                         </div>

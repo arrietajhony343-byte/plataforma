@@ -80,7 +80,7 @@ export default function Calendario() {
                         <h1 className="text-2xl font-bold text-gray-800">Mi Calendario</h1>
                         <p className="text-gray-600">Gestiona tus clases, reuniones y eventos</p>
                     </div>
-                    <button className="flex items-center gap-2 bg-[#2196F3] text-white px-4 py-2 rounded-lg hover:bg-[#1976D2]">
+                    <button className="flex items-center gap-2 bg-[#293577] text-white px-4 py-2 rounded-lg hover:bg-[#181b49]">
                         <span>+</span> Nuevo Evento
                     </button>
                 </div>
@@ -134,11 +134,11 @@ export default function Calendario() {
                                     <div
                                         key={day}
                                         onClick={() => setSelectedDate(dateStr)}
-                                        className={`h-16 sm:h-24 p-1 border rounded-lg cursor-pointer transition-all hover:border-[#2196F3] ${
-                                            isToday(day) ? 'bg-blue-50 border-[#2196F3]' : 'border-gray-200'
-                                        } ${selectedDate === dateStr ? 'ring-2 ring-[#2196F3]' : ''}`}
+                                        className={`h-16 sm:h-24 p-1 border rounded-lg cursor-pointer transition-all hover:border-[#293577] ${
+                                            isToday(day) ? 'bg-blue-50 border-[#293577]' : 'border-gray-200'
+                                        } ${selectedDate === dateStr ? 'ring-2 ring-[#293577]' : ''}`}
                                     >
-                                        <span className={`text-xs sm:text-sm font-medium ${isToday(day) ? 'text-[#2196F3]' : 'text-gray-700'}`}>
+                                        <span className={`text-xs sm:text-sm font-medium ${isToday(day) ? 'text-[#293577]' : 'text-gray-700'}`}>
                                             {day}
                                         </span>
                                         <div className="mt-1">

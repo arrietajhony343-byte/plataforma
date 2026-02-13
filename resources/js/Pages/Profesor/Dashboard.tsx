@@ -106,7 +106,7 @@ export default function Dashboard({ profesor, cursosAsignados, alertas }: Props)
                                     </div>
                                 </div>
                                 <div className="p-4">
-                                    <button className="w-full bg-[#2196F3] text-white py-2 px-4 rounded-lg hover:bg-[#1976D2] transition-colors font-medium">
+                                    <button className="w-full bg-[#293577] text-white py-2 px-4 rounded-lg hover:bg-[#181b49] transition-colors font-medium">
                                         Ir al curso
                                     </button>
                                 </div>

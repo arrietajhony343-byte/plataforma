@@ -34,16 +34,12 @@ export default function Login({
             >
                 <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md mx-4">
                     {/* Logo */}
-                    <div className="flex items-center justify-center gap-3 mb-8">
-                        <div className="w-14 h-14 bg-[#1e3a5f] rounded-lg flex items-center justify-center">
-                            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <span className="font-bold text-2xl text-[#1e3a5f]">COLEGIO</span>
-                            <span className="block text-lg text-gray-600">DEMO</span>
-                        </div>
+                    <div className="flex flex-col items-center mb-8">
+                        <img 
+                            src="/storage/logo.png" 
+                            alt="I.P. Emprendedores del Saber" 
+                            className="w-32 h-32 object-contain"
+                        />
                     </div>
 
                     {status && (
@@ -62,7 +58,7 @@ export default function Login({
                                 type="email"
                                 name="email"
                                 value={data.email}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2196F3] focus:border-transparent outline-none transition-all"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] focus:border-transparent outline-none transition-all"
                                 placeholder="Usuario / Correo Institucional"
                                 autoComplete="username"
                                 autoFocus
@@ -80,7 +76,7 @@ export default function Login({
                                 type="password"
                                 name="password"
                                 value={data.password}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2196F3] focus:border-transparent outline-none transition-all"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] focus:border-transparent outline-none transition-all"
                                 placeholder="Contraseña"
                                 autoComplete="current-password"
                                 onChange={(e) => setData('password', e.target.value)}
@@ -95,7 +91,7 @@ export default function Login({
                                 name="remember"
                                 checked={data.remember}
                                 onChange={(e) => setData('remember', e.target.checked)}
-                                className="h-4 w-4 text-[#2196F3] focus:ring-[#2196F3] border-gray-300 rounded"
+                                className="h-4 w-4 text-[#293577] focus:ring-[#293577] border-gray-300 rounded"
                             />
                             <label htmlFor="remember" className="ml-2 text-sm text-gray-600">
                                 Recordarme
@@ -105,7 +101,7 @@ export default function Login({
                         <button
                             type="submit"
                             disabled={processing}
-                            className="w-full bg-[#2196F3] text-white py-3 px-4 rounded-lg hover:bg-[#1976D2] transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-[#293577] text-white py-3 px-4 rounded-lg hover:bg-[#181b49] transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {processing ? 'Ingresando...' : 'Ingresar a la Plataforma'}
                         </button>
@@ -114,12 +110,12 @@ export default function Login({
                             {canResetPassword && (
                                 <a
                                     href="/forgot-password"
-                                    className="text-sm text-[#2196F3] hover:underline block"
+                                    className="text-sm text-[#293577] hover:underline block"
                                 >
                                     ¿Olvidaste tu contraseña?
                                 </a>
                             )}
-                            <a href="#" className="text-sm text-[#2196F3] hover:underline block">
+                            <a href="#" className="text-sm text-[#293577] hover:underline block">
                                 Soporte Técnico
                             </a>
                         </div>

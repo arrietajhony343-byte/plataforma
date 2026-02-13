@@ -50,36 +50,36 @@ export default function SidebarLayout({
         <div className="min-h-screen bg-gray-100 flex overflow-x-hidden">
             {/* Sidebar */}
             <aside className={`
-                fixed inset-y-0 left-0 z-50 w-64 bg-[#1e3a5f] text-white transform transition-transform duration-300 ease-in-out
+                fixed inset-y-0 left-0 z-50 w-64 text-white transform transition-transform duration-300 ease-in-out
                 lg:translate-x-0 lg:static lg:inset-0
                 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            `}>
+            `}
+                style={{
+                    background: 'linear-gradient(90deg, #181b49 0%, #293577 50%, #181b49 100%)',
+                }}
+            >
                 {/* Logo */}
-                <div className="flex items-center gap-3 px-6 py-5 border-b border-[#2d4a6f]">
-                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                        <svg className="w-6 h-6 text-[#1e3a5f]" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <span className="font-bold text-lg">COLEGIO</span>
-                        <span className="block text-sm text-gray-300">DEMO</span>
-                    </div>
+                <div className="flex flex-col items-center px-6 py-6 border-b border-white/10">
+                    <img 
+                        src="/storage/logo.png" 
+                        alt="I.P. Emprendedores del Saber" 
+                        className="w-32 h-32 object-contain drop-shadow-lg"
+                    />
                 </div>
 
                 {/* User Info (si existe) */}
                 {userInfo && (
-                    <div className="px-6 py-4 border-b border-[#2d4a6f]">
+                    <div className="px-6 py-4 border-b border-white/10">
                         <div className="flex items-center gap-3">
                             {userInfo.avatar ? (
                                 <img src={userInfo.avatar} alt={userInfo.name} className="w-12 h-12 rounded-full object-cover" />
                             ) : (
-                                <div className="w-12 h-12 bg-gray-400 rounded-full flex items-center justify-center text-white font-bold">
+                                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
                                     {userInfo.name.charAt(0)}
                                 </div>
                             )}
                             <div>
-                                <p className="font-medium text-sm">{userInfo.role || 'Usuario'}</p>
+                                <p className="font-medium text-sm text-white/70">{userInfo.role || 'Usuario'}</p>
                                 <p className="text-white font-semibold">{userInfo.name}</p>
                             </div>
                         </div>
@@ -87,7 +87,7 @@ export default function SidebarLayout({
                 )}
 
                 {/* Navigation */}
-                <nav className="mt-4 px-3">
+                <nav className="mt-4 px-3 flex-1 overflow-y-auto">
                     {menuItems.map((item, index) => (
                         <Link
                             key={index}
@@ -95,8 +95,8 @@ export default function SidebarLayout({
                             className={`
                                 flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors
                                 ${item.active 
-                                    ? 'bg-[#2196F3] text-white' 
-                                    : 'text-gray-300 hover:bg-[#2d4a6f] hover:text-white'}
+                                    ? 'bg-white/20 text-white shadow-lg' 
+                                    : 'text-white/70 hover:bg-white/10 hover:text-white'}
                             `}
                         >
                             <span className="w-5 h-5">{item.icon}</span>

@@ -1,6 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head } from '@inertiajs/react';
 import { useState } from 'react';
+import { adminMenuItems } from '@/Config/adminMenu';
 
 interface Periodo {
     id: number;
@@ -10,14 +11,6 @@ interface Periodo {
     estado: 'activo' | 'cerrado' | 'pendiente';
     porcentaje: number;
 }
-
-const menuItems = [
-    { icon: '📊', label: 'Dashboard', href: '/admin/dashboard' },
-    { icon: '👥', label: 'Usuarios (Altas/Bajas)', href: '/admin/usuarios' },
-    { icon: '📚', label: 'Cursos & Materias', href: '/admin/cursos' },
-    { icon: '⚙️', label: 'Configuración de Periodos', href: '/admin/periodos', active: true },
-    { icon: '📈', label: 'Reportes Globales', href: '/admin/reportes' },
-];
 
 export default function Periodos() {
     const [showModal, setShowModal] = useState(false);
@@ -40,7 +33,7 @@ export default function Periodos() {
     };
 
     return (
-        <SidebarLayout menuItems={menuItems} title="Configuración de Periodos">
+        <SidebarLayout menuItems={adminMenuItems} title="Configuración de Periodos">
             <Head title="Periodos" />
 
             <div className="space-y-6">
@@ -54,7 +47,7 @@ export default function Periodos() {
                         <select
                             value={selectedYear}
                             onChange={(e) => setSelectedYear(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2196F3]"
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577]"
                         >
                             <option value="2026">Año 2026</option>
                             <option value="2025">Año 2025</option>
@@ -62,7 +55,7 @@ export default function Periodos() {
                         </select>
                         <button
                             onClick={() => setShowModal(true)}
-                            className="flex items-center gap-2 bg-[#2196F3] text-white px-4 py-2 rounded-lg hover:bg-[#1976D2]"
+                            className="flex items-center gap-2 bg-[#293577] text-white px-4 py-2 rounded-lg hover:bg-[#181b49]"
                         >
                             <span>+</span> Nuevo Periodo
                         </button>
@@ -106,11 +99,11 @@ export default function Periodos() {
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <div className="text-center">
-                                                    <p className="text-xl font-bold text-[#2196F3]">{periodo.porcentaje}%</p>
+                                                    <p className="text-xl font-bold text-[#293577]">{periodo.porcentaje}%</p>
                                                     <p className="text-xs text-gray-500">del año</p>
                                                 </div>
                                                 <div className="flex gap-2">
-                                                    <button className="p-2 text-[#2196F3] hover:bg-blue-50 rounded-lg">✏️</button>
+                                                    <button className="p-2 text-[#293577] hover:bg-blue-50 rounded-lg">✏️</button>
                                                     {periodo.estado === 'pendiente' && (
                                                         <button className="p-2 text-green-600 hover:bg-green-50 rounded-lg">▶️</button>
                                                     )}
@@ -148,7 +141,7 @@ export default function Periodos() {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Nota máxima</label>
                                 <input type="number" value="5.0" className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
                             </div>
-                            <button className="w-full bg-[#2196F3] text-white py-2 rounded-lg hover:bg-[#1976D2]">
+                            <button className="w-full bg-[#293577] text-white py-2 rounded-lg hover:bg-[#181b49]">
                                 Guardar Configuración
                             </button>
                         </div>
@@ -159,7 +152,7 @@ export default function Periodos() {
                         <div className="space-y-4">
                             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <span className="text-gray-600">Periodos completados</span>
-                                <span className="font-bold text-[#1e3a5f]">1 de 4</span>
+                                <span className="font-bold text-[#181b49]">1 de 4</span>
                             </div>
                             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <span className="text-gray-600">Periodo actual</span>
@@ -167,7 +160,7 @@ export default function Periodos() {
                             </div>
                             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <span className="text-gray-600">Días restantes del periodo</span>
-                                <span className="font-bold text-[#2196F3]">45 días</span>
+                                <span className="font-bold text-[#293577]">45 días</span>
                             </div>
                             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <span className="text-gray-600">Progreso del año</span>
@@ -176,7 +169,7 @@ export default function Periodos() {
                         </div>
                         <div className="mt-4">
                             <div className="w-full bg-gray-200 rounded-full h-3">
-                                <div className="bg-[#2196F3] h-3 rounded-full" style={{ width: '35%' }}></div>
+                                <div className="bg-[#293577] h-3 rounded-full" style={{ width: '35%' }}></div>
                             </div>
                         </div>
                     </div>

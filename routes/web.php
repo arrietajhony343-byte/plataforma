@@ -26,6 +26,8 @@ Route::get('/dashboard', function () {
         return redirect()->route('profesor.dashboard');
     } elseif ($user->hasRole('estudiante')) {
         return redirect()->route('estudiante.dashboard');
+    } elseif ($user->hasRole('padre')) {
+        return redirect()->route('padre.dashboard');
     }
     
     return Inertia::render('Dashboard');
@@ -50,6 +52,31 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('/reportes', function () {
         return Inertia::render('Admin/Reportes');
     })->name('reportes');
+
+    // Nuevas rutas de administración
+    Route::get('/certificados', function () {
+        return Inertia::render('Admin/Certificados');
+    })->name('certificados');
+
+    Route::get('/boletines', function () {
+        return Inertia::render('Admin/Boletines');
+    })->name('boletines');
+
+    Route::get('/pagos', function () {
+        return Inertia::render('Admin/Pagos');
+    })->name('pagos');
+
+    Route::get('/contabilidad', function () {
+        return Inertia::render('Admin/Contabilidad');
+    })->name('contabilidad');
+
+    Route::get('/horarios', function () {
+        return Inertia::render('Admin/Horarios');
+    })->name('horarios');
+
+    Route::get('/estudiantes', function () {
+        return Inertia::render('Admin/Estudiantes');
+    })->name('estudiantes');
 });
 
 // Rutas de Profesor
@@ -73,6 +100,41 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
 // Rutas de Estudiante
 Route::middleware(['auth', 'verified', 'role:estudiante'])->prefix('estudiante')->name('estudiante.')->group(function () {
     Route::get('/dashboard', [EstudianteDashboardController::class, 'index'])->name('dashboard');
+});
+
+// Rutas de Padre
+Route::middleware(['auth', 'verified', 'role:padre'])->prefix('padre')->name('padre.')->group(function () {
+    Route::get('/dashboard', function () {
+        return Inertia::render('Padre/Dashboard');
+    })->name('dashboard');
+
+    Route::get('/boletin', function () {
+        return Inertia::render('Padre/Boletin');
+    })->name('boletin');
+
+    Route::get('/calendario', function () {
+        return Inertia::render('Padre/Calendario');
+    })->name('calendario');
+
+    Route::get('/seguimiento', function () {
+        return Inertia::render('Padre/Seguimiento');
+    })->name('seguimiento');
+
+    Route::get('/notificaciones', function () {
+        return Inertia::render('Padre/Notificaciones');
+    })->name('notificaciones');
+
+    Route::get('/pagos', function () {
+        return Inertia::render('Padre/Pagos');
+    })->name('pagos');
+
+    Route::get('/comprobantes', function () {
+        return Inertia::render('Padre/Comprobantes');
+    })->name('comprobantes');
+
+    Route::get('/mensajes', function () {
+        return Inertia::render('Padre/Mensajes');
+    })->name('mensajes');
 });
 
 Route::middleware('auth')->group(function () {

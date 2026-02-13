@@ -134,7 +134,7 @@ export default function Dashboard({ estudiante, notas, observaciones }: Props) {
                     </div>
 
                     {/* Botón descargar boletín */}
-                    <button className="w-full bg-[#2196F3] text-white py-3 px-4 rounded-lg hover:bg-[#1976D2] transition-colors font-semibold flex items-center justify-center gap-2">
+                    <button className="w-full bg-[#293577] text-white py-3 px-4 rounded-lg hover:bg-[#181b49] transition-colors font-semibold flex items-center justify-center gap-2">
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
                         </svg>

@@ -223,7 +223,7 @@ export default function Observador({ profesor }: Props) {
                 </div>
 
                 {/* Botón de registro */}
-                <button className="bg-[#2196F3] text-white px-6 py-3 rounded-lg hover:bg-[#1976D2] transition-colors font-semibold">
+                <button className="bg-[#293577] text-white px-6 py-3 rounded-lg hover:bg-[#181b49] transition-colors font-semibold">
                     Registrar Observación
                 </button>
             </div>
