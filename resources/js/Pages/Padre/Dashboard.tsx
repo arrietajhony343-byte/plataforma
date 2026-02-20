@@ -65,10 +65,10 @@ export default function Dashboard() {
     const notifNoLeidas = notificaciones.filter(n => !n.leida).length;
 
     return (
-        <SidebarLayout menuItems={padreMenuItems} header="Portal de Padres de Familia">
+        <SidebarLayout menuItems={padreMenuItems}>
             <Head title="Dashboard Padre" />
 
-            <div className="space-y-6">
+            <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {/* Bienvenida + Info del hijo */}
                 <div className="rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg, #181b49 0%, #293577 50%, #171f54 100%)' }}>
                     <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
@@ -76,7 +76,7 @@ export default function Dashboard() {
                             👦
                         </div>
                         <div className="flex-1">
-                            <h1 className="text-2xl font-bold">Bienvenido, Padre de {hijo.nombre}</h1>
+                            <h1 className="text-2xl font-extrabold" style={{ fontFamily: "'Inter', sans-serif" }}>Bienvenido, Padre de {hijo.nombre}</h1>
                             <p className="text-blue-100">{hijo.grado} - Sección {hijo.seccion}</p>
                         </div>
                         <div className="flex gap-3">

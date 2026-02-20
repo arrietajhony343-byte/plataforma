@@ -93,11 +93,11 @@ export default function Mensajes() {
         <SidebarLayout menuItems={padreMenuItems} title="Mensajes">
             <Head title="Mensajes" />
 
-            <div className="space-y-4">
+            <div className="space-y-4" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {/* Header */}
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Mensajes</h1>
+                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Mensajes</h1>
                         <p className="text-gray-600">Comunicación directa con docentes y administrativos</p>
                     </div>
                     {totalNoLeidos > 0 && (
@@ -114,13 +114,16 @@ export default function Mensajes() {
                         <div className={`w-full lg:w-80 border-r flex flex-col ${contactoActivo && !showContactos ? 'hidden lg:flex' : 'flex'}`}>
                             {/* Search */}
                             <div className="p-3 border-b space-y-2">
-                                <input
-                                    type="text"
-                                    placeholder="Buscar contacto..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] focus:border-transparent"
-                                />
+                                <div className="relative">
+                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-800" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar contacto..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] focus:border-transparent"
+                                    />
+                                </div>
                                 <div className="flex gap-1">
                                     {(['todos', 'docente', 'administrativo'] as const).map(rol => (
                                         <button

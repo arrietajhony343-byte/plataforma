@@ -37,11 +37,11 @@ export default function Cursos() {
         <SidebarLayout menuItems={adminMenuItems} title="Cursos & Materias">
             <Head title="Cursos & Materias" />
 
-            <div className="space-y-6">
+            <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Cursos & Materias</h1>
+                        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Cursos & Materias</h1>
                         <p className="text-gray-600">Administra la estructura académica</p>
                     </div>
                     <button
@@ -113,7 +113,14 @@ export default function Cursos() {
                     /* Tabla de materias */
                     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
-                        <table className="w-full min-w-[500px]">
+                        <table className="w-full table-fixed min-w-[500px]">
+                            <colgroup>
+                                <col />
+                                <col className="w-[120px]" />
+                                <col className="w-[90px]" />
+                                <col className="w-[100px]" />
+                                <col className="w-[100px]" />
+                            </colgroup>
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Materia</th>
@@ -127,14 +134,14 @@ export default function Cursos() {
                                 {materias.map((materia) => (
                                     <tr key={materia.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-[#293577] rounded-lg flex items-center justify-center text-white">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-10 h-10 flex-shrink-0 bg-[#293577] rounded-lg flex items-center justify-center text-white">
                                                     📖
                                                 </div>
-                                                <span className="font-medium text-gray-800">{materia.nombre}</span>
+                                                <span className="font-medium text-gray-800 truncate">{materia.nombre}</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-gray-600">{materia.area}</td>
+                                        <td className="px-6 py-4 text-gray-600 truncate">{materia.area}</td>
                                         <td className="px-6 py-4 text-center">
                                             <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">{materia.cursos}</span>
                                         </td>

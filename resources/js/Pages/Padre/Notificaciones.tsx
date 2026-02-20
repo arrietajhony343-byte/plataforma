@@ -116,11 +116,11 @@ export default function Notificaciones() {
         <SidebarLayout menuItems={padreMenuItems} title="Notificaciones">
             <Head title="Notificaciones" />
 
-            <div className="space-y-6">
+            <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">
+                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>
                             Notificaciones
                             {noLeidas > 0 && (
                                 <span className="ml-2 bg-red-500 text-white text-sm px-2.5 py-0.5 rounded-full">{noLeidas}</span>

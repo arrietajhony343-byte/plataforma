@@ -12,7 +12,7 @@ interface MenuItem {
 export const adminMenuItems: MenuItem[] = [
     { icon: '📊', label: 'Dashboard', href: '/admin/dashboard' },
     { icon: '👥', label: 'Usuarios', href: '/admin/usuarios' },
-    { icon: '🔍', label: 'Buscar Estudiantes', href: '/admin/estudiantes' },
+    { icon: '🎓', label: 'Buscar Estudiantes', href: '/admin/estudiantes' },
     { icon: '📚', label: 'Cursos & Materias', href: '/admin/cursos' },
     { icon: '⚙️', label: 'Config. Periodos', href: '/admin/periodos' },
     { icon: '📅', label: 'Horarios Profesores', href: '/admin/horarios' },

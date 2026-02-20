@@ -54,10 +54,10 @@ export default function Pagos() {
         <SidebarLayout menuItems={padreMenuItems} title="Pagos">
             <Head title="Pagos" />
 
-            <div className="space-y-6">
+            <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {/* Header */}
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Pagos</h1>
+                    <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Pagos</h1>
                     <p className="text-gray-600">Realiza pagos y consulta tu estado de cuenta</p>
                 </div>
 

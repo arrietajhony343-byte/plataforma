@@ -84,11 +84,11 @@ export default function Boletin() {
         <SidebarLayout menuItems={padreMenuItems} title="Boletín & Notas">
             <Head title="Boletín & Notas" />
 
-            <div className="space-y-6">
+            <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">Boletín & Notas</h1>
+                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Boletín & Notas</h1>
                         <p className="text-gray-600">{hijo.nombre} · {hijo.grado} {hijo.seccion} · Código: {hijo.codigo}</p>
                     </div>
                     <select

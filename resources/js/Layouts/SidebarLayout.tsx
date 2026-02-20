@@ -29,7 +29,13 @@ export default function SidebarLayout({
 }: PropsWithChildren<SidebarLayoutProps>) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
-    const user = usePage().props.auth.user;
+    const page = usePage();
+    const { url } = page;
+    const user = page.props.auth.user;
+
+    // Detecta la página activa comparando la URL actual con el href del item
+    const isActivePage = (href: string) =>
+        url === href || (href.length > 1 && url.startsWith(href));
 
     const handleLogout = async () => {
         try {
@@ -88,21 +94,26 @@ export default function SidebarLayout({
 
                 {/* Navigation */}
                 <nav className="mt-4 px-3 flex-1 overflow-y-auto">
-                    {menuItems.map((item, index) => (
-                        <Link
-                            key={index}
-                            href={item.href}
-                            className={`
-                                flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors
-                                ${item.active 
-                                    ? 'bg-white/20 text-white shadow-lg' 
-                                    : 'text-white/70 hover:bg-white/10 hover:text-white'}
-                            `}
-                        >
-                            <span className="w-5 h-5">{item.icon}</span>
-                            <span className="font-medium">{item.label || item.name}</span>
-                        </Link>
-                    ))}
+                    {menuItems.map((item, index) => {
+                        const active = item.active !== undefined ? item.active : isActivePage(item.href);
+                        return (
+                            <Link
+                                key={index}
+                                href={item.href}
+                                className={`
+                                    relative flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-all duration-200 border-l-4
+                                    ${active
+                                        ? 'bg-[#e5e7eb] text-[#181b49] font-bold shadow-md border-amber-400'
+                                        : 'text-white/75 hover:bg-white/10 hover:text-white border-transparent'
+                                    }
+                                `}
+                                style={active ? { fontFamily: "'Roboto Condensed', sans-serif" } : { fontFamily: "'Roboto Condensed', sans-serif" }}
+                            >
+                                <span className="w-5 h-5 flex-shrink-0 text-base leading-none">{item.icon}</span>
+                                <span className="text-sm font-semibold tracking-wide">{item.label || item.name}</span>
+                            </Link>
+                        );
+                    })}
                 </nav>
             </aside>
 
@@ -116,29 +127,35 @@ export default function SidebarLayout({
 
             {/* Main content */}
             <div className="flex-1 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
-                {/* Top bar */}
-                <header className="bg-white shadow-sm border-b border-gray-200">
+                {/* Top bar con gradiente */}
+                <header 
+                    className="shadow-md"
+                    style={{ background: 'linear-gradient(90deg, #181b49 0%, #293577 50%, #181b49 100%)' }}
+                >
                     <div className="flex items-center justify-between px-4 py-3">
                         {/* Mobile menu button */}
                         <button
                             onClick={() => setSidebarOpen(!sidebarOpen)}
-                            className="lg:hidden p-2 rounded-md text-gray-600 hover:bg-gray-100"
+                            className="lg:hidden p-2 rounded-md text-white/70 hover:bg-white/10 transition-colors"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
                         </button>
 
-                        <div className="flex-1" />
+                        {/* Title - EMPRENDEDORES DEL SABER */}
+                        <h1 className="text-white font-bold text-base sm:text-xl md:text-2xl tracking-wide italic flex-1 text-center" style={{ fontFamily: "'Bitter', serif", textShadow: '0 1px 4px rgba(0,0,0,0.35)' }}>
+                            EMPRENDEDORES DEL SABER
+                        </h1>
 
                         {/* Right side */}
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
                             {/* Notifications */}
-                            <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            <button className="relative p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
                                 </svg>
-                                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold border border-white/20">
                                     3
                                 </span>
                             </button>
@@ -147,30 +164,33 @@ export default function SidebarLayout({
                             <div className="relative">
                                 <button 
                                     onClick={() => setShowUserMenu(!showUserMenu)}
-                                    className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded-lg transition-colors"
+                                    className="flex items-center gap-2 hover:bg-white/10 p-2 rounded-lg transition-colors"
                                 >
-                                    <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                                        <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center border border-white/30">
+                                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                                         </svg>
                                     </div>
-                                    <svg className={`w-4 h-4 text-gray-600 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                    </svg>
                                 </button>
                                 
                                 {showUserMenu && (
-                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-1 z-50 border border-gray-200">
+                                        <div className="px-4 py-2 border-b border-gray-100">
+                                            <p className="text-sm font-semibold text-gray-800">{user.name}</p>
+                                            <p className="text-xs text-gray-400">{user.email}</p>
+                                        </div>
                                         <Link 
                                             href="/profile" 
-                                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                         >
+                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                                             Mi Perfil
                                         </Link>
                                         <button 
                                             onClick={handleLogout}
-                                            className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                                            className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                                         >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                                             Cerrar Sesión
                                         </button>
                                     </div>
