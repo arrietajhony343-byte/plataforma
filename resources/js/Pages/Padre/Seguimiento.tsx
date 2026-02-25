@@ -92,9 +92,9 @@ export default function Seguimiento() {
     const materiasEnRiesgo = materias.filter(m => m.promedioActual < 3.5).length;
 
     const getTendenciaIcon = (t: string) => {
-        if (t === 'subiendo') return { icon: '📈', color: 'text-green-600', label: 'Mejorando' };
-        if (t === 'bajando') return { icon: '📉', color: 'text-red-600', label: 'Bajando' };
-        return { icon: '➡️', color: 'text-blue-600', label: 'Estable' };
+        if (t === 'subiendo') return { icon: '↑', color: 'text-green-600', label: 'Mejorando' };
+        if (t === 'bajando') return { icon: '↓', color: 'text-red-600', label: 'Bajando' };
+        return { icon: '→', color: 'text-blue-600', label: 'Estable' };
     };
 
     const getBarColor = (nota: number) => {
@@ -143,10 +143,10 @@ export default function Seguimiento() {
                 {/* Alerta de materias en riesgo */}
                 {materias.filter(m => m.promedioActual < 3.5 || m.tendencia === 'bajando').length > 0 && (
                     <div className="bg-orange-50 border-l-4 border-orange-400 rounded-r-xl p-4">
-                        <h3 className="font-bold text-orange-800 mb-2">⚠️ Atención Requerida</h3>
+                        <h3 className="font-bold text-orange-800 mb-2">Atención Requerida</h3>
                         {materias.filter(m => m.promedioActual < 3.5 || m.tendencia === 'bajando').map(m => (
                             <div key={m.materia} className="flex items-center gap-2 text-sm text-orange-700 mt-1">
-                                <span>{m.promedioActual < 3.5 ? '🔴' : '🟡'}</span>
+                                <span>{m.promedioActual < 3.5 ? '●' : '○'}</span>
                                 <strong>{m.materia}</strong> — Promedio: {m.promedioActual} · 
                                 {getTendenciaIcon(m.tendencia).icon} {getTendenciaIcon(m.tendencia).label}
                                 {m.observaciones > 0 && ` · ${m.observaciones} observación(es)`}
@@ -157,7 +157,7 @@ export default function Seguimiento() {
 
                 {/* Gráfico de barras visual */}
                 <div className="bg-white rounded-xl shadow-sm p-4">
-                    <h3 className="font-semibold text-gray-700 mb-4">📊 Rendimiento por Materia</h3>
+                    <h3 className="font-semibold text-gray-700 mb-4">Rendimiento por Materia</h3>
                     <div className="space-y-3">
                         {materias.sort((a, b) => b.promedioActual - a.promedioActual).map(m => {
                             const tendencia = getTendenciaIcon(m.tendencia);
@@ -195,7 +195,7 @@ export default function Seguimiento() {
                 {/* Observaciones del observador */}
                 {totalObservaciones > 0 && (
                     <div className="bg-white rounded-xl shadow-sm p-4">
-                        <h3 className="font-semibold text-gray-700 mb-4">📝 Observaciones Recientes</h3>
+                        <h3 className="font-semibold text-gray-700 mb-4">Observaciones Recientes</h3>
                         <div className="space-y-3">
                             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r-lg">
                                 <div className="flex justify-between items-start">

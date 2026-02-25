@@ -107,8 +107,8 @@ export default function Boletin() {
                 <div className="bg-white rounded-xl shadow-sm p-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center text-3xl">
-                                📋
+                            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
                             </div>
                             <div>
                                 <h2 className="font-bold text-gray-800">Boletín {boletines[parseInt(selectedPeriodo) - 1].periodo}</h2>
@@ -118,9 +118,9 @@ export default function Boletin() {
                                         boletines[parseInt(selectedPeriodo) - 1].estado === 'generando' ? 'bg-yellow-100 text-yellow-800' :
                                         'bg-gray-100 text-gray-800'
                                     }`}>
-                                        {boletines[parseInt(selectedPeriodo) - 1].estado === 'disponible' ? '✓ Disponible' :
-                                         boletines[parseInt(selectedPeriodo) - 1].estado === 'generando' ? '⏳ Generándose automáticamente' :
-                                         '⏸ Pendiente'}
+                                        {boletines[parseInt(selectedPeriodo) - 1].estado === 'disponible' ? 'Disponible' :
+                                         boletines[parseInt(selectedPeriodo) - 1].estado === 'generando' ? 'Generándose automáticamente' :
+                                         'Pendiente'}
                                     </span>
                                 </div>
                                 {boletines[parseInt(selectedPeriodo) - 1].estado === 'generando' && (
@@ -132,7 +132,7 @@ export default function Boletin() {
                         </div>
                         {boletines[parseInt(selectedPeriodo) - 1].estado === 'disponible' && (
                             <button className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
-                                📥 Descargar Boletín PDF
+                                Descargar Boletín PDF
                             </button>
                         )}
                     </div>
@@ -209,8 +209,8 @@ export default function Boletin() {
                                                 nota.estado === 'reprobado' ? 'bg-red-100 text-red-800' :
                                                 'bg-blue-100 text-blue-800'
                                             }`}>
-                                                {nota.estado === 'aprobado' ? '✓ Aprobado' :
-                                                 nota.estado === 'reprobado' ? '✗ Reprobado' : '⏳ En curso'}
+                                                {nota.estado === 'aprobado' ? 'Aprobado' :
+                                                 nota.estado === 'reprobado' ? 'Reprobado' : 'En curso'}
                                             </span>
                                         </td>
                                     </tr>
@@ -235,7 +235,7 @@ export default function Boletin() {
                                     nota.estado === 'reprobado' ? 'bg-red-100 text-red-800' :
                                     'bg-blue-100 text-blue-800'
                                 }`}>
-                                    {nota.estado === 'aprobado' ? '✓' : nota.estado === 'reprobado' ? '✗' : '⏳'}
+                                    {nota.estado === 'aprobado' ? '✓' : nota.estado === 'reprobado' ? '✗' : '•'}
                                 </span>
                             </div>
                             <div className="grid grid-cols-5 gap-2 text-center">
@@ -276,7 +276,7 @@ export default function Boletin() {
 
                 {/* Histórico de boletines */}
                 <div className="bg-white rounded-xl shadow-sm p-4">
-                    <h3 className="font-semibold text-gray-700 mb-4">📄 Boletines Disponibles para Descarga</h3>
+                    <h3 className="font-semibold text-gray-700 mb-4">Boletines Disponibles para Descarga</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {boletines.map((bol, i) => (
                             <div key={i} className={`border rounded-xl p-4 text-center ${
@@ -293,12 +293,12 @@ export default function Boletin() {
                                     bol.estado === 'generando' ? 'bg-yellow-200 text-yellow-800' :
                                     'bg-gray-200 text-gray-600'
                                 }`}>
-                                    {bol.estado === 'disponible' ? '✓ Disponible' :
-                                     bol.estado === 'generando' ? '⏳ Generándose' : '⏸ Pendiente'}
+                                    {bol.estado === 'disponible' ? 'Disponible' :
+                                     bol.estado === 'generando' ? 'Generándose' : 'Pendiente'}
                                 </span>
                                 {bol.estado === 'disponible' && (
                                     <button className="mt-3 w-full bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition-colors">
-                                        📥 Descargar PDF
+                                        Descargar PDF
                                     </button>
                                 )}
                                 {bol.estado === 'generando' && (

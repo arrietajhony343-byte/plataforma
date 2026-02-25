@@ -1,5 +1,5 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 interface Stats {
@@ -26,21 +26,25 @@ export default function Dashboard({ stats, actividadReciente }: Props) {
             label: 'Total Estudiantes',
             value: stats.totalEstudiantes,
             image: '/storage/total-estudiantes.png',
+            href: '/admin/estudiantes',
         },
         {
             label: 'Cursos Activos',
             value: stats.cursosActivos,
             image: '/storage/cursos-activos.png',
+            href: '/admin/cursos',
         },
         {
             label: 'Profesores',
             value: stats.totalProfesores,
             image: '/storage/profesores.png',
+            href: '/admin/usuarios',
         },
         {
             label: 'Calendario',
             value: `${stats.diasRestantes} días`,
             image: '/storage/calendario.png',
+            href: '/admin/periodos',
         },
     ];
 
@@ -81,9 +85,10 @@ export default function Dashboard({ stats, actividadReciente }: Props) {
                 {/* Shield Stats Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                     {statCards.map((card, index) => (
-                        <div
+                        <Link
                             key={index}
-                            className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 p-4 sm:p-6 flex flex-col items-center text-center cursor-default border border-gray-100 hover:border-opacity-0 hover:-translate-y-1"
+                            href={card.href}
+                            className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 p-4 sm:p-6 flex flex-col items-center text-center border border-gray-100 hover:border-opacity-0 hover:-translate-y-1"
                         >
                             {/* Shield image */}
                             <div className="w-20 h-20 sm:w-28 sm:h-28 mb-3 sm:mb-4 transition-transform duration-300 group-hover:scale-110">
@@ -101,7 +106,7 @@ export default function Dashboard({ stats, actividadReciente }: Props) {
                             <p className="text-xs sm:text-sm font-semibold text-gray-500 mt-1 uppercase tracking-wider">
                                 {card.label}
                             </p>
-                        </div>
+                        </Link>
                     ))}
                 </div>
 

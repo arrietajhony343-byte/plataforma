@@ -33,13 +33,13 @@ export default function Mensajes() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const contactos: Contacto[] = [
-        { id: 1, nombre: 'Prof. María González', rol: 'Docente', materia: 'Matemáticas', avatar: '👩‍🏫', en_linea: true, ultimo_mensaje: 'Buen día, le informo que Carlos ha mejorado...', ultimo_mensaje_fecha: '10:30 AM', no_leidos: 2 },
-        { id: 2, nombre: 'Prof. Juan Pérez', rol: 'Docente', materia: 'Español', avatar: '👨‍🏫', en_linea: false, ultimo_mensaje: 'Recordar entregar el ensayo del viernes', ultimo_mensaje_fecha: 'Ayer', no_leidos: 0 },
-        { id: 3, nombre: 'Prof. Ana Rodríguez', rol: 'Docente', materia: 'Ciencias', avatar: '👩‍🔬', en_linea: true, ultimo_mensaje: 'La exposición fue reprogramada para el miércoles', ultimo_mensaje_fecha: 'Ayer', no_leidos: 1 },
-        { id: 4, nombre: 'Coord. Laura Martínez', rol: 'Administrativo', avatar: '👩‍💼', en_linea: false, ultimo_mensaje: 'El certificado de estudios está listo', ultimo_mensaje_fecha: 'Lun', no_leidos: 0 },
-        { id: 5, nombre: 'Rector Pedro Silva', rol: 'Administrativo', avatar: '👨‍💼', en_linea: false, ultimo_mensaje: '', ultimo_mensaje_fecha: '', no_leidos: 0 },
-        { id: 6, nombre: 'Secretaría Académica', rol: 'Administrativo', avatar: '🏫', en_linea: true, ultimo_mensaje: 'Recuerde que la fecha límite de matrícula...', ultimo_mensaje_fecha: 'Mar', no_leidos: 0 },
-        { id: 7, nombre: 'Prof. Diego Castro', rol: 'Docente', materia: 'Ed. Física', avatar: '🏃', en_linea: false, ultimo_mensaje: 'Carlos debe traer el uniforme de deportes', ultimo_mensaje_fecha: 'Lun', no_leidos: 0 },
+        { id: 1, nombre: 'Prof. María González', rol: 'Docente', materia: 'Matemáticas', avatar: 'MG', en_linea: true, ultimo_mensaje: 'Buen día, le informo que Carlos ha mejorado...', ultimo_mensaje_fecha: '10:30 AM', no_leidos: 2 },
+        { id: 2, nombre: 'Prof. Juan Pérez', rol: 'Docente', materia: 'Español', avatar: 'JP', en_linea: false, ultimo_mensaje: 'Recordar entregar el ensayo del viernes', ultimo_mensaje_fecha: 'Ayer', no_leidos: 0 },
+        { id: 3, nombre: 'Prof. Ana Rodríguez', rol: 'Docente', materia: 'Ciencias', avatar: 'AR', en_linea: true, ultimo_mensaje: 'La exposición fue reprogramada para el miércoles', ultimo_mensaje_fecha: 'Ayer', no_leidos: 1 },
+        { id: 4, nombre: 'Coord. Laura Martínez', rol: 'Administrativo', avatar: 'LM', en_linea: false, ultimo_mensaje: 'El certificado de estudios está listo', ultimo_mensaje_fecha: 'Lun', no_leidos: 0 },
+        { id: 5, nombre: 'Rector Pedro Silva', rol: 'Administrativo', avatar: 'PS', en_linea: false, ultimo_mensaje: '', ultimo_mensaje_fecha: '', no_leidos: 0 },
+        { id: 6, nombre: 'Secretaría Académica', rol: 'Administrativo', avatar: 'SA', en_linea: true, ultimo_mensaje: 'Recuerde que la fecha límite de matrícula...', ultimo_mensaje_fecha: 'Mar', no_leidos: 0 },
+        { id: 7, nombre: 'Prof. Diego Castro', rol: 'Docente', materia: 'Ed. Física', avatar: 'DC', en_linea: false, ultimo_mensaje: 'Carlos debe traer el uniforme de deportes', ultimo_mensaje_fecha: 'Lun', no_leidos: 0 },
     ];
 
     const mensajesConversacion: Record<number, Mensaje[]> = {
@@ -51,7 +51,7 @@ export default function Mensajes() {
             { id: 5, de: 'otro', texto: 'Le recomiendo que practique ejercicios de fracciones y geometría. Puedo enviarle una guía de refuerzo.', fecha: '2026-02-10', hora: '10:25 AM', leido: true },
             { id: 6, de: 'yo', texto: 'Sería excelente, muchas gracias profesora.', fecha: '2026-02-10', hora: '10:28 AM', leido: true },
             { id: 7, de: 'otro', texto: 'Buen día, le informo que Carlos ha mejorado en el último quiz. ¡Obtuvo 4.5! Sigan apoyándolo así.', fecha: '2026-02-11', hora: '10:30 AM', leido: false },
-            { id: 8, de: 'otro', texto: 'Adjunto la guía de refuerzo que le mencioné. 📎 Guía_Matemáticas_7.pdf', fecha: '2026-02-11', hora: '10:30 AM', leido: false },
+            { id: 8, de: 'otro', texto: 'Adjunto la guía de refuerzo que le mencioné. Guía_Matemáticas_7.pdf', fecha: '2026-02-11', hora: '10:30 AM', leido: false },
         ],
         3: [
             { id: 1, de: 'otro', texto: 'Buenas tardes. Le informo que la exposición de ciencias fue reprogramada para el miércoles.', fecha: '2026-02-10', hora: '3:00 PM', leido: true },
@@ -212,7 +212,7 @@ export default function Mensajes() {
                                     <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
                                         {mensajesActivos.length === 0 && (
                                             <div className="text-center text-gray-400 py-10">
-                                                <span className="text-4xl block mb-2">💬</span>
+                                                <svg className="w-8 h-8 text-gray-300 mx-auto" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
                                                 <p>No hay mensajes aún</p>
                                                 <p className="text-sm">Inicie la conversación enviando un mensaje</p>
                                             </div>
@@ -252,7 +252,7 @@ export default function Mensajes() {
                                     <div className="p-3 border-t bg-white">
                                         <div className="flex gap-2">
                                             <button className="text-gray-400 hover:text-gray-600 px-2" title="Adjuntar archivo">
-                                                📎
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
                                             </button>
                                             <input
                                                 type="text"
@@ -278,7 +278,7 @@ export default function Mensajes() {
                             ) : (
                                 /* Estado vacío */
                                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                                    <span className="text-6xl mb-4">💬</span>
+                                    <svg className="w-14 h-14 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
                                     <h3 className="text-lg font-medium text-gray-600">Mensajes</h3>
                                     <p className="text-sm mt-1">Seleccione un contacto para iniciar la conversación</p>
                                     <p className="text-xs mt-4 text-gray-400 max-w-sm text-center">

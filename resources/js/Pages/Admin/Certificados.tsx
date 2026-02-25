@@ -1,5 +1,5 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
@@ -42,33 +42,17 @@ const nivelesEducativos: Record<string, { label: string; cursos: string[] }> = {
 
 const nivelesKeys = Object.keys(nivelesEducativos);
 
-export default function Certificados() {
+interface Props {
+    certificados: Certificado[];
+}
+
+export default function Certificados({ certificados }: Props) {
     const [showModal, setShowModal] = useState(false);
     const [nivelSeleccionado, setNivelSeleccionado] = useState('todos');
     const [cursoSeleccionado, setCursoSeleccionado] = useState('todos');
     const [filtroEstado, setFiltroEstado] = useState('todos');
     const [filtroTipo, setFiltroTipo] = useState('todos');
     const [busqueda, setBusqueda] = useState('');
-
-    const certificados: Certificado[] = [
-        // Pre-escolar
-        { id: 1, tipo: 'Constancia de Matrícula', estudiante: 'Sofía Ramírez', nivel: 'preescolar', curso: 'Pre-Jardín', fecha_solicitud: '2026-02-01', fecha_entrega: null, estado: 'pendiente' },
-        { id: 2, tipo: 'Constancia de Estudios', estudiante: 'Mateo Herrera', nivel: 'preescolar', curso: 'Jardín', fecha_solicitud: '2026-01-25', fecha_entrega: '2026-01-28', estado: 'entregado' },
-        // Transición
-        { id: 3, tipo: 'Certificado de Notas', estudiante: 'Isabella Moreno', nivel: 'transicion', curso: 'Transición A', fecha_solicitud: '2026-02-03', fecha_entrega: null, estado: 'en_proceso' },
-        { id: 4, tipo: 'Paz y Salvo', estudiante: 'Nicolás Castro', nivel: 'transicion', curso: 'Transición B', fecha_solicitud: '2026-02-04', fecha_entrega: null, estado: 'listo' },
-        // Primaria
-        { id: 5, tipo: 'Constancia de Estudios', estudiante: 'Juan Pérez', nivel: 'primaria', curso: '3°', fecha_solicitud: '2026-02-01', fecha_entrega: null, estado: 'pendiente' },
-        { id: 6, tipo: 'Certificado de Notas', estudiante: 'María García', nivel: 'primaria', curso: '4°', fecha_solicitud: '2026-01-28', fecha_entrega: '2026-02-02', estado: 'entregado' },
-        { id: 7, tipo: 'Certificado de Conducta', estudiante: 'Carlos López', nivel: 'primaria', curso: '5°', fecha_solicitud: '2026-02-04', fecha_entrega: null, estado: 'listo' },
-        { id: 8, tipo: 'Constancia de Matrícula', estudiante: 'Laura Jiménez', nivel: 'primaria', curso: '2°', fecha_solicitud: '2026-02-05', fecha_entrega: null, estado: 'pendiente' },
-        // Bachillerato
-        { id: 9, tipo: 'Constancia de Estudios', estudiante: 'Pedro Sánchez', nivel: 'bachillerato', curso: '9°', fecha_solicitud: '2026-02-04', fecha_entrega: null, estado: 'pendiente' },
-        { id: 10, tipo: 'Certificado de Notas', estudiante: 'Ana Martínez', nivel: 'bachillerato', curso: '7°', fecha_solicitud: '2026-01-30', fecha_entrega: null, estado: 'en_proceso' },
-        { id: 11, tipo: 'Paz y Salvo', estudiante: 'Gabriela Ríos', nivel: 'bachillerato', curso: '11°', fecha_solicitud: '2026-02-02', fecha_entrega: '2026-02-05', estado: 'entregado' },
-        { id: 12, tipo: 'Constancia de Estudios', estudiante: 'Andrés Medina', nivel: 'bachillerato', curso: '10°', fecha_solicitud: '2026-02-06', fecha_entrega: null, estado: 'listo' },
-        { id: 13, tipo: 'Certificado de Conducta', estudiante: 'Felipe Suárez', nivel: 'bachillerato', curso: '6°', fecha_solicitud: '2026-02-03', fecha_entrega: null, estado: 'en_proceso' },
-    ];
 
     const tiposCertificado = [
         { id: 'constancia_estudios', nombre: 'Constancia de Estudios', precio: 15000 },
@@ -156,7 +140,7 @@ export default function Certificados() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>📜 Gestión de Certificados</h1>
+                        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Gestión de Certificados</h1>
                         <p className="text-gray-600 text-sm sm:text-base">Genera y administra certificados y constancias</p>
                     </div>
                     <button
@@ -165,6 +149,19 @@ export default function Certificados() {
                     >
                         <span>+</span> Nueva Solicitud
                     </button>
+                </div>
+
+                {/* Tipos de certificado disponibles */}
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+                    <h2 className="font-bold text-gray-800 mb-4" style={{ fontFamily: "'Inter', sans-serif" }}>Tipos de Certificados Disponibles</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {tiposCertificado.map((tipo) => (
+                            <div key={tipo.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="text-sm text-gray-700">{tipo.nombre}</span>
+                                <span className="text-sm font-medium text-green-600">${tipo.precio.toLocaleString()}</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Stats */}
@@ -201,7 +198,7 @@ export default function Certificados() {
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
                             >
-                                🏫 Todos
+                                Todos
                             </button>
                             <button
                                 onClick={() => handleNivelChange('preescolar')}
@@ -211,7 +208,7 @@ export default function Certificados() {
                                         : 'bg-pink-50 text-pink-700 hover:bg-pink-100'
                                 }`}
                             >
-                                🧒 Pre-escolar
+                                Pre-escolar
                             </button>
                             <button
                                 onClick={() => handleNivelChange('transicion')}
@@ -221,7 +218,7 @@ export default function Certificados() {
                                         : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
                                 }`}
                             >
-                                🎒 Transición
+                                Transición
                             </button>
                             <button
                                 onClick={() => handleNivelChange('primaria')}
@@ -231,7 +228,7 @@ export default function Certificados() {
                                         : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                                 }`}
                             >
-                                📚 Primaria
+                                Primaria
                             </button>
                             <button
                                 onClick={() => handleNivelChange('bachillerato')}
@@ -241,7 +238,7 @@ export default function Certificados() {
                                         : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                                 }`}
                             >
-                                🎓 Bachillerato
+                                Bachillerato
                             </button>
                         </div>
                     </div>
@@ -353,7 +350,6 @@ export default function Certificados() {
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden hidden sm:block">
                     {filteredCertificados.length === 0 ? (
                         <div className="p-12 text-center">
-                            <p className="text-4xl mb-3">📭</p>
                             <p className="text-gray-500 font-medium">No se encontraron certificados</p>
                             <p className="text-gray-400 text-sm mt-1">Intenta ajustar los filtros de búsqueda</p>
                         </div>
@@ -385,7 +381,7 @@ export default function Certificados() {
                                         <tr key={cert.id} className="hover:bg-gray-50">
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="text-lg flex-shrink-0">📄</span>
+                                                    <span className="text-lg flex-shrink-0"></span>
                                                     <span className="text-sm font-medium text-gray-800 truncate">{cert.tipo}</span>
                                                 </div>
                                             </td>
@@ -405,10 +401,10 @@ export default function Certificados() {
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex justify-end gap-2">
                                                     {cert.estado === 'listo' && (
-                                                        <button className="text-green-600 hover:text-green-800 text-sm font-medium">📥 Descargar</button>
+                                                        <button className="text-green-600 hover:text-green-800 text-sm font-medium">Descargar</button>
                                                     )}
                                                     {cert.estado !== 'entregado' && (
-                                                        <button className="text-[#293577] hover:text-[#181b49] text-sm font-medium">✏️ Gestionar</button>
+                                                        <button className="text-[#293577] hover:text-[#181b49] text-sm font-medium">Gestionar</button>
                                                     )}
                                                 </div>
                                             </td>
@@ -424,7 +420,7 @@ export default function Certificados() {
                 <div className="sm:hidden space-y-3">
                     {filteredCertificados.length === 0 ? (
                         <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                            <p className="text-3xl mb-2">📭</p>
+                            <p className="text-3xl mb-2"></p>
                             <p className="text-gray-500 text-sm">No se encontraron certificados</p>
                         </div>
                     ) : (
@@ -432,7 +428,7 @@ export default function Certificados() {
                             <div key={cert.id} className="bg-white rounded-xl shadow-sm p-4">
                                 <div className="flex items-start justify-between mb-2">
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-xl flex-shrink-0">📄</span>
+                                        <span className="text-xl flex-shrink-0"></span>
                                         <div className="min-w-0">
                                             <p className="font-medium text-gray-800 text-sm truncate">{cert.tipo}</p>
                                             <p className="text-xs text-gray-500">{cert.fecha_solicitud}</p>
@@ -454,10 +450,10 @@ export default function Certificados() {
                                     </div>
                                     <div className="flex gap-2 flex-shrink-0">
                                         {cert.estado === 'listo' && (
-                                            <button className="text-green-600 text-xs font-medium">📥</button>
+                                            <button className="text-green-600 text-xs font-medium"></button>
                                         )}
                                         {cert.estado !== 'entregado' && (
-                                            <button className="text-[#293577] text-xs font-medium">✏️</button>
+                                            <button className="text-[#293577] text-xs font-medium"></button>
                                         )}
                                     </div>
                                 </div>
@@ -473,18 +469,7 @@ export default function Certificados() {
                     </p>
                 </div>
 
-                {/* Tipos de certificado disponibles */}
-                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
-                    <h2 className="font-bold text-gray-800 mb-4" style={{ fontFamily: "'Inter', sans-serif" }}>📋 Tipos de Certificados Disponibles</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {tiposCertificado.map((tipo) => (
-                            <div key={tipo.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <span className="text-sm text-gray-700">{tipo.nombre}</span>
-                                <span className="text-sm font-medium text-green-600">${tipo.precio.toLocaleString()}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                
             </div>
 
             {/* Modal Nueva Solicitud */}

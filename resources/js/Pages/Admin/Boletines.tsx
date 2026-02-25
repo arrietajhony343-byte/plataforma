@@ -1,5 +1,5 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
@@ -56,60 +56,17 @@ const nivelesEducativos: Record<string, { label: string; color: string; cursos: 
 
 const nivelesKeys = Object.keys(nivelesEducativos);
 
-export default function Boletines() {
+interface Props {
+    boletines: Boletin[];
+    resumenNotas: ResumenNota[];
+}
+
+export default function Boletines({ boletines, resumenNotas }: Props) {
     const [nivelSeleccionado, setNivelSeleccionado] = useState('todos');
     const [cursoSeleccionado, setCursoSeleccionado] = useState('todos');
     const [periodoSeleccionado, setPeriodoSeleccionado] = useState('todos');
     const [busqueda, setBusqueda] = useState('');
     const [vistaActiva, setVistaActiva] = useState<'boletines' | 'notas'>('boletines');
-
-    // Datos demo amplios cubriendo todos los niveles
-    const boletines: Boletin[] = [
-        // Pre-escolar
-        { id: 1, estudiante: 'Sofía Ramírez', nivel: 'preescolar', curso: 'Pre-Jardín', periodo: '1', promedio: 4.5, estado: 'enviado', fecha_generacion: '2026-01-15' },
-        { id: 2, estudiante: 'Mateo Herrera', nivel: 'preescolar', curso: 'Pre-Jardín', periodo: '1', promedio: 4.2, estado: 'generado', fecha_generacion: '2026-01-15' },
-        { id: 3, estudiante: 'Valentina Torres', nivel: 'preescolar', curso: 'Jardín', periodo: '1', promedio: 4.8, estado: 'enviado', fecha_generacion: '2026-01-14' },
-        { id: 4, estudiante: 'Samuel Díaz', nivel: 'preescolar', curso: 'Jardín', periodo: '2', promedio: 4.0, estado: 'pendiente', fecha_generacion: null },
-        // Transición
-        { id: 5, estudiante: 'Isabella Moreno', nivel: 'transicion', curso: 'Transición A', periodo: '1', promedio: 4.3, estado: 'enviado', fecha_generacion: '2026-01-16' },
-        { id: 6, estudiante: 'Nicolás Castro', nivel: 'transicion', curso: 'Transición A', periodo: '2', promedio: 3.9, estado: 'generado', fecha_generacion: '2026-02-01' },
-        { id: 7, estudiante: 'Luciana Vargas', nivel: 'transicion', curso: 'Transición B', periodo: '2', promedio: 4.1, estado: 'pendiente', fecha_generacion: null },
-        // Primaria
-        { id: 8, estudiante: 'Juan Pérez', nivel: 'primaria', curso: '3°', periodo: '2', promedio: 4.2, estado: 'generado', fecha_generacion: '2026-02-01' },
-        { id: 9, estudiante: 'María García', nivel: 'primaria', curso: '3°', periodo: '2', promedio: 4.5, estado: 'enviado', fecha_generacion: '2026-02-01' },
-        { id: 10, estudiante: 'Carlos López', nivel: 'primaria', curso: '4°', periodo: '2', promedio: 3.8, estado: 'pendiente', fecha_generacion: null },
-        { id: 11, estudiante: 'Laura Jiménez', nivel: 'primaria', curso: '5°', periodo: '1', promedio: 4.6, estado: 'enviado', fecha_generacion: '2026-01-20' },
-        { id: 12, estudiante: 'Diego Ruiz', nivel: 'primaria', curso: '1°', periodo: '2', promedio: 3.5, estado: 'pendiente', fecha_generacion: null },
-        { id: 13, estudiante: 'Camila Ortiz', nivel: 'primaria', curso: '2°', periodo: '2', promedio: 4.0, estado: 'generado', fecha_generacion: '2026-02-03' },
-        // Bachillerato
-        { id: 14, estudiante: 'Ana Martínez', nivel: 'bachillerato', curso: '7°', periodo: '2', promedio: 4.0, estado: 'generado', fecha_generacion: '2026-02-02' },
-        { id: 15, estudiante: 'Pedro Sánchez', nivel: 'bachillerato', curso: '7°', periodo: '2', promedio: 3.5, estado: 'pendiente', fecha_generacion: null },
-        { id: 16, estudiante: 'Daniela Rojas', nivel: 'bachillerato', curso: '9°', periodo: '1', promedio: 4.4, estado: 'enviado', fecha_generacion: '2026-01-18' },
-        { id: 17, estudiante: 'Andrés Medina', nivel: 'bachillerato', curso: '10°', periodo: '2', promedio: 3.2, estado: 'pendiente', fecha_generacion: null },
-        { id: 18, estudiante: 'Gabriela Ríos', nivel: 'bachillerato', curso: '11°', periodo: '2', promedio: 4.7, estado: 'generado', fecha_generacion: '2026-02-04' },
-        { id: 19, estudiante: 'Felipe Suárez', nivel: 'bachillerato', curso: '6°', periodo: '2', promedio: 3.9, estado: 'generado', fecha_generacion: '2026-02-03' },
-    ];
-
-    const resumenNotas: ResumenNota[] = [
-        // Pre-escolar
-        { nivel: 'preescolar', curso: 'Pre-Jardín', promedio: 4.3, aprobados: 18, reprobados: 0, mejorMateria: 'Motricidad', peorMateria: 'Lectoescritura' },
-        { nivel: 'preescolar', curso: 'Jardín', promedio: 4.4, aprobados: 20, reprobados: 1, mejorMateria: 'Arte', peorMateria: 'Números' },
-        // Transición
-        { nivel: 'transicion', curso: 'Transición A', promedio: 4.1, aprobados: 22, reprobados: 2, mejorMateria: 'Ciencias', peorMateria: 'Lectura' },
-        { nivel: 'transicion', curso: 'Transición B', promedio: 3.9, aprobados: 20, reprobados: 3, mejorMateria: 'Sociales', peorMateria: 'Matemáticas' },
-        // Primaria
-        { nivel: 'primaria', curso: '1°', promedio: 4.0, aprobados: 25, reprobados: 3, mejorMateria: 'Español', peorMateria: 'Matemáticas' },
-        { nivel: 'primaria', curso: '2°', promedio: 3.8, aprobados: 24, reprobados: 4, mejorMateria: 'Ciencias', peorMateria: 'Inglés' },
-        { nivel: 'primaria', curso: '3°', promedio: 4.1, aprobados: 28, reprobados: 2, mejorMateria: 'Ciencias', peorMateria: 'Matemáticas' },
-        { nivel: 'primaria', curso: '4°', promedio: 3.9, aprobados: 26, reprobados: 4, mejorMateria: 'Historia', peorMateria: 'Inglés' },
-        { nivel: 'primaria', curso: '5°', promedio: 4.2, aprobados: 27, reprobados: 1, mejorMateria: 'Español', peorMateria: 'Matemáticas' },
-        // Bachillerato
-        { nivel: 'bachillerato', curso: '6°', promedio: 3.9, aprobados: 26, reprobados: 4, mejorMateria: 'Ed. Física', peorMateria: 'Álgebra' },
-        { nivel: 'bachillerato', curso: '7°', promedio: 3.7, aprobados: 24, reprobados: 4, mejorMateria: 'Biología', peorMateria: 'Química' },
-        { nivel: 'bachillerato', curso: '9°', promedio: 4.0, aprobados: 25, reprobados: 3, mejorMateria: 'Español', peorMateria: 'Física' },
-        { nivel: 'bachillerato', curso: '10°', promedio: 3.6, aprobados: 22, reprobados: 6, mejorMateria: 'Filosofía', peorMateria: 'Trigonometría' },
-        { nivel: 'bachillerato', curso: '11°', promedio: 4.1, aprobados: 28, reprobados: 2, mejorMateria: 'Lectura Crítica', peorMateria: 'Cálculo' },
-    ];
 
     // Cursos disponibles según nivel seleccionado
     const cursosDisponibles = useMemo(() => {
@@ -180,15 +137,15 @@ export default function Boletines() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>📋 Boletines & Notas</h1>
+                        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Boletines & Notas</h1>
                         <p className="text-gray-600 text-sm sm:text-base">Gestiona boletines y visualiza información de notas</p>
                     </div>
                     <div className="flex gap-2">
                         <button className="flex items-center gap-2 bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
-                            📥 Exportar Todo
+                            Exportar Todo
                         </button>
                         <button className="flex items-center gap-2 bg-[#293577] text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-[#181b49] text-sm">
-                            🔄 Generar Masivo
+                            Generar Masivo
                         </button>
                     </div>
                 </div>
@@ -199,13 +156,13 @@ export default function Boletines() {
                         onClick={() => setVistaActiva('boletines')}
                         className={`px-4 sm:px-6 py-2 rounded-lg font-medium transition-colors text-sm ${vistaActiva === 'boletines' ? 'bg-[#293577] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
                     >
-                        📄 Boletines
+                        Boletines
                     </button>
                     <button
                         onClick={() => setVistaActiva('notas')}
                         className={`px-4 sm:px-6 py-2 rounded-lg font-medium transition-colors text-sm ${vistaActiva === 'notas' ? 'bg-[#293577] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
                     >
-                        📊 Resumen Notas
+                        Resumen Notas
                     </button>
                 </div>
 
@@ -223,7 +180,7 @@ export default function Boletines() {
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
                             >
-                                🏫 Todos los niveles
+                                Todos los niveles
                             </button>
                             <button
                                 onClick={() => handleNivelChange('preescolar')}
@@ -233,7 +190,7 @@ export default function Boletines() {
                                         : 'bg-pink-50 text-pink-700 hover:bg-pink-100'
                                 }`}
                             >
-                                🧒 Pre-escolar
+                                Pre-escolar
                             </button>
                             <button
                                 onClick={() => handleNivelChange('transicion')}
@@ -243,7 +200,7 @@ export default function Boletines() {
                                         : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
                                 }`}
                             >
-                                🎒 Transición
+                                Transición
                             </button>
                             <button
                                 onClick={() => handleNivelChange('primaria')}
@@ -253,7 +210,7 @@ export default function Boletines() {
                                         : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                                 }`}
                             >
-                                📚 Primaria
+                                Primaria
                             </button>
                             <button
                                 onClick={() => handleNivelChange('bachillerato')}
@@ -263,7 +220,7 @@ export default function Boletines() {
                                         : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                                 }`}
                             >
-                                🎓 Bachillerato
+                                Bachillerato
                             </button>
                         </div>
                     </div>
@@ -374,7 +331,6 @@ export default function Boletines() {
                         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                             {boletinesFiltrados.length === 0 ? (
                                 <div className="p-12 text-center">
-                                    <p className="text-4xl mb-3">📭</p>
                                     <p className="text-gray-500 font-medium">No se encontraron boletines</p>
                                     <p className="text-gray-400 text-sm mt-1">Intenta ajustar los filtros de búsqueda</p>
                                 </div>
@@ -431,16 +387,16 @@ export default function Boletines() {
                                                         <td className="px-4 py-3 text-right">
                                                             <div className="flex justify-end gap-2">
                                                                 {boletin.estado === 'pendiente' && (
-                                                                    <button className="text-[#293577] hover:text-[#181b49] text-sm font-medium">🔄 Generar</button>
+                                                                    <button className="text-[#293577] hover:text-[#181b49] text-sm font-medium">Generar</button>
                                                                 )}
                                                                 {boletin.estado === 'generado' && (
                                                                     <>
-                                                                        <button className="text-green-600 hover:text-green-800 text-sm font-medium">📥 PDF</button>
-                                                                        <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">📧 Enviar</button>
+                                                                        <button className="text-green-600 hover:text-green-800 text-sm font-medium">PDF</button>
+                                                                        <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">Enviar</button>
                                                                     </>
                                                                 )}
                                                                 {boletin.estado === 'enviado' && (
-                                                                    <button className="text-gray-600 hover:text-gray-800 text-sm font-medium">👁️ Ver</button>
+                                                                    <button className="text-gray-600 hover:text-gray-800 text-sm font-medium">Ver</button>
                                                                 )}
                                                             </div>
                                                         </td>
@@ -478,16 +434,16 @@ export default function Boletines() {
                                                     </span>
                                                     <div className="flex gap-3">
                                                         {boletin.estado === 'pendiente' && (
-                                                            <button className="text-[#293577] text-xs font-medium">🔄 Generar</button>
+                                                            <button className="text-[#293577] text-xs font-medium">Generar</button>
                                                         )}
                                                         {boletin.estado === 'generado' && (
                                                             <>
-                                                                <button className="text-green-600 text-xs font-medium">📥 PDF</button>
-                                                                <button className="text-blue-600 text-xs font-medium">📧 Enviar</button>
+                                                                <button className="text-green-600 text-xs font-medium">PDF</button>
+                                                                <button className="text-blue-600 text-xs font-medium">Enviar</button>
                                                             </>
                                                         )}
                                                         {boletin.estado === 'enviado' && (
-                                                            <button className="text-gray-600 text-xs font-medium">👁️ Ver</button>
+                                                            <button className="text-gray-600 text-xs font-medium">Ver</button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -510,7 +466,6 @@ export default function Boletines() {
                         {/* Resumen de notas por curso filtrado */}
                         {resumenFiltrado.length === 0 ? (
                             <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-                                <p className="text-4xl mb-3">📊</p>
                                 <p className="text-gray-500 font-medium">No hay resúmenes para los filtros seleccionados</p>
                                 <p className="text-gray-400 text-sm mt-1">Ajusta el nivel o curso para ver resultados</p>
                             </div>
@@ -551,7 +506,7 @@ export default function Boletines() {
                                                 <p className="text-xs text-blue-700">Mejor Materia</p>
                                             </div>
                                             <div className="bg-orange-50 rounded-lg p-3 text-center">
-                                                <p className="text-sm font-medium text-orange-600">⚠️ {curso.peorMateria}</p>
+                                                <p className="text-sm font-medium text-orange-600">{curso.peorMateria}</p>
                                                 <p className="text-xs text-orange-700">Necesita Atención</p>
                                             </div>
                                         </div>

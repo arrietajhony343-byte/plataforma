@@ -1,20 +1,34 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { useState, useEffect, useCallback } from 'react';
+import { profesorMenuItems } from '@/Config/profesorMenu';
 
-interface Estudiante {
+interface NotaBackend {
+    id: number;
+    tipo: string;
+    valor: number;
+    peso: number;
+    descripcion: string | null;
+}
+
+interface EstudianteBackend {
     id: number;
     nombre: string;
-    notas: {
-        [key: string]: number;
-    };
-    promedio: number;
+    notas: NotaBackend[];
+    promedio: number | null;
 }
 
 interface Evaluacion {
     id: string;
     nombre: string;
     porcentaje: number;
+    tipo: string;
+}
+
+interface CursoMateriaMap {
+    id: number;
+    curso_id: number;
+    materia_id: number;
 }
 
 interface Props {
@@ -33,63 +47,104 @@ interface Props {
         id: number;
         nombre: string;
     }>;
+    cursoMaterias: CursoMateriaMap[];
 }
 
-export default function RegistrarNotas({ profesor, cursos, materias, periodos }: Props) {
-    // Datos mock para demostración
-    const [cursoSeleccionado, setCursoSeleccionado] = useState('6A');
-    const [materiaSeleccionada, setMateriaSeleccionada] = useState('Matemáticas');
-    const [periodoSeleccionado, setPeriodoSeleccionado] = useState('1° Trimestre');
+export default function RegistrarNotas({ profesor, cursos, materias, periodos, cursoMaterias }: Props) {
+    const [cursoSeleccionado, setCursoSeleccionado] = useState(cursos[0]?.id?.toString() || '');
+    const [materiaSeleccionada, setMateriaSeleccionada] = useState(materias[0]?.id?.toString() || '');
+    const [periodoSeleccionado, setPeriodoSeleccionado] = useState(periodos[0]?.id?.toString() || '');
 
-    // Evaluaciones dinámicas
     const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([
-        { id: 'quiz1', nombre: 'Quiz 1', porcentaje: 30 },
-        { id: 'examen', nombre: 'Examen Parcial', porcentaje: 30 },
-        { id: 'final', nombre: 'Trabajo Final', porcentaje: 40 },
+        { id: 'quiz', nombre: 'Quiz', porcentaje: 30, tipo: 'quiz' },
+        { id: 'examen', nombre: 'Examen', porcentaje: 30, tipo: 'examen' },
+        { id: 'tarea', nombre: 'Tarea', porcentaje: 40, tipo: 'tarea' },
     ]);
 
-    const [estudiantes, setEstudiantes] = useState<Estudiante[]>([
-        { id: 1, nombre: 'Pérez, Juan', notas: { quiz1: 85, examen: 90, final: 85 }, promedio: 86.5 },
-        { id: 2, nombre: 'García, Ana', notas: { quiz1: 90, examen: 90, final: 90 }, promedio: 90.0 },
-        { id: 3, nombre: 'López, Carlos', notas: { quiz1: 78, examen: 78, final: 78 }, promedio: 78.0 },
-        { id: 4, nombre: 'Rodríguez, Sofía', notas: { quiz1: 92, examen: 92, final: 92 }, promedio: 92.0 },
-        { id: 5, nombre: 'Martínez, Luis', notas: { quiz1: 88, examen: 88, final: 88 }, promedio: 88.0 },
-    ]);
+    const [estudiantes, setEstudiantes] = useState<EstudianteBackend[]>([]);
+    const [notasLocales, setNotasLocales] = useState<Record<number, Record<string, number>>>({});
+    const [loading, setLoading] = useState(false);
+    const [guardando, setGuardando] = useState(false);
+
+    // Encontrar el curso_materia_id correspondiente
+    const cursoMateriaId = cursoMaterias.find(
+        cm => cm.curso_id === Number(cursoSeleccionado) && cm.materia_id === Number(materiaSeleccionada)
+    )?.id;
+
+    // Cargar estudiantes cuando cambian los filtros
+    const cargarEstudiantes = useCallback(() => {
+        if (!cursoMateriaId || !periodoSeleccionado) return;
+        setLoading(true);
+        fetch(`/profesor/notas/estudiantes?curso_materia_id=${cursoMateriaId}&periodo_id=${periodoSeleccionado}`)
+            .then(res => res.json())
+            .then((data: EstudianteBackend[]) => {
+                setEstudiantes(data);
+                // Inicializar notas locales desde backend
+                const locales: Record<number, Record<string, number>> = {};
+                data.forEach(est => {
+                    locales[est.id] = {};
+                    est.notas.forEach(n => {
+                        locales[est.id][n.tipo] = n.valor;
+                    });
+                });
+                setNotasLocales(locales);
+            })
+            .finally(() => setLoading(false));
+    }, [cursoMateriaId, periodoSeleccionado]);
+
+    useEffect(() => { cargarEstudiantes(); }, [cargarEstudiantes]);
 
     const [mostrarModalEvaluacion, setMostrarModalEvaluacion] = useState(false);
-    const [nuevaEvaluacion, setNuevaEvaluacion] = useState({ nombre: '', porcentaje: 0 });
+    const [nuevaEvaluacion, setNuevaEvaluacion] = useState({ nombre: '', porcentaje: 0, tipo: 'tarea' });
 
-    const calcularPromedio = (notas: { [key: string]: number }) => {
+    const calcularPromedio = (notas: Record<string, number>) => {
         let total = 0;
+        let pesoTotal = 0;
         evaluaciones.forEach(ev => {
-            total += (notas[ev.id] || 0) * (ev.porcentaje / 100);
+            if (notas[ev.tipo] !== undefined) {
+                total += (notas[ev.tipo] || 0) * (ev.porcentaje / 100);
+                pesoTotal += ev.porcentaje;
+            }
         });
-        return total.toFixed(1);
+        return pesoTotal > 0 ? (total / (pesoTotal / 100) * (100 / 100)).toFixed(1) : '0.0';
     };
 
-    const actualizarNota = (estudianteId: number, evaluacionId: string, valor: number) => {
-        setEstudiantes(prev => prev.map(est => {
-            if (est.id === estudianteId) {
-                const nuevasNotas = { ...est.notas, [evaluacionId]: valor };
-                return {
-                    ...est,
-                    notas: nuevasNotas,
-                    promedio: parseFloat(calcularPromedio(nuevasNotas))
-                };
-            }
-            return est;
+    const actualizarNota = (estudianteId: number, tipo: string, valor: number) => {
+        setNotasLocales(prev => ({
+            ...prev,
+            [estudianteId]: { ...prev[estudianteId], [tipo]: valor }
         }));
+    };
+
+    const guardarNotas = () => {
+        if (!cursoMateriaId || !periodoSeleccionado) return;
+        setGuardando(true);
+        const notasArr: Array<{estudiante_id: number; curso_materia_id: number; periodo_id: number; tipo: string; valor: number; peso: number; descripcion: string | null}> = [];
+        Object.entries(notasLocales).forEach(([estId, notas]) => {
+            Object.entries(notas).forEach(([tipo, valor]) => {
+                const ev = evaluaciones.find(e => e.tipo === tipo);
+                notasArr.push({
+                    estudiante_id: Number(estId),
+                    curso_materia_id: cursoMateriaId!,
+                    periodo_id: Number(periodoSeleccionado),
+                    tipo,
+                    valor: Math.min(5, Math.max(0, valor)),
+                    peso: ev?.porcentaje || 0,
+                    descripcion: ev?.nombre || null,
+                });
+            });
+        });
+        router.post('/profesor/notas', { notas: notasArr }, {
+            onSuccess: () => setGuardando(false),
+            onError: () => setGuardando(false),
+        });
     };
 
     const agregarEvaluacion = () => {
         if (nuevaEvaluacion.nombre && nuevaEvaluacion.porcentaje > 0) {
             const id = nuevaEvaluacion.nombre.toLowerCase().replace(/\s/g, '_');
-            setEvaluaciones([...evaluaciones, { ...nuevaEvaluacion, id }]);
-            setEstudiantes(prev => prev.map(est => ({
-                ...est,
-                notas: { ...est.notas, [id]: 0 }
-            })));
-            setNuevaEvaluacion({ nombre: '', porcentaje: 0 });
+            setEvaluaciones([...evaluaciones, { ...nuevaEvaluacion, id, tipo: nuevaEvaluacion.tipo }]);
+            setNuevaEvaluacion({ nombre: '', porcentaje: 0, tipo: 'tarea' });
             setMostrarModalEvaluacion(false);
         }
     };
@@ -98,33 +153,14 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
         setEvaluaciones(prev => prev.filter(ev => ev.id !== id));
     };
 
-    const menuItems = [
-        {
-            name: 'Mis Cursos',
-            href: '/profesor/dashboard',
-            icon: <svg fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>,
-        },
-        {
-            name: 'Registrar Notas',
-            href: '/profesor/notas',
-            icon: <svg fill="currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>,
-            active: true,
-        },
-        {
-            name: 'Observador Académico',
-            href: '/profesor/observador',
-            icon: <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>,
-        },
-        {
-            name: 'Mi Calendario',
-            href: '/profesor/calendario',
-            icon: <svg fill="currentColor" viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/></svg>,
-        },
-    ];
+    // Materias filtradas según curso seleccionado
+    const materiasDisponibles = materias.filter(m =>
+        cursoMaterias.some(cm => cm.curso_id === Number(cursoSeleccionado) && cm.materia_id === m.id)
+    );
 
     return (
         <SidebarLayout 
-            menuItems={menuItems}
+            menuItems={profesorMenuItems}
             userInfo={{ name: profesor?.nombre || 'Profesor', role: 'Profesor' }}
         >
             <Head title="Registrar Notas" />
@@ -132,7 +168,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
             <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">
                 <span className="hidden sm:inline">Registro de Notas - </span>
                 <span className="sm:hidden">Notas: </span>
-                {materiaSeleccionada} - {cursoSeleccionado}
+                {materias.find(m => m.id === Number(materiaSeleccionada))?.nombre || 'Materia'} - {cursos.find(c => c.id === Number(cursoSeleccionado))?.nombre || 'Curso'}
             </h1>
 
             {/* Filtros */}
@@ -144,10 +180,9 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
                         onChange={(e) => setCursoSeleccionado(e.target.value)}
                         className="border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
                     >
-                        <option value="6A">6A</option>
-                        <option value="6B">6B</option>
-                        <option value="10A">10A</option>
-                        <option value="10B">10B</option>
+                        {cursos.map(c => (
+                            <option key={c.id} value={c.id}>{c.nombre}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -157,9 +192,9 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
                         onChange={(e) => setMateriaSeleccionada(e.target.value)}
                         className="border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
                     >
-                        <option value="Matemáticas">Matemáticas</option>
-                        <option value="Física">Física</option>
-                        <option value="Español">Español</option>
+                        {materiasDisponibles.map(m => (
+                            <option key={m.id} value={m.id}>{m.nombre}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
@@ -169,9 +204,9 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
                         onChange={(e) => setPeriodoSeleccionado(e.target.value)}
                         className="border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
                     >
-                        <option value="1° Trimestre">1° Trimestre</option>
-                        <option value="2° Trimestre">2° Trimestre</option>
-                        <option value="3° Trimestre">3° Trimestre</option>
+                        {periodos.map(p => (
+                            <option key={p.id} value={p.id}>{p.nombre}</option>
+                        ))}
                     </select>
                 </div>
                 <button
@@ -180,7 +215,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
                 >
                     + Evaluación
                 </button>
-                <button className="col-span-2 sm:col-span-1 lg:ml-auto bg-green-600 text-white px-4 sm:px-6 py-2 rounded-lg text-sm hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+                <button className="col-span-2 sm:col-span-1 lg:ml-auto bg-green-600 text-white px-4 sm:px-6 py-2 rounded-lg text-sm hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50" onClick={guardarNotas} disabled={guardando || !cursoMateriaId}>
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm2 16H5V5h11.17L19 7.83V19zm-7-7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zM6 6h9v4H6z"/>
                     </svg>
@@ -191,11 +226,18 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
 
             {/* Tabla de notas */}
             <div className="bg-white rounded-xl shadow overflow-x-auto -mx-4 sm:mx-0">
+                {loading ? (
+                    <div className="p-8 text-center text-gray-500">Cargando estudiantes...</div>
+                ) : !cursoMateriaId ? (
+                    <div className="p-8 text-center text-gray-500">Selecciona una combinación curso-materia válida</div>
+                ) : estudiantes.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500">No hay estudiantes matriculados</div>
+                ) : (
                 <table className="w-full min-w-[500px]">
                     <thead className="bg-gray-100">
                         <tr>
                             <th className="text-left px-4 py-3 font-semibold text-gray-700 border-b">
-                                Estudiante <span className="text-xs text-gray-500">(Apellido, Nombre)</span>
+                                Estudiante
                             </th>
                             {evaluaciones.map(ev => (
                                 <th key={ev.id} className="text-center px-4 py-3 font-semibold text-gray-700 border-b">
@@ -219,7 +261,10 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
                         </tr>
                     </thead>
                     <tbody>
-                        {estudiantes.map((estudiante, idx) => (
+                        {estudiantes.map((estudiante, idx) => {
+                            const notas = notasLocales[estudiante.id] || {};
+                            const promedio = parseFloat(calcularPromedio(notas));
+                            return (
                             <tr key={estudiante.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                 <td className="px-4 py-3 font-medium text-gray-800 border-b">
                                     {estudiante.nombre}
@@ -229,25 +274,28 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos }:
                                         <input
                                             type="number"
                                             min="0"
-                                            max="100"
-                                            value={estudiante.notas[ev.id] || ''}
-                                            onChange={(e) => actualizarNota(estudiante.id, ev.id, parseFloat(e.target.value) || 0)}
+                                            max="5"
+                                            step="0.1"
+                                            value={notas[ev.tipo] ?? ''}
+                                            onChange={(e) => actualizarNota(estudiante.id, ev.tipo, parseFloat(e.target.value) || 0)}
                                             className="w-16 text-center border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         />
                                     </td>
                                 ))}
                                 <td className="px-4 py-3 text-center border-b">
                                     <span className={`font-bold text-lg ${
-                                        estudiante.promedio >= 90 ? 'text-green-600' :
-                                        estudiante.promedio >= 70 ? 'text-yellow-600' : 'text-red-600'
+                                        promedio >= 4 ? 'text-green-600' :
+                                        promedio >= 3 ? 'text-yellow-600' : 'text-red-600'
                                     }`}>
-                                        {estudiante.promedio.toFixed(1)}
+                                        {promedio.toFixed(1)}
                                     </span>
                                 </td>
                             </tr>
-                        ))}
+                            );
+                        })}
                     </tbody>
                 </table>
+                )}
             </div>
 
             {/* Modal para agregar evaluación */}

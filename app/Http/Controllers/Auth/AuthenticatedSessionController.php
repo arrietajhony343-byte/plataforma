@@ -33,9 +33,19 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        // Determinar URL de redirección según el rol
+        // Registrar último acceso y resetear intentos fallidos
         $user = Auth::user();
-        
+        $user->update([
+            'last_login_at'  => now(),
+            'login_attempts' => 0,
+        ]);
+
+        // Si debe cambiar contraseña, redirigir a cambio obligatorio
+        if ($user->must_change_password) {
+            return redirect()->route('password.force-change');
+        }
+
+        // Determinar URL de redirección según el rol
         if ($user->hasRole('admin')) {
             return redirect()->intended('/admin/dashboard');
         } elseif ($user->hasRole('profesor')) {

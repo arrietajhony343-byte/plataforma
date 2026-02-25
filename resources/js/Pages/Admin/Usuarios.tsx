@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { useState, useMemo } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 interface User {
@@ -12,8 +12,32 @@ interface User {
     created_at: string;
     last_login: string | null;
     login_attempts: number;
-    blocked_reason?: string;
     phone?: string;
+    documento?: string;
+    tipo_documento: string;
+    direccion?: string;
+    fecha_nacimiento?: string;
+    genero?: string;
+    must_change_password: boolean;
+    // Datos académicos (estudiantes)
+    curso_id?: number;
+    nivel_educativo?: string;
+    acudiente_id?: number;
+    acudiente_name?: string;
+}
+
+interface Curso {
+    id: number;
+    nombre: string;
+    nivel: string;
+    grado: number | null;
+    grupo: string;
+}
+
+interface Padre {
+    id: number;
+    name: string;
+    documento?: string;
 }
 
 interface ActionLog {
@@ -26,50 +50,54 @@ interface ActionLog {
     timestamp: string;
 }
 
-export default function Usuarios() {
+interface Props {
+    users: User[];
+    actionLogs: ActionLog[];
+    cursos: Curso[];
+    padres: Padre[];
+}
+
+const EMPTY_FORM = {
+    name: '', email: '', phone: '', role: 'estudiante', password: '', status: 'activo',
+    documento: '', tipo_documento: 'CC', direccion: '', fecha_nacimiento: '', genero: '',
+    nivel_educativo: '', curso_id: '', acudiente_id: '',
+};
+
+export default function Usuarios({ users: initialUsers, actionLogs, cursos, padres }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('todos');
     const [filterStatus, setFilterStatus] = useState('todos');
     const [showModal, setShowModal] = useState(false);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [showResetPwModal, setShowResetPwModal] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [blockReason, setBlockReason] = useState('');
+    const [resetPwValue, setResetPwValue] = useState('');
+    const [formData, setFormData] = useState({ ...EMPTY_FORM });
+    const [processing, setProcessing] = useState(false);
+    const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-    const [users, setUsers] = useState<User[]>([
-        { id: 1, name: 'Juan Pérez', email: 'juan@colegio.com', role: 'profesor', status: 'activo', created_at: '2026-01-15', last_login: '2026-01-20 08:30', login_attempts: 0, phone: '555-1234' },
-        { id: 2, name: 'María García', email: 'maria@colegio.com', role: 'profesor', status: 'activo', created_at: '2026-01-10', last_login: '2026-01-19 14:15', login_attempts: 0, phone: '555-5678' },
-        { id: 3, name: 'Carlos López', email: 'carlos@colegio.com', role: 'estudiante', status: 'activo', created_at: '2026-01-05', last_login: '2026-01-20 07:45', login_attempts: 0 },
-        { id: 4, name: 'Ana Martínez', email: 'ana@colegio.com', role: 'estudiante', status: 'bloqueado', created_at: '2025-12-20', last_login: '2026-01-10 09:00', login_attempts: 5, blocked_reason: 'Múltiples intentos fallidos de inicio de sesión' },
-        { id: 5, name: 'Pedro Sánchez', email: 'pedro@colegio.com', role: 'padre', status: 'activo', created_at: '2026-01-01', last_login: '2026-01-18 20:30', login_attempts: 0, phone: '555-9012' },
-        { id: 6, name: 'Laura Rodríguez', email: 'laura@colegio.com', role: 'estudiante', status: 'pendiente', created_at: '2026-01-19', last_login: null, login_attempts: 0 },
-        { id: 7, name: 'Diego Hernández', email: 'diego@colegio.com', role: 'profesor', status: 'bloqueado', created_at: '2025-11-15', last_login: '2025-12-01 10:00', login_attempts: 0, blocked_reason: 'Solicitud del usuario - Licencia temporal' },
-        { id: 8, name: 'Sofía Castro', email: 'sofia@colegio.com', role: 'estudiante', status: 'pendiente', created_at: '2026-01-20', last_login: null, login_attempts: 0 },
-    ]);
+    const users = initialUsers;
 
-    const [actionLogs] = useState<ActionLog[]>([
-        { id: 1, user_id: 4, user_name: 'Ana Martínez', action: 'bloquear', reason: 'Múltiples intentos fallidos', performed_by: 'Admin Sistema', timestamp: '2026-01-15 10:30' },
-        { id: 2, user_id: 7, user_name: 'Diego Hernández', action: 'bloquear', reason: 'Licencia temporal', performed_by: 'Admin Principal', timestamp: '2025-12-01 09:00' },
-        { id: 3, user_id: 3, user_name: 'Carlos López', action: 'activar', performed_by: 'Admin Sistema', timestamp: '2026-01-05 08:00' },
-        { id: 4, user_id: 6, user_name: 'Laura Rodríguez', action: 'crear', performed_by: 'Admin Principal', timestamp: '2026-01-19 11:30' },
-    ]);
-
-    const filteredUsers = users.filter(user => {
+    const filteredUsers = useMemo(() => users.filter(user => {
         const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              user.email.toLowerCase().includes(searchTerm.toLowerCase());
+                              user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              (user.documento ?? '').includes(searchTerm);
         const matchesRole = filterRole === 'todos' || user.role === filterRole;
         const matchesStatus = filterStatus === 'todos' || user.status === filterStatus;
         return matchesSearch && matchesRole && matchesStatus;
-    });
+    }), [users, searchTerm, filterRole, filterStatus]);
 
+    /* ─── Helpers visuales ─── */
     const getRoleBadge = (role: string) => {
         switch (role) {
-            case 'admin': return { bg: 'bg-purple-50 text-purple-700 ring-purple-200', dot: 'bg-purple-500' };
-            case 'profesor': return { bg: 'bg-sky-50 text-sky-700 ring-sky-200', dot: 'bg-sky-500' };
-            case 'estudiante': return { bg: 'bg-emerald-50 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500' };
-            case 'padre': return { bg: 'bg-amber-50 text-amber-700 ring-amber-200', dot: 'bg-amber-500' };
-            default: return { bg: 'bg-gray-50 text-gray-700 ring-gray-200', dot: 'bg-gray-500' };
+            case 'admin': return { bg: 'bg-purple-50 text-purple-700 ring-purple-200', dot: 'bg-purple-500', label: 'Administrador' };
+            case 'profesor': return { bg: 'bg-sky-50 text-sky-700 ring-sky-200', dot: 'bg-sky-500', label: 'Profesor' };
+            case 'estudiante': return { bg: 'bg-emerald-50 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500', label: 'Estudiante' };
+            case 'padre': return { bg: 'bg-amber-50 text-amber-700 ring-amber-200', dot: 'bg-amber-500', label: 'Padre' };
+            default: return { bg: 'bg-gray-50 text-gray-700 ring-gray-200', dot: 'bg-gray-500', label: role };
         }
     };
 
@@ -82,33 +110,14 @@ export default function Usuarios() {
         }
     };
 
-    const handleToggleStatus = (user: User) => {
-        if (user.status === 'activo') {
-            setSelectedUser(user);
-            setBlockReason('');
-            setShowBlockModal(true);
-        } else {
-            setUsers(prev => prev.map(u =>
-                u.id === user.id ? { ...u, status: 'activo' as const, blocked_reason: undefined, login_attempts: 0 } : u
-            ));
+    const getInitialColor = (role: string) => {
+        switch (role) {
+            case 'admin': return 'from-purple-600 to-purple-800';
+            case 'profesor': return 'from-sky-600 to-sky-800';
+            case 'estudiante': return 'from-emerald-600 to-emerald-800';
+            case 'padre': return 'from-amber-600 to-amber-800';
+            default: return 'from-gray-600 to-gray-800';
         }
-    };
-
-    const handleBlockUser = () => {
-        if (selectedUser && blockReason.trim()) {
-            setUsers(prev => prev.map(u =>
-                u.id === selectedUser.id ? { ...u, status: 'bloqueado' as const, blocked_reason: blockReason } : u
-            ));
-            setShowBlockModal(false);
-            setSelectedUser(null);
-            setBlockReason('');
-        }
-    };
-
-    const handleActivatePending = (user: User) => {
-        setUsers(prev => prev.map(u =>
-            u.id === user.id ? { ...u, status: 'activo' as const } : u
-        ));
     };
 
     const getActionBadge = (action: string) => {
@@ -122,14 +131,122 @@ export default function Usuarios() {
         }
     };
 
-    const getInitialColor = (role: string) => {
-        switch (role) {
-            case 'admin': return 'from-purple-600 to-purple-800';
-            case 'profesor': return 'from-sky-600 to-sky-800';
-            case 'estudiante': return 'from-emerald-600 to-emerald-800';
-            case 'padre': return 'from-amber-600 to-amber-800';
-            default: return 'from-gray-600 to-gray-800';
+    const tipoDocLabel: Record<string, string> = { CC: 'C.C.', TI: 'T.I.', CE: 'C.E.', RC: 'R.C.', PP: 'Pasaporte' };
+
+    /* ─── Validación de campos numéricos ─── */
+    const onlyNumbers = (value: string) => value.replace(/[^0-9]/g, '');
+
+    /* ─── Acciones ─── */
+    const handleToggleStatus = (user: User) => {
+        if (user.status === 'activo') {
+            setSelectedUser(user);
+            setBlockReason('');
+            setShowBlockModal(true);
+        } else {
+            router.patch(`/admin/usuarios/${user.id}/toggle-status`, {}, { preserveScroll: true });
         }
+    };
+
+    const handleBlockUser = () => {
+        if (selectedUser) {
+            router.patch(`/admin/usuarios/${selectedUser.id}/toggle-status`, { reason: blockReason }, {
+                preserveScroll: true,
+                onSuccess: () => { setShowBlockModal(false); setSelectedUser(null); setBlockReason(''); },
+            });
+        }
+    };
+
+    const handleActivatePending = (user: User) => {
+        router.patch(`/admin/usuarios/${user.id}/toggle-status`, {}, { preserveScroll: true });
+    };
+
+    const openCreateModal = () => {
+        setEditingUser(null);
+        setFormData({ ...EMPTY_FORM });
+        setFormErrors({});
+        setShowModal(true);
+    };
+
+    const openEditModal = (user: User) => {
+        setEditingUser(user);
+        setFormData({
+            name: user.name, email: user.email, phone: user.phone || '', role: user.role,
+            password: '', status: user.status, documento: user.documento || '',
+            tipo_documento: user.tipo_documento || 'CC', direccion: user.direccion || '',
+            fecha_nacimiento: user.fecha_nacimiento || '', genero: user.genero || '',
+            nivel_educativo: user.nivel_educativo || '',
+            curso_id: user.curso_id?.toString() || '',
+            acudiente_id: user.acudiente_id?.toString() || '',
+        });
+        setFormErrors({});
+        setShowModal(true);
+    };
+
+    const validateForm = (): boolean => {
+        const errors: Record<string, string> = {};
+        if (!formData.name.trim()) errors.name = 'El nombre es obligatorio';
+        if (!formData.email.trim()) errors.email = 'El email es obligatorio';
+        if (formData.documento && !/^[0-9]{5,15}$/.test(formData.documento)) {
+            errors.documento = 'Solo números, 5 a 15 dígitos, sin puntos ni espacios';
+        }
+        if (formData.phone && !/^[0-9]{7,10}$/.test(formData.phone)) {
+            errors.phone = 'Solo números, 7 a 10 dígitos';
+        }
+        if (!editingUser && (!formData.password || formData.password.length < 8)) {
+            errors.password = 'La contraseña debe tener mínimo 8 caracteres';
+        }
+        if (editingUser && formData.password && formData.password.length < 8) {
+            errors.password = 'La contraseña debe tener mínimo 8 caracteres';
+        }
+        setFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!validateForm()) return;
+        setProcessing(true);
+
+        const payload = { ...formData };
+        // No enviar password vacío en edición
+        if (editingUser && !payload.password) {
+            const { password, ...rest } = payload;
+            if (editingUser) {
+                router.put(`/admin/usuarios/${editingUser.id}`, rest, {
+                    preserveScroll: true,
+                    onSuccess: () => { setShowModal(false); setProcessing(false); },
+                    onError: (errors) => { setFormErrors(errors as Record<string, string>); setProcessing(false); },
+                });
+            }
+        } else if (editingUser) {
+            router.put(`/admin/usuarios/${editingUser.id}`, payload, {
+                preserveScroll: true,
+                onSuccess: () => { setShowModal(false); setProcessing(false); },
+                onError: (errors) => { setFormErrors(errors as Record<string, string>); setProcessing(false); },
+            });
+        } else {
+            router.post('/admin/usuarios', payload, {
+                preserveScroll: true,
+                onSuccess: () => { setShowModal(false); setProcessing(false); },
+                onError: (errors) => { setFormErrors(errors as Record<string, string>); setProcessing(false); },
+            });
+        }
+    };
+
+    const handleDelete = (user: User) => {
+        if (confirm(`¿Eliminar a ${user.name}? Esta acción no se puede deshacer.`)) {
+            router.delete(`/admin/usuarios/${user.id}`, { preserveScroll: true });
+        }
+    };
+
+    const handleResetPassword = () => {
+        if (!selectedUser || !resetPwValue || resetPwValue.length < 8) return;
+        setProcessing(true);
+        router.patch(`/admin/usuarios/${selectedUser.id}/reset-password`, { password: resetPwValue }, {
+            preserveScroll: true,
+            onSuccess: () => { setShowResetPwModal(false); setSelectedUser(null); setResetPwValue(''); setProcessing(false); },
+            onError: () => setProcessing(false),
+        });
     };
 
     const pendingCount = users.filter(u => u.status === 'pendiente').length;
@@ -156,7 +273,7 @@ export default function Usuarios() {
                             Historial
                         </button>
                         <button
-                            onClick={() => { setEditingUser(null); setShowModal(true); }}
+                            onClick={openCreateModal}
                             className="flex items-center gap-2 text-white px-4 py-2.5 rounded-lg hover:opacity-90 transition-all text-sm font-semibold shadow-md"
                             style={{ background: 'linear-gradient(135deg, #181b49 0%, #293577 100%)' }}
                         >
@@ -298,6 +415,9 @@ export default function Usuarios() {
                                                     <div className="min-w-0">
                                                         <p className="font-semibold text-gray-900 text-sm truncate">{user.name}</p>
                                                         <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                                                        {user.documento && (
+                                                            <p className="text-[11px] text-gray-400">{tipoDocLabel[user.tipo_documento] || user.tipo_documento} {user.documento}</p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </td>
@@ -305,7 +425,7 @@ export default function Usuarios() {
                                             <td className="px-4 py-3.5">
                                                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${roleBadge.bg}`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${roleBadge.dot}`}></span>
-                                                    <span className="capitalize truncate">{user.role}</span>
+                                                    <span className="truncate">{roleBadge.label}</span>
                                                 </span>
                                             </td>
                                             {/* Estado */}
@@ -315,13 +435,11 @@ export default function Usuarios() {
                                                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusCfg.bg}`}></span>
                                                         {statusCfg.label}
                                                     </span>
-                                                    {user.blocked_reason && (
-                                                        <p className="text-[11px] text-red-500 leading-tight line-clamp-2" title={user.blocked_reason}>
-                                                            {user.blocked_reason}
-                                                        </p>
+                                                    {user.must_change_password && user.status === 'activo' && (
+                                                        <p className="text-[11px] text-blue-500 whitespace-nowrap">Debe cambiar contraseña</p>
                                                     )}
                                                     {user.login_attempts > 3 && (
-                                                        <p className="text-[11px] text-amber-600 whitespace-nowrap">⚠ {user.login_attempts} intentos fallidos</p>
+                                                        <p className="text-[11px] text-amber-600 whitespace-nowrap">{user.login_attempts} intentos fallidos</p>
                                                     )}
                                                 </div>
                                             </td>
@@ -365,7 +483,7 @@ export default function Usuarios() {
                                             <td className="px-4 py-3.5">
                                                 <div className="flex items-center justify-center gap-1">
                                                     <button
-                                                        onClick={() => { setEditingUser(user); setShowModal(true); }}
+                                                        onClick={() => openEditModal(user)}
                                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#293577] bg-[#293577]/8 hover:bg-[#293577]/15 border border-[#293577]/20 transition-colors"
                                                         title="Editar usuario"
                                                     >
@@ -381,6 +499,14 @@ export default function Usuarios() {
                                                         Log
                                                     </button>
                                                     <button
+                                                        onClick={() => { setSelectedUser(user); setResetPwValue(''); setShowResetPwModal(true); }}
+                                                        className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors"
+                                                        title="Resetear contraseña"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(user)}
                                                         className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
                                                         title="Eliminar usuario"
                                                     >
@@ -436,17 +562,20 @@ export default function Usuarios() {
                                     <div className="flex flex-wrap gap-2 mb-3">
                                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${roleBadge.bg}`}>
                                             <span className={`w-1.5 h-1.5 rounded-full ${roleBadge.dot}`}></span>
-                                            <span className="capitalize">{user.role}</span>
+                                            {roleBadge.label}
                                         </span>
                                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-600">
                                             <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.bg}`}></span>
                                             {statusCfg.label}
                                         </span>
+                                        {user.documento && (
+                                            <span className="text-xs text-gray-400">{tipoDocLabel[user.tipo_documento]} {user.documento}</span>
+                                        )}
                                     </div>
 
-                                    {user.blocked_reason && (
-                                        <div className="bg-red-50 rounded-lg px-3 py-2 mb-3 text-xs text-red-600 border border-red-100">
-                                            <span className="font-medium">Motivo:</span> {user.blocked_reason}
+                                    {user.must_change_password && user.status === 'activo' && (
+                                        <div className="bg-blue-50 rounded-lg px-3 py-2 mb-3 text-xs text-blue-600 border border-blue-100">
+                                            Pendiente: cambio de contraseña obligatorio
                                         </div>
                                     )}
 
@@ -467,7 +596,7 @@ export default function Usuarios() {
                                     </div>
                                     <div className="flex gap-1.5 flex-shrink-0">
                                         <button
-                                            onClick={() => { setEditingUser(user); setShowModal(true); }}
+                                            onClick={() => openEditModal(user)}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#293577] bg-[#293577]/8 hover:bg-[#293577]/15 border border-[#293577]/20 transition-colors"
                                         >
                                             <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -480,7 +609,7 @@ export default function Usuarios() {
                                             <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                             Log
                                         </button>
-                                        <button className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors" title="Eliminar">
+                                        <button onClick={() => handleDelete(user)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors" title="Eliminar">
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                         </button>
                                     </div>
@@ -499,7 +628,7 @@ export default function Usuarios() {
             {/* Modal crear/editar */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden shadow-2xl">
+                    <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl">
                         <div className="p-5 sm:p-6" style={{ background: 'linear-gradient(135deg, #181b49 0%, #293577 100%)' }}>
                             <h2 className="text-lg font-bold text-white">
                                 {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -509,39 +638,127 @@ export default function Usuarios() {
                             </p>
                         </div>
                         <div className="p-5 sm:p-6 overflow-y-auto max-h-[calc(90vh-160px)]">
-                            <form className="space-y-4">
+                            <form onSubmit={handleSubmit} id="user-form" className="space-y-4">
+                                {/* Nombre */}
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nombre completo <span className="text-red-400">*</span></label>
                                     <input
                                         type="text"
-                                        defaultValue={editingUser?.name || ''}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
-                                        placeholder="Ej: Juan Pérez"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData(f => ({ ...f, name: e.target.value }))}
+                                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all ${formErrors.name ? 'border-red-300' : 'border-gray-200'}`}
+                                        placeholder="Ej: Juan Carlos Pérez López"
+                                        required
                                     />
+                                    {formErrors.name && <p className="text-xs text-red-500 mt-1">{formErrors.name}</p>}
                                 </div>
+
+                                {/* Email */}
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email <span className="text-red-400">*</span></label>
                                     <input
                                         type="email"
-                                        defaultValue={editingUser?.email || ''}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData(f => ({ ...f, email: e.target.value }))}
+                                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all ${formErrors.email ? 'border-red-300' : 'border-gray-200'}`}
                                         placeholder="email@colegio.com"
+                                        required
                                     />
+                                    {formErrors.email && <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>}
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Teléfono</label>
-                                    <input
-                                        type="tel"
-                                        defaultValue={editingUser?.phone || ''}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
-                                        placeholder="300-123-4567"
-                                    />
+
+                                {/* Tipo documento + Número documento */}
+                                <div className="grid grid-cols-5 gap-3">
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tipo Doc.</label>
+                                        <select
+                                            value={formData.tipo_documento}
+                                            onChange={(e) => setFormData(f => ({ ...f, tipo_documento: e.target.value }))}
+                                            className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                        >
+                                            <option value="CC">CC - Cédula de Ciudadanía</option>
+                                            <option value="TI">TI - Tarjeta de Identidad</option>
+                                            <option value="CE">CE - Cédula de Extranjería</option>
+                                            <option value="RC">RC - Registro Civil</option>
+                                            <option value="PP">PP - Pasaporte</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-span-3">
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">N° Documento</label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={formData.documento}
+                                            onChange={(e) => setFormData(f => ({ ...f, documento: onlyNumbers(e.target.value) }))}
+                                            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all ${formErrors.documento ? 'border-red-300' : 'border-gray-200'}`}
+                                            placeholder="Solo números, sin puntos"
+                                            maxLength={15}
+                                        />
+                                        {formErrors.documento && <p className="text-xs text-red-500 mt-1">{formErrors.documento}</p>}
+                                    </div>
                                 </div>
+
+                                {/* Teléfono + Género */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Teléfono</label>
+                                        <input
+                                            type="tel"
+                                            inputMode="numeric"
+                                            value={formData.phone}
+                                            onChange={(e) => setFormData(f => ({ ...f, phone: onlyNumbers(e.target.value) }))}
+                                            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all ${formErrors.phone ? 'border-red-300' : 'border-gray-200'}`}
+                                            placeholder="Ej: 3001234567"
+                                            maxLength={10}
+                                        />
+                                        {formErrors.phone && <p className="text-xs text-red-500 mt-1">{formErrors.phone}</p>}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Género</label>
+                                        <select
+                                            value={formData.genero}
+                                            onChange={(e) => setFormData(f => ({ ...f, genero: e.target.value }))}
+                                            className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                        >
+                                            <option value="">Sin especificar</option>
+                                            <option value="M">Masculino</option>
+                                            <option value="F">Femenino</option>
+                                            <option value="otro">Otro</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Fecha nacimiento + Dirección */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Fecha Nacimiento</label>
+                                        <input
+                                            type="date"
+                                            value={formData.fecha_nacimiento}
+                                            onChange={(e) => setFormData(f => ({ ...f, fecha_nacimiento: e.target.value }))}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
+                                            max={new Date().toISOString().split('T')[0]}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Dirección</label>
+                                        <input
+                                            type="text"
+                                            value={formData.direccion}
+                                            onChange={(e) => setFormData(f => ({ ...f, direccion: e.target.value }))}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
+                                            placeholder="Calle, barrio, ciudad"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Rol */}
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Rol</label>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Rol <span className="text-red-400">*</span></label>
                                     <select
-                                        defaultValue={editingUser?.role || 'estudiante'}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all"
+                                        value={formData.role}
+                                        onChange={(e) => setFormData(f => ({ ...f, role: e.target.value, nivel_educativo: '', curso_id: '', acudiente_id: '' }))}
+                                        className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
                                     >
                                         <option value="admin">Administrador</option>
                                         <option value="profesor">Profesor</option>
@@ -549,34 +766,128 @@ export default function Usuarios() {
                                         <option value="padre">Padre de familia</option>
                                     </select>
                                 </div>
+
+                                {/* Estado (solo en edición) */}
                                 {editingUser && (
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Estado</label>
                                         <select
-                                            defaultValue={editingUser?.status || 'activo'}
-                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all"
+                                            value={formData.status}
+                                            onChange={(e) => setFormData(f => ({ ...f, status: e.target.value }))}
+                                            className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
                                         >
                                             <option value="activo">Activo</option>
                                             <option value="bloqueado">Bloqueado</option>
-                                            <option value="pendiente">Pendiente</option>
                                         </select>
                                     </div>
                                 )}
-                                {!editingUser && (
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Contraseña temporal</label>
-                                        <input
-                                            type="password"
-                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
-                                            placeholder="Mínimo 8 caracteres"
-                                        />
-                                        <p className="text-[11px] text-gray-400 mt-1">Se solicitará cambio en el primer inicio de sesión</p>
+
+                                {/* ─── Datos académicos (solo Estudiante) ─── */}
+                                {formData.role === 'estudiante' && (
+                                    <div className="space-y-4 pt-2 border-t border-gray-100">
+                                        <p className="text-xs font-bold text-[#293577] uppercase tracking-widest flex items-center gap-2">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                            Datos Académicos
+                                        </p>
+
+                                        {/* Nivel educativo */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nivel Educativo</label>
+                                            <select
+                                                value={formData.nivel_educativo}
+                                                onChange={(e) => setFormData(f => ({ ...f, nivel_educativo: e.target.value, curso_id: '' }))}
+                                                className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                            >
+                                                <option value="">— Sin asignar —</option>
+                                                <option value="preescolar">Preescolar</option>
+                                                <option value="transicion">Transición</option>
+                                                <option value="primaria">Primaria</option>
+                                                <option value="bachillerato">Bachillerato</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Curso (filtrado por nivel) */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Grado y Sección</label>
+                                            <select
+                                                value={formData.curso_id}
+                                                onChange={(e) => setFormData(f => ({ ...f, curso_id: e.target.value }))}
+                                                className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                            >
+                                                <option value="">— Sin asignar —</option>
+                                                {(formData.nivel_educativo
+                                                    ? cursos.filter(c => c.nivel === formData.nivel_educativo)
+                                                    : cursos
+                                                ).map(c => (
+                                                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                                                ))}
+                                            </select>
+                                            {cursos.length === 0 && (
+                                                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" /></svg>
+                                                    No hay cursos registrados aún
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Acudiente */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Acudiente</label>
+                                            <select
+                                                value={formData.acudiente_id}
+                                                onChange={(e) => setFormData(f => ({ ...f, acudiente_id: e.target.value }))}
+                                                className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                            >
+                                                <option value="">— Sin asignar —</option>
+                                                {padres.map(p => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name}{p.documento ? ` — ${p.documento}` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {padres.length === 0 && (
+                                                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" /></svg>
+                                                    No hay padres/acudientes registrados aún
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
+
+                                {/* Contraseña */}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                                        {editingUser ? 'Nueva contraseña (opcional)' : 'Contraseña temporal'} {!editingUser && <span className="text-red-400">*</span>}
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={formData.password}
+                                        onChange={(e) => setFormData(f => ({ ...f, password: e.target.value }))}
+                                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all ${formErrors.password ? 'border-red-300' : 'border-gray-200'}`}
+                                        placeholder={editingUser ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'}
+                                        required={!editingUser}
+                                        minLength={8}
+                                    />
+                                    {formErrors.password && <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>}
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mt-2 flex items-start gap-2">
+                                        <svg className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <p className="text-[11px] text-blue-600">
+                                            {editingUser
+                                                ? 'Si asignas nueva contraseña, el usuario deberá cambiarla en su próximo inicio de sesión.'
+                                                : 'El usuario deberá cambiar esta contraseña en su primer inicio de sesión.'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Info del usuario (solo en edición) */}
                                 {editingUser && (
                                     <div className="bg-gray-50 rounded-lg p-3 space-y-1">
                                         <p className="text-xs text-gray-500"><span className="font-medium text-gray-600">Registrado:</span> {editingUser.created_at}</p>
                                         <p className="text-xs text-gray-500"><span className="font-medium text-gray-600">Último acceso:</span> {editingUser.last_login || 'Nunca'}</p>
+                                        {editingUser.must_change_password && (
+                                            <p className="text-xs text-blue-600"><span className="font-medium">Pendiente:</span> Cambio de contraseña obligatorio</p>
+                                        )}
                                         {editingUser.login_attempts > 0 && (
                                             <p className="text-xs text-amber-600"><span className="font-medium">Intentos fallidos:</span> {editingUser.login_attempts}</p>
                                         )}
@@ -594,10 +905,12 @@ export default function Usuarios() {
                             </button>
                             <button
                                 type="submit"
-                                className="flex-1 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                                form="user-form"
+                                disabled={processing}
+                                className="flex-1 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-50"
                                 style={{ background: 'linear-gradient(135deg, #181b49 0%, #293577 100%)' }}
                             >
-                                {editingUser ? 'Guardar cambios' : 'Crear usuario'}
+                                {processing ? 'Guardando...' : editingUser ? 'Guardar cambios' : 'Crear usuario'}
                             </button>
                         </div>
                     </div>
@@ -721,6 +1034,58 @@ export default function Usuarios() {
                             >
                                 Cerrar
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal resetear contraseña */}
+            {showResetPwModal && selectedUser && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                        <div className="p-5" style={{ background: 'linear-gradient(135deg, #181b49 0%, #293577 100%)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold text-white">Resetear Contraseña</h2>
+                                    <p className="text-sm text-white/60">{selectedUser.name}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-5 sm:p-6">
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                                <svg className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                                <p className="text-xs text-amber-700">El usuario deberá cambiar esta contraseña en su próximo inicio de sesión.</p>
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nueva contraseña temporal <span className="text-red-400">*</span></label>
+                                <input
+                                    type="password"
+                                    value={resetPwValue}
+                                    onChange={(e) => setResetPwValue(e.target.value)}
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm transition-all"
+                                    placeholder="Mínimo 8 caracteres"
+                                    minLength={8}
+                                />
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setShowResetPwModal(false); setSelectedUser(null); setResetPwValue(''); }}
+                                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm text-gray-600 font-medium transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleResetPassword}
+                                    disabled={!resetPwValue || resetPwValue.length < 8 || processing}
+                                    className="flex-1 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-50"
+                                    style={{ background: 'linear-gradient(135deg, #181b49 0%, #293577 100%)' }}
+                                >
+                                    {processing ? 'Reseteando...' : 'Resetear Contraseña'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

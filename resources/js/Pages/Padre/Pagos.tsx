@@ -65,7 +65,7 @@ export default function Pagos() {
                 {showConfirmacion && (
                     <div className="bg-green-50 border-l-4 border-green-500 rounded-r-xl p-4 animate-pulse">
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">✅</span>
+                            <span className="text-2xl"><svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></span>
                             <div>
                                 <p className="font-bold text-green-800">¡Pago procesado exitosamente!</p>
                                 <p className="text-sm text-green-700">Se ha generado un comprobante. Puede verlo en la sección de Comprobantes.</p>
@@ -103,10 +103,10 @@ export default function Pagos() {
                     }`}>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div className="flex items-center gap-4">
-                                <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-3xl ${
+                                <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${
                                     new Date(proximoPago.vencimiento) < new Date() ? 'bg-red-100' : 'bg-blue-100'
                                 }`}>
-                                    💳
+                                    <svg className={`w-7 h-7 ${new Date(proximoPago.vencimiento) < new Date() ? 'text-red-600' : 'text-blue-600'}`} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-gray-800">{proximoPago.concepto}</h3>
@@ -118,7 +118,7 @@ export default function Pagos() {
                                 onClick={() => handlePagar(proximoPago)}
                                 className="bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition-colors font-medium text-lg shadow-sm"
                             >
-                                💳 Pagar ahora
+                                Pagar ahora
                             </button>
                         </div>
                     </div>
@@ -155,7 +155,7 @@ export default function Pagos() {
                                                 m.estado === 'vencido' ? 'bg-red-100 text-red-800' :
                                                 'bg-yellow-100 text-yellow-800'
                                             }`}>
-                                                {m.estado === 'pagado' ? '✓ Pagado' : m.estado === 'vencido' ? '⚠ Vencido' : '⏳ Pendiente'}
+                                                {m.estado === 'pagado' ? 'Pagado' : m.estado === 'vencido' ? 'Vencido' : 'Pendiente'}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-center text-sm text-gray-600">{m.fecha_pago || '—'}</td>
@@ -191,7 +191,7 @@ export default function Pagos() {
                                         m.estado === 'vencido' ? 'bg-red-100 text-red-800' :
                                         'bg-yellow-100 text-yellow-800'
                                     }`}>
-                                        {m.estado === 'pagado' ? '✓' : m.estado === 'vencido' ? '⚠' : '⏳'}
+                                        {m.estado === 'pagado' ? '✓' : m.estado === 'vencido' ? '!' : '•'}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center">
@@ -203,7 +203,7 @@ export default function Pagos() {
                                             onClick={() => handlePagar(m)}
                                             className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-700"
                                         >
-                                            💳 Pagar
+                                            Pagar
                                         </button>
                                     )}
                                 </div>
@@ -235,10 +235,10 @@ export default function Pagos() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">Método de pago</label>
                             <div className="grid grid-cols-2 gap-2">
                                 {[
-                                    { id: 'tarjeta', label: '💳 Tarjeta', desc: 'Débito/Crédito' },
-                                    { id: 'pse', label: '🏦 PSE', desc: 'Transferencia' },
-                                    { id: 'nequi', label: '📱 Nequi', desc: 'Billetera digital' },
-                                    { id: 'efecty', label: '🏪 Efecty', desc: 'Punto de pago' },
+                                    { id: 'tarjeta', label: 'Tarjeta', desc: 'Débito/Crédito' },
+                                    { id: 'pse', label: 'PSE', desc: 'Transferencia' },
+                                    { id: 'nequi', label: 'Nequi', desc: 'Billetera digital' },
+                                    { id: 'efecty', label: 'Efecty', desc: 'Punto de pago' },
                                 ].map(m => (
                                     <button
                                         key={m.id}
@@ -327,7 +327,7 @@ export default function Pagos() {
                         )}
 
                         <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs text-gray-500">
-                            🔒 Pago seguro. Sus datos están protegidos con encriptación SSL.
+                            Pago seguro. Sus datos están protegidos con encriptación SSL.
                         </div>
 
                         <div className="flex gap-3">
@@ -341,7 +341,7 @@ export default function Pagos() {
                                 onClick={procesarPago}
                                 className="flex-1 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-medium"
                             >
-                                💳 Pagar {formatMonto(selectedPago.monto)}
+                                Pagar {formatMonto(selectedPago.monto)}
                             </button>
                         </div>
                     </div>

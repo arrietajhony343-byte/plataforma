@@ -15,35 +15,22 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Primero crear roles y permisos
+        // 1. Roles y permisos
         $this->call(RoleSeeder::class);
 
-        // Crear usuario administrador
-        $admin = User::factory()->create([
-            'name' => 'Administrador',
-            'email' => 'admin@colegio.com',
+        // 2. Usuario administrador (único que no crea DatosColegioSeeder)
+        $admin = User::create([
+            'name'           => 'Administrador General',
+            'email'          => 'admin@colegio.com',
+            'password'       => bcrypt('password'),
+            'documento'      => '00000001',
+            'tipo_documento' => 'CC',
+            'telefono'       => '3001000001',
+            'activo'         => true,
         ]);
         $admin->assignRole('admin');
 
-        // Crear profesor de ejemplo
-        $profesor = User::factory()->create([
-            'name' => 'Carlos Díaz',
-            'email' => 'profesor@colegio.com',
-        ]);
-        $profesor->assignRole('profesor');
-
-        // Crear estudiante de ejemplo
-        $estudiante = User::factory()->create([
-            'name' => 'Juan Pérez',
-            'email' => 'estudiante@colegio.com',
-        ]);
-        $estudiante->assignRole('estudiante');
-
-        // Crear padre de ejemplo
-        $padre = User::factory()->create([
-            'name' => 'María López',
-            'email' => 'padre@colegio.com',
-        ]);
-        $padre->assignRole('padre');
+        // 3. Todos los datos del colegio (profesores, estudiantes, padres, cursos, notas, etc.)
+        $this->call(DatosColegioSeeder::class);
     }
 }

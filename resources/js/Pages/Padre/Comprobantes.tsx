@@ -140,8 +140,8 @@ export default function Comprobantes() {
                                                 c.estado === 'procesando' ? 'bg-yellow-100 text-yellow-800' :
                                                 'bg-red-100 text-red-800'
                                             }`}>
-                                                {c.estado === 'confirmado' ? '✓ Confirmado' :
-                                                 c.estado === 'procesando' ? '⏳ Procesando' : '✗ Rechazado'}
+                                                {c.estado === 'confirmado' ? 'Confirmado' :
+                                                 c.estado === 'procesando' ? 'Procesando' : 'Rechazado'}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-right">
@@ -150,10 +150,10 @@ export default function Comprobantes() {
                                                     onClick={() => setSelectedComprobante(c)}
                                                     className="text-[#293577] hover:text-[#181b49] text-sm"
                                                 >
-                                                    👁 Ver
+                                                    Ver
                                                 </button>
                                                 <button className="text-green-600 hover:text-green-700 text-sm">
-                                                    📥 PDF
+                                                    PDF
                                                 </button>
                                             </div>
                                         </td>
@@ -176,7 +176,7 @@ export default function Comprobantes() {
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                     c.estado === 'confirmado' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                                 }`}>
-                                    {c.estado === 'confirmado' ? '✓' : '⏳'}
+                                    {c.estado === 'confirmado' ? '✓' : '•'}
                                 </span>
                             </div>
                             <div className="flex justify-between items-center text-sm mb-3">
@@ -188,10 +188,10 @@ export default function Comprobantes() {
                                     onClick={() => setSelectedComprobante(c)}
                                     className="flex-1 text-[#293577] bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100"
                                 >
-                                    👁 Ver detalle
+                                    Ver detalle
                                 </button>
                                 <button className="flex-1 text-green-700 bg-green-50 px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-100">
-                                    📥 Descargar PDF
+                                    Descargar PDF
                                 </button>
                             </div>
                         </div>
@@ -248,7 +248,7 @@ export default function Comprobantes() {
 
                             <div className="flex gap-3 pt-2">
                                 <button className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium">
-                                    📥 Descargar PDF
+                                    Descargar PDF
                                 </button>
                                 <button
                                     onClick={() => setSelectedComprobante(null)}

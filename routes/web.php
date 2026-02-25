@@ -2,7 +2,24 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\UsuarioController;
+use App\Http\Controllers\Admin\CursoController;
+use App\Http\Controllers\Admin\MateriaController;
+use App\Http\Controllers\Admin\PeriodoController;
+use App\Http\Controllers\Admin\EstudianteController;
+use App\Http\Controllers\Admin\PagoController;
+use App\Http\Controllers\Admin\BoletinController;
+use App\Http\Controllers\Admin\CertificadoController;
+use App\Http\Controllers\Admin\HorarioController;
+use App\Http\Controllers\Admin\ReporteController;
+use App\Http\Controllers\Admin\ContabilidadController;
+use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Profesor\DashboardController as ProfesorDashboardController;
+use App\Http\Controllers\Profesor\NotaController as ProfesorNotaController;
+use App\Http\Controllers\Profesor\ObservadorController as ProfesorObservadorController;
+use App\Http\Controllers\Profesor\CalendarioController as ProfesorCalendarioController;
+use App\Http\Controllers\Profesor\ActividadController as ProfesorActividadController;
+use App\Http\Controllers\Profesor\MensajeController as ProfesorMensajeController;
 use App\Http\Controllers\Estudiante\DashboardController as EstudianteDashboardController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -33,73 +50,129 @@ Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+// Cambio obligatorio de contraseña
+Route::middleware('auth')->group(function () {
+    Route::get('/force-change-password', [ForcePasswordChangeController::class, 'show'])->name('password.force-change');
+    Route::post('/force-change-password', [ForcePasswordChangeController::class, 'update'])->name('password.force-update');
+});
+
 // Rutas de Administrador
 Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
     
-    Route::get('/usuarios', function () {
-        return Inertia::render('Admin/Usuarios');
-    })->name('usuarios');
+    Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios');
+    Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
+    Route::put('/usuarios/{user}', [UsuarioController::class, 'update'])->name('usuarios.update');
+    Route::patch('/usuarios/{user}/toggle-status', [UsuarioController::class, 'toggleStatus'])->name('usuarios.toggle-status');
+    Route::patch('/usuarios/{user}/reset-password', [UsuarioController::class, 'resetPassword'])->name('usuarios.reset-password');
+    Route::delete('/usuarios/{user}', [UsuarioController::class, 'destroy'])->name('usuarios.destroy');
     
-    Route::get('/cursos', function () {
-        return Inertia::render('Admin/Cursos');
-    })->name('cursos');
-    
-    Route::get('/periodos', function () {
-        return Inertia::render('Admin/Periodos');
-    })->name('periodos');
-    
-    Route::get('/reportes', function () {
-        return Inertia::render('Admin/Reportes');
-    })->name('reportes');
+    // Cursos + Materias
+    Route::get('/cursos', [CursoController::class, 'index'])->name('cursos');
+    Route::post('/cursos', [CursoController::class, 'store'])->name('cursos.store');
+    Route::put('/cursos/{curso}', [CursoController::class, 'update'])->name('cursos.update');
+    Route::delete('/cursos/{curso}', [CursoController::class, 'destroy'])->name('cursos.destroy');
+    Route::post('/materias', [MateriaController::class, 'store'])->name('materias.store');
+    Route::put('/materias/{materia}', [MateriaController::class, 'update'])->name('materias.update');
+    Route::delete('/materias/{materia}', [MateriaController::class, 'destroy'])->name('materias.destroy');
+    Route::post('/materias/{materia}/profesores', [MateriaController::class, 'asignarProfesores'])->name('materias.asignar-profesores');
 
-    // Nuevas rutas de administración
-    Route::get('/certificados', function () {
-        return Inertia::render('Admin/Certificados');
-    })->name('certificados');
+    // Periodos
+    Route::get('/periodos', [PeriodoController::class, 'index'])->name('periodos');
+    Route::post('/periodos', [PeriodoController::class, 'store'])->name('periodos.store');
+    Route::put('/periodos/{periodo}', [PeriodoController::class, 'update'])->name('periodos.update');
+    Route::patch('/periodos/{periodo}/estado', [PeriodoController::class, 'cambiarEstado'])->name('periodos.cambiar-estado');
+    Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy'])->name('periodos.destroy');
 
-    Route::get('/boletines', function () {
-        return Inertia::render('Admin/Boletines');
-    })->name('boletines');
+    // Estudiantes
+    Route::get('/estudiantes', [EstudianteController::class, 'index'])->name('estudiantes');
+    Route::get('/estudiantes/export', [EstudianteController::class, 'export'])->name('estudiantes.export');
+    Route::put('/estudiantes/{estudiante}', [EstudianteController::class, 'update'])->name('estudiantes.update');
+    Route::patch('/estudiantes/{estudiante}/toggle-status', [EstudianteController::class, 'toggleStatus'])->name('estudiantes.toggle-status');
+    Route::post('/estudiantes/{estudiante}/mensaje', [EstudianteController::class, 'sendMessage'])->name('estudiantes.mensaje');
+    Route::get('/estudiantes/{estudiante}/notas', [EstudianteController::class, 'notas'])->name('estudiantes.notas');
+    Route::get('/estudiantes/{estudiante}/observaciones', [EstudianteController::class, 'observaciones'])->name('estudiantes.observaciones');
+    Route::get('/estudiantes/{estudiante}/pagos', [EstudianteController::class, 'pagos'])->name('estudiantes.pagos');
 
-    Route::get('/pagos', function () {
-        return Inertia::render('Admin/Pagos');
-    })->name('pagos');
+    // Pagos
+    Route::get('/pagos', [PagoController::class, 'index'])->name('pagos');
+    Route::post('/pagos', [PagoController::class, 'store'])->name('pagos.store');
+    Route::put('/pagos/{pago}', [PagoController::class, 'update'])->name('pagos.update');
 
-    Route::get('/contabilidad', function () {
-        return Inertia::render('Admin/Contabilidad');
-    })->name('contabilidad');
+    // Boletines
+    Route::get('/boletines', [BoletinController::class, 'index'])->name('boletines');
+    Route::post('/boletines/generar', [BoletinController::class, 'generate'])->name('boletines.generar');
 
-    Route::get('/horarios', function () {
-        return Inertia::render('Admin/Horarios');
-    })->name('horarios');
+    // Certificados
+    Route::get('/certificados', [CertificadoController::class, 'index'])->name('certificados');
+    Route::post('/certificados', [CertificadoController::class, 'store'])->name('certificados.store');
+    Route::put('/certificados/{certificado}', [CertificadoController::class, 'update'])->name('certificados.update');
 
-    Route::get('/estudiantes', function () {
-        return Inertia::render('Admin/Estudiantes');
-    })->name('estudiantes');
+    // Horarios
+    Route::get('/horarios', [HorarioController::class, 'index'])->name('horarios');
+    Route::post('/horarios', [HorarioController::class, 'store'])->name('horarios.store');
+    Route::put('/horarios/{horarioBloque}', [HorarioController::class, 'update'])->name('horarios.update');
+    Route::delete('/horarios/{horarioBloque}', [HorarioController::class, 'destroy'])->name('horarios.destroy');
+
+    // Reportes (read-only)
+    Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes');
+
+    // Contabilidad (read-only)
+    Route::get('/contabilidad', [ContabilidadController::class, 'index'])->name('contabilidad');
 });
 
 // Rutas de Profesor
 Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->name('profesor.')->group(function () {
     Route::get('/dashboard', [ProfesorDashboardController::class, 'index'])->name('dashboard');
-    Route::get('/notas', function () {
-        return Inertia::render('Profesor/RegistrarNotas', [
-            'profesor' => ['nombre' => auth()->user()->name],
-        ]);
-    })->name('notas');
-    Route::get('/observador', function () {
-        return Inertia::render('Profesor/Observador', [
-            'profesor' => ['nombre' => auth()->user()->name],
-        ]);
-    })->name('observador');
-    Route::get('/calendario', function () {
-        return Inertia::render('Profesor/Calendario');
-    })->name('calendario');
+
+    // Notas
+    Route::get('/notas', [ProfesorNotaController::class, 'index'])->name('notas');
+    Route::get('/notas/estudiantes', [ProfesorNotaController::class, 'estudiantes'])->name('notas.estudiantes');
+    Route::post('/notas', [ProfesorNotaController::class, 'store'])->name('notas.store');
+
+    // Observador
+    Route::get('/observador', [ProfesorObservadorController::class, 'index'])->name('observador');
+    Route::post('/observador', [ProfesorObservadorController::class, 'store'])->name('observador.store');
+
+    // Calendario
+    Route::get('/calendario', [ProfesorCalendarioController::class, 'index'])->name('calendario');
+
+    // Actividades
+    Route::get('/actividades', [ProfesorActividadController::class, 'index'])->name('actividades');
+    Route::post('/actividades', [ProfesorActividadController::class, 'store'])->name('actividades.store');
+    Route::put('/actividades/{actividad}', [ProfesorActividadController::class, 'update'])->name('actividades.update');
+    Route::delete('/actividades/{actividad}', [ProfesorActividadController::class, 'destroy'])->name('actividades.destroy');
+    Route::get('/actividades/{actividad}/entregas', [ProfesorActividadController::class, 'entregas'])->name('actividades.entregas');
+
+    // Mensajes
+    Route::get('/mensajes', [ProfesorMensajeController::class, 'index'])->name('mensajes');
+    Route::post('/mensajes', [ProfesorMensajeController::class, 'store'])->name('mensajes.store');
 });
 
 // Rutas de Estudiante
 Route::middleware(['auth', 'verified', 'role:estudiante'])->prefix('estudiante')->name('estudiante.')->group(function () {
     Route::get('/dashboard', [EstudianteDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/materias', function () {
+        return Inertia::render('Estudiante/Materias');
+    })->name('materias');
+    Route::get('/actividades', function () {
+        return Inertia::render('Estudiante/Actividades');
+    })->name('actividades');
+    Route::get('/notas', function () {
+        return Inertia::render('Estudiante/Notas');
+    })->name('notas');
+    Route::get('/horario', function () {
+        return Inertia::render('Estudiante/Horario');
+    })->name('horario');
+    Route::get('/mensajes', function () {
+        return Inertia::render('Estudiante/Mensajes');
+    })->name('mensajes');
+    Route::get('/observador', function () {
+        return Inertia::render('Estudiante/Observador');
+    })->name('observador');
+    Route::get('/boletines', function () {
+        return Inertia::render('Estudiante/Boletines');
+    })->name('boletines');
 });
 
 // Rutas de Padre

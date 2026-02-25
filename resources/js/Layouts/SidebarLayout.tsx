@@ -127,9 +127,9 @@ export default function SidebarLayout({
 
             {/* Main content */}
             <div className="flex-1 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
-                {/* Top bar con gradiente */}
+                {/* Top bar con gradiente - STICKY */}
                 <header 
-                    className="shadow-md"
+                    className="shadow-md sticky top-0 z-30"
                     style={{ background: 'linear-gradient(90deg, #181b49 0%, #293577 50%, #181b49 100%)' }}
                 >
                     <div className="flex items-center justify-between px-4 py-3">

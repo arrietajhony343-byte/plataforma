@@ -1,5 +1,5 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
@@ -30,40 +30,42 @@ interface RendimientoRow {
     peorMateria: string;
 }
 
-export default function Reportes() {
+interface Props {
+    resumen: {
+        totalEstudiantes: number;
+        totalProfesores: number;
+        cursosActivos: number;
+        periodoActivo: string;
+    };
+    rendimientoCursos: { curso: string; promedio: number; estudiantes: number }[];
+    rendimientoMaterias: { materia: string; promedio: number; totalNotas: number; aprobados: number; reprobados: number; tasaAprobacion: number }[];
+    observaciones: { total: number; positivas: number; negativas: number };
+    finanzas: { totalPagos: number; pagados: number; pendientes: number; vencidos: number; montoRecaudado: number; montoPendiente: number };
+    topEstudiantes: { nombre: string; curso: string; promedio: number }[];
+}
+
+export default function Reportes({ resumen, rendimientoCursos, rendimientoMaterias, observaciones, finanzas, topEstudiantes }: Props) {
     const [selectedReport, setSelectedReport] = useState('rendimiento');
     const [selectedPeriodo, setSelectedPeriodo] = useState('2');
     const [nivelSeleccionado, setNivelSeleccionado] = useState('todos');
     const [selectedCurso, setSelectedCurso] = useState('todos');
 
-    const reportTypes = [
-        { id: 'rendimiento', name: 'Rendimiento Académico', icon: '📊', description: 'Promedios y estadísticas por curso' },
-        { id: 'asistencia', name: 'Asistencia', icon: '📋', description: 'Control de asistencia por periodo' },
-        { id: 'observador', name: 'Observador', icon: '📝', description: 'Resumen de observaciones' },
-        { id: 'boletines', name: 'Boletines', icon: '📄', description: 'Generación masiva de boletines' },
-    ];
+    // Use rendimientoCursos from backend as rendimiento data
+    const rendimientoData: RendimientoRow[] = useMemo(() => rendimientoCursos.map(r => ({
+        nivel: 'bachillerato',
+        curso: r.curso,
+        promedio: r.promedio,
+        aprobados: r.estudiantes,
+        reprobados: 0,
+        mejorMateria: '-',
+        peorMateria: '-',
+    })), [rendimientoCursos]);
 
-    const rendimientoData: RendimientoRow[] = [
-        // Pre-escolar
-        { nivel: 'preescolar', curso: 'Pre-Jardín', promedio: 4.5, aprobados: 18, reprobados: 0, mejorMateria: 'Motricidad', peorMateria: 'Lectoescritura' },
-        { nivel: 'preescolar', curso: 'Jardín', promedio: 4.3, aprobados: 20, reprobados: 1, mejorMateria: 'Arte', peorMateria: 'Números' },
-        // Transición
-        { nivel: 'transicion', curso: 'Transición A', promedio: 4.1, aprobados: 22, reprobados: 2, mejorMateria: 'Ciencias', peorMateria: 'Lectura' },
-        { nivel: 'transicion', curso: 'Transición B', promedio: 3.9, aprobados: 20, reprobados: 3, mejorMateria: 'Sociales', peorMateria: 'Matemáticas' },
-        // Primaria
-        { nivel: 'primaria', curso: '1°', promedio: 4.0, aprobados: 25, reprobados: 2, mejorMateria: 'Español', peorMateria: 'Matemáticas' },
-        { nivel: 'primaria', curso: '2°', promedio: 3.8, aprobados: 24, reprobados: 3, mejorMateria: 'Ciencias', peorMateria: 'Inglés' },
-        { nivel: 'primaria', curso: '3°', promedio: 4.2, aprobados: 28, reprobados: 2, mejorMateria: 'Español', peorMateria: 'Matemáticas' },
-        { nivel: 'primaria', curso: '4°', promedio: 3.9, aprobados: 26, reprobados: 3, mejorMateria: 'Historia', peorMateria: 'Inglés' },
-        { nivel: 'primaria', curso: '5°', promedio: 4.1, aprobados: 27, reprobados: 2, mejorMateria: 'Ciencias', peorMateria: 'Matemáticas' },
-        // Bachillerato
-        { nivel: 'bachillerato', curso: '6° A', promedio: 4.2, aprobados: 30, reprobados: 2, mejorMateria: 'Ciencias', peorMateria: 'Matemáticas' },
-        { nivel: 'bachillerato', curso: '6° B', promedio: 3.9, aprobados: 27, reprobados: 3, mejorMateria: 'Historia', peorMateria: 'Inglés' },
-        { nivel: 'bachillerato', curso: '7° A', promedio: 4.0, aprobados: 26, reprobados: 2, mejorMateria: 'Español', peorMateria: 'Física' },
-        { nivel: 'bachillerato', curso: '8° A', promedio: 3.8, aprobados: 32, reprobados: 3, mejorMateria: 'Biología', peorMateria: 'Química' },
-        { nivel: 'bachillerato', curso: '9° A', promedio: 4.0, aprobados: 25, reprobados: 2, mejorMateria: 'Ed. Física', peorMateria: 'Trigonometría' },
-        { nivel: 'bachillerato', curso: '10°', promedio: 3.6, aprobados: 22, reprobados: 5, mejorMateria: 'Filosofía', peorMateria: 'Cálculo' },
-        { nivel: 'bachillerato', curso: '11°', promedio: 4.1, aprobados: 28, reprobados: 2, mejorMateria: 'Lectura Crítica', peorMateria: 'Química' },
+    const reportTypes = [
+        { id: 'rendimiento', name: 'Rendimiento Académico', icon: 'RA', description: 'Promedios y estadísticas por curso' },
+        { id: 'asistencia', name: 'Asistencia', icon: 'As', description: 'Control de asistencia por periodo' },
+        { id: 'observador', name: 'Observador', icon: 'Ob', description: 'Resumen de observaciones' },
+        { id: 'boletines', name: 'Boletines', icon: 'Bo', description: 'Generación masiva de boletines' },
     ];
 
     // Cursos disponibles según nivel
@@ -134,7 +136,7 @@ export default function Reportes() {
                         <p className="text-gray-600">Genera y descarga reportes institucionales</p>
                     </div>
                     <button className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-                        📥 Exportar a Excel
+                        Exportar a Excel
                     </button>
                 </div>
 
@@ -173,7 +175,7 @@ export default function Reportes() {
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
                             >
-                                🏫 Todos los niveles
+                                Todos los niveles
                             </button>
                             <button
                                 onClick={() => handleNivelChange('preescolar')}
@@ -183,7 +185,7 @@ export default function Reportes() {
                                         : 'bg-pink-50 text-pink-700 hover:bg-pink-100'
                                 }`}
                             >
-                                🧒 Pre-escolar
+                                Pre-escolar
                             </button>
                             <button
                                 onClick={() => handleNivelChange('transicion')}
@@ -193,7 +195,7 @@ export default function Reportes() {
                                         : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
                                 }`}
                             >
-                                🎒 Transición
+                                Transición
                             </button>
                             <button
                                 onClick={() => handleNivelChange('primaria')}
@@ -203,7 +205,7 @@ export default function Reportes() {
                                         : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                                 }`}
                             >
-                                📚 Primaria
+                                Primaria
                             </button>
                             <button
                                 onClick={() => handleNivelChange('bachillerato')}
@@ -213,7 +215,7 @@ export default function Reportes() {
                                         : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                                 }`}
                             >
-                                🎓 Bachillerato
+                                Bachillerato
                             </button>
                         </div>
                     </div>
@@ -306,7 +308,7 @@ export default function Reportes() {
                         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                             <div className="p-4 border-b">
                                 <h2 className="font-bold text-gray-800 text-sm sm:text-base" style={{ fontFamily: "'Inter', sans-serif" }}>
-                                    📊 Rendimiento por Curso - {getPeriodoLabel(selectedPeriodo)}
+                                    Rendimiento por Curso - {getPeriodoLabel(selectedPeriodo)}
                                     {nivelSeleccionado !== 'todos' && (
                                         <span className={`ml-2 px-2 py-0.5 rounded-full text-[11px] font-medium ${getNivelBadge(nivelSeleccionado)}`}>
                                             {getNivelLabel(nivelSeleccionado)}
@@ -316,7 +318,6 @@ export default function Reportes() {
                             </div>
                             {rendimientoFiltrado.length === 0 ? (
                                 <div className="p-12 text-center">
-                                    <p className="text-4xl mb-3">📊</p>
                                     <p className="text-gray-500 font-medium">No hay datos para los filtros seleccionados</p>
                                 </div>
                             ) : (
@@ -368,7 +369,7 @@ export default function Reportes() {
                                                         <span className="text-green-600 truncate">✓ {row.mejorMateria}</span>
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <span className="text-orange-600 truncate">⚠️ {row.peorMateria}</span>
+                                                        <span className="text-orange-600 truncate">{row.peorMateria}</span>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -381,16 +382,16 @@ export default function Reportes() {
                         {/* Acciones de reporte */}
                         <div className="flex flex-wrap gap-4">
                             <button className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">
-                                📄 Exportar PDF
+                                Exportar PDF
                             </button>
                             <button className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
-                                📊 Exportar Excel
+                                Exportar Excel
                             </button>
                             <button className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">
-                                🖨️ Imprimir
+                                Imprimir
                             </button>
                             <button className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">
-                                📧 Enviar por Email
+                                Enviar por Email
                             </button>
                         </div>
                     </div>
@@ -398,7 +399,7 @@ export default function Reportes() {
 
                 {selectedReport === 'boletines' && (
                     <div className="bg-white rounded-xl shadow-sm p-6">
-                        <h2 className="font-bold text-gray-800 mb-4" style={{ fontFamily: "'Inter', sans-serif" }}>📄 Generación Masiva de Boletines</h2>
+                        <h2 className="font-bold text-gray-800 mb-4" style={{ fontFamily: "'Inter', sans-serif" }}>Generación Masiva de Boletines</h2>
                         <div className="space-y-4">
                             <div className="p-4 bg-blue-50 rounded-lg">
                                 <p className="text-blue-800">
@@ -430,7 +431,7 @@ export default function Reportes() {
                                 </div>
                             </div>
                             <button className="w-full bg-[#293577] text-white py-3 rounded-lg hover:bg-[#181b49] font-medium">
-                                🚀 Generar 125 Boletines
+                                Generar 125 Boletines
                             </button>
                         </div>
                     </div>

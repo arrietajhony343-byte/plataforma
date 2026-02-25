@@ -47,13 +47,13 @@ export default function Calendario() {
 
     const getTipoIcon = (tipo: string) => {
         switch (tipo) {
-            case 'examen': return '📝';
-            case 'tarea': return '📚';
-            case 'exposicion': return '🎤';
-            case 'laboratorio': return '🔬';
-            case 'evento': return '🎪';
-            case 'reunion': return '🤝';
-            default: return '📌';
+            case 'examen': return 'E';
+            case 'tarea': return 'T';
+            case 'exposicion': return 'X';
+            case 'laboratorio': return 'L';
+            case 'evento': return 'V';
+            case 'reunion': return 'R';
+            default: return '•';
         }
     };
 
@@ -89,7 +89,7 @@ export default function Calendario() {
                                 vistaActual === 'calendario' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                         >
-                            📅 Calendario
+                            Calendario
                         </button>
                         <button
                             onClick={() => setVistaActual('lista')}
@@ -97,7 +97,7 @@ export default function Calendario() {
                                 vistaActual === 'lista' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                         >
-                            📋 Lista
+                            Lista
                         </button>
                     </div>
                 </div>
@@ -106,7 +106,7 @@ export default function Calendario() {
                 {actividades.filter(a => a.entregada === false).length > 0 && (
                     <div className="bg-red-50 border-l-4 border-red-500 rounded-r-xl p-4">
                         <div className="flex items-center gap-2">
-                            <span className="text-xl">⚠️</span>
+                            <span className="text-sm font-bold text-red-600">!</span>
                             <div>
                                 <p className="font-medium text-red-800">
                                     {actividades.filter(a => a.entregada === false).length} actividades sin entregar
@@ -243,12 +243,12 @@ export default function Calendario() {
                                             {act.hora && <p className="text-xs text-gray-500 mt-1">{act.hora}</p>}
                                             {act.entregada === false && (
                                                 <span className="inline-block mt-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-medium">
-                                                    ⚠️ No entregada
+                                                    No entregada
                                                 </span>
                                             )}
                                             {act.entregada === true && (
                                                 <span className="inline-block mt-1 bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-medium">
-                                                    ✓ Entregada
+                                                    Entregada
                                                 </span>
                                             )}
                                         </div>
@@ -307,7 +307,7 @@ export default function Calendario() {
                             {selectedActividad.entregada !== undefined && (
                                 <div className={`p-3 rounded-lg ${selectedActividad.entregada ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                                     <p className={`text-sm font-medium ${selectedActividad.entregada ? 'text-green-800' : 'text-red-800'}`}>
-                                        {selectedActividad.entregada ? '✓ Actividad entregada por el estudiante' : '⚠️ El estudiante NO ha entregado esta actividad'}
+                                        {selectedActividad.entregada ? 'Actividad entregada por el estudiante' : 'El estudiante NO ha entregado esta actividad'}
                                     </p>
                                 </div>
                             )}

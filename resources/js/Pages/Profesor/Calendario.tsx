@@ -1,13 +1,26 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { profesorMenuItems } from '@/Config/profesorMenu';
 
-const menuItems = [
-    { icon: '📚', label: 'Mis Cursos', href: '/profesor/dashboard' },
-    { icon: '📝', label: 'Registrar Notas', href: '/profesor/notas' },
-    { icon: '👁️', label: 'Observador Académico', href: '/profesor/observador' },
-    { icon: '📅', label: 'Mi Calendario', href: '/profesor/calendario', active: true },
-];
+interface HorarioBack {
+    id: number;
+    materia: string;
+    curso: string;
+    dia: string;
+    hora: string;
+    horaFin: string;
+    salon: string;
+}
+
+interface ActividadBack {
+    id: number;
+    titulo: string;
+    curso: string;
+    materia: string;
+    fecha: string;
+    tipo: string;
+}
 
 interface Evento {
     id: number;
@@ -18,18 +31,60 @@ interface Evento {
     curso?: string;
 }
 
-export default function Calendario() {
+interface Props {
+    profesor: { nombre: string };
+    horario: HorarioBack[];
+    actividades: ActividadBack[];
+}
+
+export default function Calendario({ profesor, horario, actividades }: Props) {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-    const eventos: Evento[] = [
-        { id: 1, titulo: 'Clase Matemáticas 6°A', fecha: '2026-02-02', hora: '08:00', tipo: 'clase', curso: '6° A' },
-        { id: 2, titulo: 'Evaluación Parcial', fecha: '2026-02-02', hora: '10:00', tipo: 'evaluacion', curso: '7° A' },
-        { id: 3, titulo: 'Reunión de docentes', fecha: '2026-02-03', hora: '14:00', tipo: 'reunion' },
-        { id: 4, titulo: 'Entrega de notas', fecha: '2026-02-05', hora: '12:00', tipo: 'entrega' },
-        { id: 5, titulo: 'Clase Física 8°A', fecha: '2026-02-02', hora: '11:00', tipo: 'clase', curso: '8° A' },
-        { id: 6, titulo: 'Taller de padres', fecha: '2026-02-10', hora: '16:00', tipo: 'reunion' },
-    ];
+    // Generar eventos a partir de horario semanal + actividades
+    const eventos: Evento[] = useMemo(() => {
+        const evts: Evento[] = [];
+        const daysMap: Record<string, number> = { lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6, domingo: 0 };
+
+        // Generar clases semanales para el mes actual
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        const daysInM = new Date(year, month + 1, 0).getDate();
+
+        horario.forEach(h => {
+            const dayOfWeek = daysMap[h.dia.toLowerCase()] ?? -1;
+            if (dayOfWeek < 0) return;
+            for (let d = 1; d <= daysInM; d++) {
+                const date = new Date(year, month, d);
+                if (date.getDay() === dayOfWeek) {
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    evts.push({
+                        id: h.id * 100 + d,
+                        titulo: `${h.materia} - ${h.curso}`,
+                        fecha: dateStr,
+                        hora: h.hora,
+                        tipo: 'clase',
+                        curso: h.curso,
+                    });
+                }
+            }
+        });
+
+        // Agregar actividades como eventos
+        actividades.forEach(a => {
+            const tipoMap: Record<string, 'evaluacion' | 'entrega'> = { examen: 'evaluacion', quiz: 'evaluacion', tarea: 'entrega', proyecto: 'entrega', exposicion: 'entrega' };
+            evts.push({
+                id: a.id + 10000,
+                titulo: a.titulo,
+                fecha: a.fecha,
+                hora: '00:00',
+                tipo: tipoMap[a.tipo] || 'entrega',
+                curso: a.curso ?? undefined,
+            });
+        });
+
+        return evts;
+    }, [horario, actividades, currentMonth]);
 
     const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
@@ -70,7 +125,7 @@ export default function Calendario() {
     };
 
     return (
-        <SidebarLayout menuItems={menuItems} title="Mi Calendario">
+        <SidebarLayout menuItems={profesorMenuItems} userInfo={{ name: profesor.nombre, role: 'Profesor' }}>
             <Head title="Calendario" />
 
             <div className="space-y-6">
@@ -94,7 +149,7 @@ export default function Calendario() {
                                 onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
                                 className="p-2 hover:bg-gray-100 rounded-lg"
                             >
-                                ◀️
+                                ◀
                             </button>
                             <h2 className="text-xl font-bold text-gray-800">
                                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
@@ -103,7 +158,7 @@ export default function Calendario() {
                                 onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
                                 className="p-2 hover:bg-gray-100 rounded-lg"
                             >
-                                ▶️
+                                
                             </button>
                         </div>
 
@@ -177,7 +232,7 @@ export default function Calendario() {
                     {/* Panel lateral - Eventos del día */}
                     <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
                         <h2 className="font-bold text-gray-800 mb-4">
-                            📅 {selectedDate ? `Eventos del ${selectedDate}` : 'Próximos Eventos'}
+                            {selectedDate ? `Eventos del ${selectedDate}` : 'Próximos Eventos'}
                         </h2>
                         
                         <div className="space-y-3">
@@ -187,7 +242,7 @@ export default function Calendario() {
                                         <div className={`w-3 h-3 rounded-full mt-1.5 ${getTipoColor(evento.tipo)}`}></div>
                                         <div className="flex-1">
                                             <h3 className="font-medium text-gray-800">{evento.titulo}</h3>
-                                            <p className="text-sm text-gray-500">🕐 {evento.hora}</p>
+                                            <p className="text-sm text-gray-500">{evento.hora}</p>
                                             {evento.curso && (
                                                 <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
                                                     {evento.curso}
