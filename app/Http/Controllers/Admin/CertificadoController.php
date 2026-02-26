@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Certificado, TipoCertificado, User, Curso};
+use App\Models\{Certificado, TipoCertificado, User, Curso, Mensaje, Notificacion};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -16,22 +16,46 @@ class CertificadoController extends Controller
      */
     public function index(): Response
     {
+        // Pre-cargar tipos por código para resolver registros legacy
+        $tiposPorCodigo = TipoCertificado::all()->keyBy('codigo');
+
         // Get all certificates with relationships
         $certificados = Certificado::with(['estudiante', 'tipoCertificado'])
             ->orderByDesc('created_at')
             ->get()
-            ->map(function (Certificado $c) {
-                // Get student's active enrollment
+            ->map(function (Certificado $c) use ($tiposPorCodigo) {
+                // Resolver tipo: si no tiene tipo_certificado_id, buscar por código legacy
+                $tipo = $c->tipoCertificado
+                    ?? ($c->tipo ? $tiposPorCodigo->get($c->tipo) : null);
+
+                // Si es legacy sin relación, auto-asignar el tipo_certificado_id
+                if (!$c->tipo_certificado_id && $tipo) {
+                    $c->update(['tipo_certificado_id' => $tipo->id]);
+                    $c->tipo_certificado_id = $tipo->id;
+                }
+
+                // Get student's active enrollment, fallback to most recent
                 $mat = $c->estudiante->matriculas()
                     ->where('estado', 'activa')
                     ->with('curso')
-                    ->first();
+                    ->first()
+                    ?? $c->estudiante->matriculas()
+                        ->with('curso')
+                        ->orderByDesc('created_at')
+                        ->first();
+
+                // Get parent(s) for notification
+                $padres = $c->estudiante->padres()
+                    ->select('users.id', 'users.name')
+                    ->get()
+                    ->map(fn($p) => ['id' => $p->id, 'name' => $p->name])
+                    ->values();
 
                 return [
                     'id'                  => $c->id,
                     'tipo_certificado_id' => $c->tipo_certificado_id,
-                    'tipo_nombre'         => $c->tipoCertificado?->nombre ?? $c->tipo ?? 'Sin tipo',
-                    'tipo_codigo'         => $c->tipoCertificado?->codigo ?? $c->tipo,
+                    'tipo_nombre'         => $tipo?->nombre ?? $c->tipo ?? 'Sin tipo',
+                    'tipo_codigo'         => $tipo?->codigo ?? $c->tipo,
                     'estudiante_id'       => $c->estudiante_id,
                     'estudiante'          => $c->estudiante->name,
                     'nivel'               => $mat?->curso?->nivel ?? '',
@@ -42,6 +66,7 @@ class CertificadoController extends Controller
                     'fecha_solicitud'     => $c->fecha_solicitud?->format('Y-m-d'),
                     'fecha_entrega'       => $c->fecha_entrega?->format('Y-m-d'),
                     'estado'              => $c->estado,
+                    'padres'              => $padres,
                 ];
             });
 
@@ -106,9 +131,12 @@ class CertificadoController extends Controller
             'descripcion'         => 'nullable|string|max:500',
         ]);
 
+        $tipoCert = TipoCertificado::findOrFail($data['tipo_certificado_id']);
+
         Certificado::create([
             'estudiante_id'       => $data['estudiante_id'],
             'tipo_certificado_id' => $data['tipo_certificado_id'],
+            'tipo'                => $tipoCert->codigo,
             'descripcion'         => $data['descripcion'] ?? null,
             'estado'              => 'solicitado',
             'fecha_solicitud'     => now(),
@@ -162,6 +190,54 @@ class CertificadoController extends Controller
         }
 
         return Storage::download($certificado->archivo);
+    }
+
+    /* ════════════════════════════════════════════════════════════════════════
+     * Notify parent / send message
+     * ════════════════════════════════════════════════════════════════════════ */
+
+    /**
+     * Send message + notification to the student's parent(s)
+     */
+    public function notificarPadre(Certificado $certificado)
+    {
+        $estudiante = $certificado->estudiante;
+        $tipo       = $certificado->tipoCertificado?->nombre ?? $certificado->tipo ?? 'Certificado';
+        $padres     = $estudiante->padres;
+
+        if ($padres->isEmpty()) {
+            return redirect()->back()->with('error', 'El estudiante no tiene acudientes registrados.');
+        }
+
+        $admin    = auth()->user();
+        $asunto   = "Certificado listo: {$tipo}";
+        $contenido = "Estimado acudiente, le informamos que el {$tipo} solicitado para {$estudiante->name} ya está listo para ser retirado en la secretaría de la institución. Por favor acérquese en horario de atención.";
+
+        foreach ($padres as $padre) {
+            Mensaje::create([
+                'remitente_id'    => $admin->id,
+                'destinatario_id' => $padre->id,
+                'asunto'          => $asunto,
+                'contenido'       => $contenido,
+                'leido'           => false,
+            ]);
+
+            Notificacion::create([
+                'user_id' => $padre->id,
+                'tipo'    => 'success',
+                'titulo'  => $asunto,
+                'mensaje' => $contenido,
+                'leida'   => false,
+            ]);
+        }
+
+        // Auto-advance to 'listo' if still in process
+        if (in_array($certificado->estado, ['solicitado', 'en_proceso'])) {
+            $certificado->update(['estado' => 'listo']);
+        }
+
+        $count = $padres->count();
+        return redirect()->back()->with('success', "Notificación enviada a {$count} acudiente(s) de {$estudiante->name}.");
     }
 
     /* ════════════════════════════════════════════════════════════════════════

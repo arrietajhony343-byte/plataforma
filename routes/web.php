@@ -102,6 +102,9 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     // Boletines
     Route::get('/boletines', [BoletinController::class, 'index'])->name('boletines');
     Route::post('/boletines/generar', [BoletinController::class, 'generate'])->name('boletines.generar');
+    Route::post('/boletines/{boletin}/notificar', [BoletinController::class, 'notificar'])->name('boletines.notificar');
+    Route::post('/boletines/notificar-masivo', [BoletinController::class, 'notificarMasivo'])->name('boletines.notificar-masivo');
+    Route::post('/boletines/{boletin}/enviar', [BoletinController::class, 'marcarEnviado'])->name('boletines.enviar');
 
     // Certificados
     Route::get('/certificados', [CertificadoController::class, 'index'])->name('certificados');
@@ -109,6 +112,7 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::put('/certificados/{certificado}', [CertificadoController::class, 'update'])->name('certificados.update');
     Route::delete('/certificados/{certificado}', [CertificadoController::class, 'destroy'])->name('certificados.destroy');
     Route::get('/certificados/{certificado}/download', [CertificadoController::class, 'download'])->name('certificados.download');
+    Route::post('/certificados/{certificado}/notificar', [CertificadoController::class, 'notificarPadre'])->name('certificados.notificar');
     // Tipos de certificado
     Route::post('/certificados/tipos', [CertificadoController::class, 'storeTipo'])->name('certificados.tipos.store');
     Route::put('/certificados/tipos/{tipo}', [CertificadoController::class, 'updateTipo'])->name('certificados.tipos.update');
@@ -126,6 +130,7 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('/reportes/comentarios', [ReporteController::class, 'comentarios'])->name('reportes.comentarios');
     Route::get('/reportes/asistencia', [ReporteController::class, 'asistencia'])->name('reportes.asistencia');
     Route::get('/reportes/exportar-rendimiento', [ReporteController::class, 'exportarRendimiento'])->name('reportes.exportar-rendimiento');
+    Route::get('/reportes/estudiante/{id}/observaciones', [ReporteController::class, 'estudianteObservaciones'])->name('reportes.estudiante-obs');
 
     // Contabilidad (read-only)
     Route::get('/contabilidad', [ContabilidadController::class, 'index'])->name('contabilidad');

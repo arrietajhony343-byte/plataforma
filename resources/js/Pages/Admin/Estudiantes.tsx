@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 import * as XLSX from 'xlsx';
 
@@ -51,6 +51,9 @@ const NIVEL_KEYS = Object.keys(NIVELES);
 const onlyNumbers = (v: string) => v.replace(/[^0-9]/g, '');
 
 export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
+    /* ─── Carga diferida ─── */
+    const [hasLoaded, setHasLoaded] = useState(false);
+
     /* ─── Filtros ─── */
     const [busqueda, setBusqueda] = useState('');
     const [nivelSel, setNivelSel] = useState('todos');
@@ -118,6 +121,11 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
     const promedioColor = (v: number) => v >= 4 ? 'text-green-600' : v >= 3 ? 'text-yellow-600' : 'text-red-600';
 
     const hayFiltros = nivelSel !== 'todos' || cursoSel !== 'todos' || estadoSel !== 'todos' || pagosSel !== 'todos' || busqueda !== '';
+
+    // Si el usuario aplica algún filtro, cargar automáticamente
+    useEffect(() => {
+        if (hayFiltros) setHasLoaded(true);
+    }, [hayFiltros]);
 
     const limpiarFiltros = () => { setNivelSel('todos'); setCursoSel('todos'); setEstadoSel('todos'); setPagosSel('todos'); setBusqueda(''); };
 
@@ -362,11 +370,30 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
                         </div>
                     )}
 
-                    <p className="text-sm text-gray-500">{filtered.length} de {estudiantes.length} estudiante(s) encontrado(s)</p>
+                    {hasLoaded
+                        ? <p className="text-sm text-gray-500">{filtered.length} de {estudiantes.length} estudiante(s) encontrado(s)</p>
+                        : <p className="text-sm text-gray-400">Haz clic en "Cargar estudiantes" para ver los resultados</p>
+                    }
                 </div>
 
                 {/* Lista */}
-                {filtered.length === 0 ? (
+                {!hasLoaded ? (
+                    /* Placeholder: aún no se ha cargado */
+                    <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-dashed border-gray-200">
+                        <svg className="w-14 h-14 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                        </svg>
+                        <h3 className="text-gray-600 font-semibold text-base mb-1">Lista de estudiantes lista para cargar</h3>
+                        <p className="text-gray-400 text-sm mb-5">Presiona el botón para mostrar todos los estudiantes o usa los filtros para búsquedas específicas</p>
+                        <button
+                            onClick={() => setHasLoaded(true)}
+                            className="inline-flex items-center gap-2 bg-[#293577] text-white px-6 py-2.5 rounded-lg hover:bg-[#181b49] text-sm font-semibold transition-all shadow-md"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+                            Cargar estudiantes ({estudiantes.length})
+                        </button>
+                    </div>
+                ) : filtered.length === 0 ? (
                     <div className="bg-white rounded-xl shadow-sm p-8 text-center">
                         <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
                         <p className="text-gray-600 font-medium">No se encontraron estudiantes</p>

@@ -37,8 +37,14 @@ interface ComentariosData {
     positivas: number;
     negativas: number;
     neutras: number;
-    topNegativos: { nombre: string; total: number }[];
+    topNegativos: { id: number; nombre: string; total: number }[];
     categorias: { categoria: string; total: number }[];
+}
+
+interface EstudianteDetalle {
+    estudiante: { id: number; nombre: string; curso: string; nivel: string };
+    observaciones: { id: number; tipo: string; categoria: string; descripcion: string; fecha: string; profesor: string; materia: string }[];
+    stats: { total: number; positivas: number; negativas: number; neutras: number };
 }
 
 interface AsistenciaData {
@@ -80,10 +86,13 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
 
     // Data states
     const [loading, setLoading] = useState(false);
+    const [hasLoaded, setHasLoaded] = useState(false);
     const [rendimiento, setRendimiento] = useState<RendimientoRow[]>([]);
     const [rendimientoStats, setRendimientoStats] = useState({ promedioGeneral: 0, tasaAprobacion: 100, totalEstudiantes: 0, totalCursos: 0 });
     const [comentarios, setComentarios] = useState<ComentariosData | null>(null);
     const [asistencia, setAsistencia] = useState<AsistenciaData | null>(null);
+    const [estudianteDetalle, setEstudianteDetalle] = useState<EstudianteDetalle | null>(null);
+    const [loadingDetalle, setLoadingDetalle] = useState(false);
 
     // Report types
     const reportTypes = [
@@ -155,6 +164,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
         try {
             const params = new URLSearchParams();
             if (selectedPeriodo) params.append('periodo_id', selectedPeriodo);
+            if (nivelSeleccionado !== 'todos') params.append('nivel', nivelSeleccionado);
             if (selectedCurso !== 'todos') params.append('curso_id', selectedCurso);
 
             const response = await fetch(`/admin/reportes/comentarios?${params.toString()}`);
@@ -171,6 +181,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
         try {
             const params = new URLSearchParams();
             if (selectedPeriodo) params.append('periodo_id', selectedPeriodo);
+            if (nivelSeleccionado !== 'todos') params.append('nivel', nivelSeleccionado);
             if (selectedCurso !== 'todos') params.append('curso_id', selectedCurso);
 
             const response = await fetch(`/admin/reportes/asistencia?${params.toString()}`);
@@ -182,14 +193,31 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
         setLoading(false);
     };
 
-    // Auto-fetch al cambiar filtros o tipo de reporte
+    const fetchEstudianteDetalle = async (estudianteId: number) => {
+        setLoadingDetalle(true);
+        try {
+            const params = new URLSearchParams();
+            if (selectedPeriodo) params.append('periodo_id', selectedPeriodo);
+            if (nivelSeleccionado !== 'todos') params.append('nivel', nivelSeleccionado);
+            const response = await fetch(`/admin/reportes/estudiante/${estudianteId}/observaciones?${params.toString()}`);
+            const data = await response.json();
+            setEstudianteDetalle(data);
+        } catch (error) {
+            console.error('Error fetching detalle:', error);
+        }
+        setLoadingDetalle(false);
+    };
+
+    // Auto-fetch: si ya cargó, re-fetch cuando cambien filtros o tipo
     useEffect(() => {
+        if (!hasLoaded) return;
         if (selectedReport === 'rendimiento') fetchRendimiento();
         else if (selectedReport === 'comentarios') fetchComentarios();
         else if (selectedReport === 'asistencia') fetchAsistencia();
     }, [selectedPeriodo, nivelSeleccionado, selectedCurso, selectedReport]);
 
     const handleGenerarReporte = () => {
+        setHasLoaded(true);
         if (selectedReport === 'rendimiento') fetchRendimiento();
         else if (selectedReport === 'comentarios') fetchComentarios();
         else if (selectedReport === 'asistencia') fetchAsistencia();
@@ -412,6 +440,27 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                         </div>
                     )}
                 </div>
+
+                {/* ── Estado vacío hasta que el usuario genere el reporte ── */}
+                {!hasLoaded ? (
+                    <div className="bg-white rounded-xl shadow-sm border border-dashed border-gray-200 p-12 text-center">
+                        <svg className="w-14 h-14 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                        </svg>
+                        <h3 className="text-gray-600 font-semibold text-base mb-1">Datos listos para generar</h3>
+                        <p className="text-gray-400 text-sm mb-5">Selecciona los filtros deseados y presiona el botón para cargar el reporte</p>
+                        <button
+                            onClick={handleGenerarReporte}
+                            className="inline-flex items-center gap-2 bg-[#293577] text-white px-7 py-2.5 rounded-lg hover:bg-[#181b49] text-sm font-semibold transition-all shadow-md"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            Generar Reporte
+                        </button>
+                    </div>
+                ) : (
+                <>
 
                 {/* ═══════════════════════════ RENDIMIENTO ═══════════════════════════ */}
                 {selectedReport === 'rendimiento' && (
@@ -732,13 +781,20 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                                                 const badgeColor = est.total >= 5 ? 'bg-rose-500' : est.total >= 3 ? 'bg-orange-400' : 'bg-yellow-400';
                                                 const textColor = est.total >= 5 ? 'text-rose-700' : est.total >= 3 ? 'text-orange-700' : 'text-yellow-700';
                                                 return (
-                                                    <div key={idx} className={`rounded-xl border p-3 ${severity}`}>
+                                                    <div
+                                                        key={idx}
+                                                        onClick={() => fetchEstudianteDetalle(est.id)}
+                                                        className={`rounded-xl border p-3 ${severity} cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all duration-200 group`}
+                                                    >
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex items-center gap-2">
                                                                 <span className={`w-6 h-6 rounded-full ${badgeColor} text-white text-xs flex items-center justify-center font-bold flex-shrink-0`}>{idx + 1}</span>
                                                                 <span className={`font-semibold text-sm ${textColor}`}>{est.nombre}</span>
                                                             </div>
-                                                            <span className={`text-sm font-bold ${textColor}`}>{est.total} obs.</span>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className={`text-sm font-bold ${textColor}`}>{est.total} obs.</span>
+                                                                <svg className={`w-3.5 h-3.5 ${textColor} opacity-0 group-hover:opacity-100 transition-opacity`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                                            </div>
                                                         </div>
                                                         <div className="bg-white/60 rounded-full h-2 overflow-hidden">
                                                             <div
@@ -746,6 +802,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                                                                 style={{ width: `${pct}%` }}
                                                             />
                                                         </div>
+                                                        <p className={`text-xs mt-1.5 ${textColor} opacity-0 group-hover:opacity-70 transition-opacity`}>Ver observaciones →</p>
                                                     </div>
                                                 );
                                             })}
@@ -756,7 +813,135 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                         )}
                     </div>
                 )}
+
+                </>
+                )}
+
             </div>
+        {/* ── Modal Detalle Estudiante ── */}
+        {estudianteDetalle && (
+            <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                onClick={() => setEstudianteDetalle(null)}
+            >
+                <div
+                    className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl"
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="relative p-6 pb-4 bg-gradient-to-br from-[#293577] to-[#181b49] rounded-t-2xl text-white">
+                        <button
+                            onClick={() => setEstudianteDetalle(null)}
+                            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-xl font-bold flex-shrink-0">
+                                {estudianteDetalle.estudiante.nombre.charAt(0)}
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold leading-tight">{estudianteDetalle.estudiante.nombre}</h2>
+                                <p className="text-sm text-white/70 mt-0.5">{estudianteDetalle.estudiante.curso}</p>
+                                <span className="inline-block mt-1 px-2 py-0.5 bg-white/20 rounded-full text-xs capitalize">
+                                    {estudianteDetalle.estudiante.nivel}
+                                </span>
+                            </div>
+                        </div>
+                        {/* Stats bar */}
+                        <div className="mt-4 grid grid-cols-4 gap-2">
+                            {[
+                                { label: 'Total', value: estudianteDetalle.stats.total, color: 'bg-white/20' },
+                                { label: 'Positivas', value: estudianteDetalle.stats.positivas, color: 'bg-emerald-400/30' },
+                                { label: 'Negativas', value: estudianteDetalle.stats.negativas, color: 'bg-rose-400/30' },
+                                { label: 'Neutras', value: estudianteDetalle.stats.neutras, color: 'bg-sky-400/30' },
+                            ].map(stat => (
+                                <div key={stat.label} className={`${stat.color} rounded-xl p-2.5 text-center`}>
+                                    <div className="text-xl font-bold">{stat.value}</div>
+                                    <div className="text-xs text-white/70">{stat.label}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="overflow-y-auto flex-1 p-4 space-y-3">
+                        {estudianteDetalle.observaciones.length === 0 ? (
+                            <div className="text-center py-10 text-gray-400">
+                                <svg className="w-10 h-10 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <p className="text-sm">Sin observaciones en este período</p>
+                            </div>
+                        ) : (
+                            estudianteDetalle.observaciones.map(obs => {
+                                const tipoConfig = obs.tipo === 'positiva'
+                                    ? { icon: '✅', bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', text: 'text-emerald-700' }
+                                    : obs.tipo === 'negativa'
+                                    ? { icon: '⚠️', bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-100 text-rose-700', text: 'text-rose-700' }
+                                    : { icon: '💬', bg: 'bg-sky-50', border: 'border-sky-200', badge: 'bg-sky-100 text-sky-700', text: 'text-sky-700' };
+                                return (
+                                    <div key={obs.id} className={`rounded-xl border p-4 ${tipoConfig.bg} ${tipoConfig.border}`}>
+                                        <div className="flex items-start justify-between gap-3 mb-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-base leading-none">{tipoConfig.icon}</span>
+                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${tipoConfig.badge} capitalize`}>{obs.tipo}</span>
+                                                {obs.categoria && (
+                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">{obs.categoria}</span>
+                                                )}
+                                            </div>
+                                            <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                                                {new Date(obs.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-700 leading-relaxed mb-3">{obs.descripcion}</p>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                                            <span className="flex items-center gap-1">
+                                                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                {obs.profesor}
+                                            </span>
+                                            {obs.materia && (
+                                                <span className="flex items-center gap-1">
+                                                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                    </svg>
+                                                    {obs.materia}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-4 border-t border-gray-100 flex justify-end">
+                        <button
+                            onClick={() => setEstudianteDetalle(null)}
+                            className="px-5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition-colors"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Loading detalle overlay */}
+        {loadingDetalle && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+                <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-3 shadow-2xl">
+                    <div className="w-10 h-10 border-4 border-[#293577] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-gray-600 font-medium">Cargando observaciones...</p>
+                </div>
+            </div>
+        )}
+
         </SidebarLayout>
     );
 }

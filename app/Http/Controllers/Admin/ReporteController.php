@@ -193,77 +193,123 @@ class ReporteController extends Controller
      */
     public function comentarios(Request $request)
     {
-        $periodoId = $request->input('periodo_id');
-        $cursoId = $request->input('curso_id');
+        $periodoId  = $request->input('periodo_id');
+        $cursoId    = $request->input('curso_id');
+        $nivelFiltro = $request->input('nivel', 'todos');
         $anio = now()->year;
 
-        // Query base
-        $query = Observacion::query();
-
-        // Filtrar por periodo basándose en las fechas del periodo
-        if ($periodoId) {
-            $periodo = Periodo::find($periodoId);
-            if ($periodo) {
-                $query->whereBetween('fecha', [$periodo->fecha_inicio, $periodo->fecha_fin]);
-            }
-        } else {
-            $query->whereYear('fecha', $anio);
-        }
-
-        // Filtrar por curso si se especifica
+        // IDs de estudiantes según filtro de curso/nivel
+        $estudianteIds = null;
         if ($cursoId) {
             $estudianteIds = Matricula::where('curso_id', $cursoId)
                 ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
                 ->pluck('estudiante_id');
-            $query->whereIn('estudiante_id', $estudianteIds);
+        } elseif ($nivelFiltro && $nivelFiltro !== 'todos') {
+            $cursosNivel = Curso::activo()->where('nivel', $nivelFiltro)->pluck('id');
+            $estudianteIds = Matricula::whereIn('curso_id', $cursosNivel)
+                ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
+                ->pluck('estudiante_id')->unique();
         }
 
-        $total = (clone $query)->count();
-        $positivas = (clone $query)->where('tipo', 'positiva')->count();
-        $negativas = (clone $query)->where('tipo', 'negativa')->count();
-        $neutras = $total - $positivas - $negativas;
-
-        // Top estudiantes con más observaciones negativas
-        $topNegativos = Observacion::select('estudiante_id', DB::raw('COUNT(*) as total'))
-            ->where('tipo', 'negativa')
-            ->whereYear('fecha', $anio)
+        // Query base con filtros de periodo
+        $baseQuery = fn() => Observacion::query()
             ->when($periodoId, function ($q) use ($periodoId) {
                 $periodo = Periodo::find($periodoId);
-                if ($periodo) {
+                if ($periodo && $periodo->fecha_inicio && $periodo->fecha_fin) {
                     $q->whereBetween('fecha', [$periodo->fecha_inicio, $periodo->fecha_fin]);
                 }
-            })
+            }, fn($q) => $q->whereYear('fecha', $anio))
+            ->when($estudianteIds, fn($q) => $q->whereIn('estudiante_id', $estudianteIds));
+
+        $total     = $baseQuery()->count();
+        $positivas = $baseQuery()->where('tipo', 'positiva')->count();
+        $negativas = $baseQuery()->where('tipo', 'negativa')->count();
+        $neutras   = $total - $positivas - $negativas;
+
+        // Top estudiantes con más observaciones negativas
+        $topNegativos = $baseQuery()
+            ->where('tipo', 'negativa')
+            ->select('estudiante_id', DB::raw('COUNT(*) as total'))
             ->groupBy('estudiante_id')
             ->orderByDesc('total')
-            ->limit(5)
+            ->limit(8)
             ->with('estudiante:id,name')
             ->get()
             ->map(fn($o) => [
+                'id'     => $o->estudiante_id,
                 'nombre' => $o->estudiante?->name ?? 'N/A',
                 'total'  => $o->total,
             ]);
 
-        // Distribución por tipo de comentario (categorías)
-        $categorias = Observacion::select('categoria', DB::raw('COUNT(*) as total'))
-            ->whereYear('fecha', $anio)
-            ->when($periodoId, function ($q) use ($periodoId) {
-                $periodo = Periodo::find($periodoId);
-                if ($periodo) {
-                    $q->whereBetween('fecha', [$periodo->fecha_inicio, $periodo->fecha_fin]);
-                }
-            })
+        // Distribución por categoría
+        $categorias = $baseQuery()
+            ->select('categoria', DB::raw('COUNT(*) as total'))
             ->whereNotNull('categoria')
             ->groupBy('categoria')
             ->orderByDesc('total')
             ->get();
 
         return response()->json([
-            'total'       => $total,
-            'positivas'   => $positivas,
-            'negativas'   => $negativas,
-            'neutras'     => $neutras,
+            'total'        => $total,
+            'positivas'    => $positivas,
+            'negativas'    => $negativas,
+            'neutras'      => $neutras,
             'topNegativos' => $topNegativos,
-            'categorias'  => $categorias,
+            'categorias'   => $categorias,
+        ]);
+    }
+
+    /**
+     * Detalle de observaciones de un estudiante específico
+     */
+    public function estudianteObservaciones(Request $request, int $estudianteId)
+    {
+        $periodoId   = $request->input('periodo_id');
+        $nivelFiltro = $request->input('nivel', 'todos');
+        $anio = now()->year;
+
+        $estudiante = User::findOrFail($estudianteId);
+
+        $obs = Observacion::where('estudiante_id', $estudianteId)
+            ->when($periodoId, function ($q) use ($periodoId) {
+                $periodo = Periodo::find($periodoId);
+                if ($periodo && $periodo->fecha_inicio && $periodo->fecha_fin) {
+                    $q->whereBetween('fecha', [$periodo->fecha_inicio, $periodo->fecha_fin]);
+                }
+            }, fn($q) => $q->whereYear('fecha', $anio))
+            ->with(['profesor:id,name', 'materia:id,nombre'])
+            ->orderByDesc('fecha')
+            ->get()
+            ->map(fn($o) => [
+                'id'          => $o->id,
+                'tipo'        => $o->tipo,
+                'categoria'   => $o->categoria,
+                'descripcion' => $o->descripcion,
+                'fecha'       => $o->fecha?->format('d/m/Y'),
+                'profesor'    => $o->profesor?->name ?? 'N/A',
+                'materia'     => $o->materia?->nombre ?? '-',
+            ]);
+
+        $matricula = Matricula::where('estudiante_id', $estudianteId)
+            ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
+            ->with('curso:id,nombre,nivel')
+            ->latest()
+            ->first();
+
+        return response()->json([
+            'estudiante' => [
+                'id'     => $estudiante->id,
+                'nombre' => $estudiante->name,
+                'curso'  => $matricula?->curso?->nombre ?? '-',
+                'nivel'  => $matricula?->curso?->nivel ?? '-',
+            ],
+            'observaciones' => $obs,
+            'stats' => [
+                'total'     => $obs->count(),
+                'positivas' => $obs->where('tipo', 'positiva')->count(),
+                'negativas' => $obs->where('tipo', 'negativa')->count(),
+                'neutras'   => $obs->filter(fn($o) => !in_array($o['tipo'], ['positiva', 'negativa']))->count(),
+            ],
         ]);
     }
 
@@ -272,15 +318,17 @@ class ReporteController extends Controller
      */
     public function asistencia(Request $request)
     {
-        // Por ahora retornamos datos de ejemplo ya que no existe el modelo Asistencia
-        // En el futuro se implementará con el modelo real
+        $periodoId   = $request->input('periodo_id');
+        $cursoId     = $request->input('curso_id');
+        $nivelFiltro = $request->input('nivel', 'todos');
 
-        $periodoId = $request->input('periodo_id');
-        $cursoId = $request->input('curso_id');
+        $nivelOrder = "CASE nivel WHEN 'preescolar' THEN 1 WHEN 'transicion' THEN 2 WHEN 'primaria' THEN 3 WHEN 'secundaria' THEN 4 WHEN 'media' THEN 5 WHEN 'bachillerato' THEN 6 ELSE 7 END";
 
-        // Simular datos de asistencia basados en estudiantes matriculados
         $cursos = Curso::activo()
             ->when($cursoId, fn($q) => $q->where('id', $cursoId))
+            ->when($nivelFiltro && $nivelFiltro !== 'todos', fn($q) => $q->where('nivel', $nivelFiltro))
+            ->orderByRaw($nivelOrder)
+            ->orderBy('grado')
             ->get();
 
         $asistenciaPorCurso = [];
@@ -290,14 +338,13 @@ class ReporteController extends Controller
                 ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
                 ->count();
 
-            // Datos simulados mientras no exista el modelo
             $asistenciaPorCurso[] = [
-                'curso'           => $curso->nombre,
-                'nivel'           => $curso->nivel,
+                'curso'            => $curso->nombre,
+                'nivel'            => $curso->nivel,
                 'totalEstudiantes' => $totalEstudiantes,
-                'promedioAsist'   => 0, // Se calculará cuando exista el modelo
-                'inasistencias'   => 0,
-                'tardanzas'       => 0,
+                'promedioAsist'    => 0,
+                'inasistencias'    => 0,
+                'tardanzas'        => 0,
             ];
         }
 
