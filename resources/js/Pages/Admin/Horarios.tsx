@@ -1111,24 +1111,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                         </div>
                         {renderHorarioGridGeneral(horarioData)}
 
-                        {/* Leyenda profesores */}
-                        {profesores.length > 0 && (
-                            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Leyenda de Profesores</h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {profesores.map(p => (
-                                        <button
-                                            key={p.id}
-                                            onClick={() => { setVistaActiva('profesor'); setProfesorSeleccionado(p.nombre); }}
-                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${p.colorBg} ${p.colorBorder} border text-xs font-medium ${p.colorText} hover:shadow-sm transition-all`}
-                                        >
-                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: 'currentColor', opacity: 0.5 }} />
-                                            {p.nombre}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                   
                     </>
                 )}
 
