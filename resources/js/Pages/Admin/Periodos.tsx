@@ -182,16 +182,18 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                         <p className="text-gray-500 text-sm">Gestiona los periodos académicos y sus configuraciones</p>
                     </div>
                     <div className="flex gap-3">
+                        <div className="relative z-10">
                         <select
                             value={anio}
                             onChange={(e) => changeYear(parseInt(e.target.value))}
-                            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] bg-white"
                         >
                             {aniosDisponibles.map(a => (
                                 <option key={a} value={a}>Año {a}</option>
                             ))}
                             {!aniosDisponibles.includes(anio) && <option value={anio}>Año {anio}</option>}
                         </select>
+                        </div>
                         <button
                             onClick={openCreate}
                             className="flex items-center gap-2 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-5 py-2.5 rounded-xl hover:shadow-lg hover:shadow-[#293577]/25 transition-all text-sm font-medium"
@@ -205,15 +207,15 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                 {/* ── Stats Row ── */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     {[
-                        { label: 'Periodos',     value: periodos.length,       icon: '📅', color: 'from-blue-500 to-blue-600' },
-                        { label: 'Completados',  value: periodosCompletados,   icon: '✅', color: 'from-emerald-500 to-emerald-600' },
-                        { label: 'Actual',        value: periodoActivo?.nombre ?? '—', icon: '🟢', color: 'from-green-500 to-green-600' },
-                        { label: 'Días restantes', value: `${diasRestantes}d`, icon: '⏳', color: 'from-amber-500 to-amber-600' },
-                        { label: 'Progreso año',  value: `${progresoAnio}%`,   icon: '📊', color: 'from-purple-500 to-purple-600' },
+                        { label: 'Periodos',     value: periodos.length,       color: 'from-blue-500 to-blue-600',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg> },
+                        { label: 'Completados',  value: periodosCompletados,   color: 'from-emerald-500 to-emerald-600', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                        { label: 'Actual',        value: periodoActivo?.nombre ?? '—', color: 'from-[#293577] to-[#181b49]', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1 0 12.728 0M12 3v9" /></svg> },
+                        { label: 'Días restantes', value: `${diasRestantes}d`, color: 'from-amber-500 to-amber-600',   icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                        { label: 'Progreso año',  value: `${progresoAnio}%`,   color: 'from-purple-500 to-purple-600', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg> },
                     ].map((stat, i) => (
                         <div key={i} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xl">{stat.icon}</span>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className={`bg-gradient-to-br ${stat.color} text-white p-2 rounded-lg flex items-center justify-center`}>{stat.icon}</span>
                                 <div className={`w-8 h-1 rounded-full bg-gradient-to-r ${stat.color}`} />
                             </div>
                             <p className="text-xl font-extrabold text-gray-800 truncate" style={{ fontFamily: "'Inter', sans-serif" }}>{stat.value}</p>
@@ -225,7 +227,12 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                 {/* ── Porcentaje Warning ── */}
                 {sumaPorcentajes !== 100 && periodos.length > 0 && (
                     <div className={`rounded-xl p-4 border flex items-center gap-3 ${sumaPorcentajes > 100 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-                        <span className="text-2xl">{sumaPorcentajes > 100 ? '🚨' : '⚠️'}</span>
+                        <span className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${sumaPorcentajes > 100 ? 'bg-red-100' : 'bg-amber-100'}`}>
+                            {sumaPorcentajes > 100
+                                ? <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                                : <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                            }
+                        </span>
                         <div>
                             <p className={`text-sm font-medium ${sumaPorcentajes > 100 ? 'text-red-700' : 'text-amber-700'}`}>
                                 La suma de porcentajes es {sumaPorcentajes}% {sumaPorcentajes > 100 ? '(excede el 100%)' : `(faltan ${(100 - sumaPorcentajes).toFixed(1)}%)`}
@@ -246,7 +253,9 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
 
                     {periodos.length === 0 ? (
                         <div className="text-center py-12">
-                            <div className="text-5xl mb-4">📅</div>
+                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                            </div>
                             <h3 className="text-lg font-bold text-gray-700 mb-1">Sin periodos configurados</h3>
                             <p className="text-sm text-gray-500 mb-4">Agrega periodos para este año académico</p>
                             <button onClick={openCreate} className="inline-flex items-center gap-2 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-5 py-2.5 rounded-xl hover:shadow-lg text-sm font-medium">
@@ -493,7 +502,7 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                             </div>
                             {form.fecha_inicio && form.fecha_fin && form.fecha_fin > form.fecha_inicio && (
                                 <div className="bg-gray-50 rounded-xl px-4 py-2.5 text-xs text-gray-500 flex items-center gap-2">
-                                    <span>📅</span>
+                                    <svg className="w-4 h-4 text-[#293577]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
                                     Duración: {diffDays(form.fecha_inicio, form.fecha_fin)} días
                                 </div>
                             )}

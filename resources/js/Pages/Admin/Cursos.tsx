@@ -88,19 +88,19 @@ const nivelCardAccent: Record<string, string> = {
     bachillerato: 'from-emerald-500 to-emerald-600',
 };
 
-const materiaColors: Record<string, { icono: string; colorBg: string; colorText: string; colorBorder: string }> = {
-    'Matemáticas':        { icono: '📐', colorBg: 'bg-blue-50',   colorText: 'text-blue-700',    colorBorder: 'border-blue-200' },
-    'Lengua Castellana':  { icono: '📝', colorBg: 'bg-amber-50',  colorText: 'text-amber-700',   colorBorder: 'border-amber-200' },
-    'Ciencias Naturales': { icono: '🔬', colorBg: 'bg-green-50',  colorText: 'text-green-700',   colorBorder: 'border-green-200' },
-    'Ciencias Sociales':  { icono: '🌎', colorBg: 'bg-purple-50', colorText: 'text-purple-700',  colorBorder: 'border-purple-200' },
-    'Inglés':             { icono: '🇬🇧', colorBg: 'bg-indigo-50', colorText: 'text-indigo-700',  colorBorder: 'border-indigo-200' },
-    'Educación Física':   { icono: '⚽', colorBg: 'bg-orange-50', colorText: 'text-orange-700',  colorBorder: 'border-orange-200' },
-    'Artes':              { icono: '🎨', colorBg: 'bg-pink-50',   colorText: 'text-pink-700',    colorBorder: 'border-pink-200' },
-    'Tecnología':         { icono: '💻', colorBg: 'bg-cyan-50',   colorText: 'text-cyan-700',    colorBorder: 'border-cyan-200' },
-    'Ética y Valores':    { icono: '🤝', colorBg: 'bg-teal-50',   colorText: 'text-teal-700',    colorBorder: 'border-teal-200' },
-    'Religión':           { icono: '📖', colorBg: 'bg-rose-50',   colorText: 'text-rose-700',    colorBorder: 'border-rose-200' },
+const materiaColors: Record<string, { icono: React.ReactNode; colorBg: string; colorText: string; colorBorder: string }> = {
+    'Matemáticas':        { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 8.25h15m-16.5 7.5h15m-1.8-13.5-3.9 19.5m-2.1-19.5-3.9 19.5" /></svg>,        colorBg: 'bg-blue-50',   colorText: 'text-blue-600',    colorBorder: 'border-blue-200' },
+    'Lengua Castellana':  { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>, colorBg: 'bg-amber-50',  colorText: 'text-amber-700',   colorBorder: 'border-amber-200' },
+    'Ciencias Naturales': { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.169.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23-.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>, colorBg: 'bg-green-50',  colorText: 'text-green-700',   colorBorder: 'border-green-200' },
+    'Ciencias Sociales':  { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" /></svg>, colorBg: 'bg-purple-50', colorText: 'text-purple-700',  colorBorder: 'border-purple-200' },
+    'Inglés':             { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" /></svg>,             colorBg: 'bg-indigo-50', colorText: 'text-indigo-700',  colorBorder: 'border-indigo-200' },
+    'Educación Física':   { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 0 0 7.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 0 0 2.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 0 1 2.916.52 6.003 6.003 0 0 1-5.395 4.972m0 0a6.726 6.726 0 0 1-2.749 1.35m0 0a6.772 6.772 0 0 1-3.044 0" /></svg>,   colorBg: 'bg-orange-50', colorText: 'text-orange-700',  colorBorder: 'border-orange-200' },
+    'Artes':              { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>,              colorBg: 'bg-pink-50',   colorText: 'text-pink-700',    colorBorder: 'border-pink-200' },
+    'Tecnología':         { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" /></svg>,         colorBg: 'bg-cyan-50',   colorText: 'text-cyan-700',    colorBorder: 'border-cyan-200' },
+    'Ética y Valores':    { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>,    colorBg: 'bg-teal-50',   colorText: 'text-teal-700',    colorBorder: 'border-teal-200' },
+    'Religión':           { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>,           colorBg: 'bg-rose-50',   colorText: 'text-rose-700',    colorBorder: 'border-rose-200' },
 };
-const defaultMateriaColor = { icono: '📚', colorBg: 'bg-gray-50', colorText: 'text-gray-700', colorBorder: 'border-gray-200' };
+const defaultMateriaColor: { icono: React.ReactNode; colorBg: string; colorText: string; colorBorder: string } = { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>, colorBg: 'bg-gray-50', colorText: 'text-gray-600', colorBorder: 'border-gray-200' };
 const getMateriaStyle = (nombre: string) => materiaColors[nombre] ?? defaultMateriaColor;
 
 /* ─── Form defaults ─── */
@@ -411,15 +411,15 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                 {/* ── Stats Cards ── */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     {[
-                        { label: 'Cursos',        value: stats.totalCursos,        icon: '🏫', color: 'from-blue-500 to-blue-600' },
-                        { label: 'Materias',      value: stats.totalMaterias,      icon: '📚', color: 'from-indigo-500 to-indigo-600' },
-                        { label: 'Estudiantes',   value: stats.totalEstudiantes,   icon: '👨‍🎓', color: 'from-emerald-500 to-emerald-600' },
-                        { label: 'Profesores',    value: stats.totalProfesores,    icon: '👨‍🏫', color: 'from-amber-500 to-amber-600' },
-                        { label: 'Prom. / Curso', value: stats.promedioEstudiantes, icon: '📊', color: 'from-purple-500 to-purple-600' },
+                        { label: 'Cursos',        value: stats.totalCursos,        color: 'from-blue-500 to-blue-600',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" /></svg> },
+                        { label: 'Materias',      value: stats.totalMaterias,      color: 'from-indigo-500 to-indigo-600', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
+                        { label: 'Estudiantes',   value: stats.totalEstudiantes,   color: 'from-emerald-500 to-emerald-600', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg> },
+                        { label: 'Profesores',    value: stats.totalProfesores,    color: 'from-amber-500 to-amber-600',   icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg> },
+                        { label: 'Prom. / Curso', value: stats.promedioEstudiantes, color: 'from-purple-500 to-purple-600', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg> },
                     ].map((stat, i) => (
                         <div key={i} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xl">{stat.icon}</span>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className={`bg-gradient-to-br ${stat.color} text-white p-2 rounded-lg flex items-center justify-center`}>{stat.icon}</span>
                                 <div className={`w-8 h-1 rounded-full bg-gradient-to-r ${stat.color}`} />
                             </div>
                             <p className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>{stat.value}</p>
@@ -497,7 +497,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                     <>
                         {filteredCursos.length === 0 ? (
                             <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-                                <div className="text-5xl mb-4">🏫</div>
+                                <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" /></svg>
+                                </div>
                                 <h3 className="text-lg font-bold text-gray-700 mb-1">No se encontraron cursos</h3>
                                 <p className="text-sm text-gray-500 mb-4">Intenta ajustar los filtros o crea un nuevo curso</p>
                                 <button onClick={openCreateCurso} className="inline-flex items-center gap-2 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-5 py-2.5 rounded-xl hover:shadow-lg text-sm font-medium">
@@ -640,7 +642,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                     <>
                         {filteredMaterias.length === 0 ? (
                             <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-                                <div className="text-5xl mb-4">📚</div>
+                                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+                                </div>
                                 <h3 className="text-lg font-bold text-gray-700 mb-1">No se encontraron materias</h3>
                                 <p className="text-sm text-gray-500 mb-4">Intenta ajustar los filtros o crea una nueva materia</p>
                                 <button onClick={openCreateMateria} className="inline-flex items-center gap-2 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-5 py-2.5 rounded-xl hover:shadow-lg text-sm font-medium">
@@ -656,7 +660,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                             <div className={`${style.colorBg} p-4 border-b ${style.colorBorder}`}>
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <span className="text-3xl">{style.icono}</span>
+                                                        <span className={`${style.colorText} w-9 h-9 flex items-center justify-center rounded-xl bg-white/70 shadow-sm`}>{style.icono}</span>
                                                         <div>
                                                             <h3 className={`font-bold text-base ${style.colorText}`}>{materia.nombre}</h3>
                                                             <div className="flex items-center gap-2">
@@ -889,7 +893,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
 
                                         {materiasAsignadas.length === 0 && (
                                             <div className="text-center py-6">
-                                                <div className="text-4xl mb-2">📚</div>
+                                                <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mx-auto mb-2">
+                                                    <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+                                                </div>
                                                 <p className="text-sm text-gray-500">No hay materias asignadas a este curso</p>
                                                 <p className="text-xs text-gray-400 mt-1">Haz clic en "Agregar materia" para comenzar</p>
                                             </div>
@@ -1124,7 +1130,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                 </div>
                                 {listaProfesores.length === 0 && (
                                     <div className="text-center py-8">
-                                        <div className="text-4xl mb-2">👨‍🏫</div>
+                                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-2">
+                                            <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                                        </div>
                                         <p className="text-sm text-gray-500">No hay profesores registrados</p>
                                     </div>
                                 )}
