@@ -107,6 +107,13 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('/certificados', [CertificadoController::class, 'index'])->name('certificados');
     Route::post('/certificados', [CertificadoController::class, 'store'])->name('certificados.store');
     Route::put('/certificados/{certificado}', [CertificadoController::class, 'update'])->name('certificados.update');
+    Route::delete('/certificados/{certificado}', [CertificadoController::class, 'destroy'])->name('certificados.destroy');
+    Route::get('/certificados/{certificado}/download', [CertificadoController::class, 'download'])->name('certificados.download');
+    Route::post('/certificados/{certificado}/mensaje', [CertificadoController::class, 'enviarMensaje'])->name('certificados.mensaje');
+    // Tipos de certificado
+    Route::post('/certificados/tipos', [CertificadoController::class, 'storeTipo'])->name('certificados.tipos.store');
+    Route::put('/certificados/tipos/{tipo}', [CertificadoController::class, 'updateTipo'])->name('certificados.tipos.update');
+    Route::delete('/certificados/tipos/{tipo}', [CertificadoController::class, 'destroyTipo'])->name('certificados.tipos.destroy');
 
     // Horarios
     Route::get('/horarios', [HorarioController::class, 'index'])->name('horarios');
@@ -114,8 +121,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::put('/horarios/{horarioBloque}', [HorarioController::class, 'update'])->name('horarios.update');
     Route::delete('/horarios/{horarioBloque}', [HorarioController::class, 'destroy'])->name('horarios.destroy');
 
-    // Reportes (read-only)
+    // Reportes
     Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes');
+    Route::get('/reportes/rendimiento', [ReporteController::class, 'rendimiento'])->name('reportes.rendimiento');
+    Route::get('/reportes/comentarios', [ReporteController::class, 'comentarios'])->name('reportes.comentarios');
+    Route::get('/reportes/asistencia', [ReporteController::class, 'asistencia'])->name('reportes.asistencia');
+    Route::get('/reportes/exportar-rendimiento', [ReporteController::class, 'exportarRendimiento'])->name('reportes.exportar-rendimiento');
 
     // Contabilidad (read-only)
     Route::get('/contabilidad', [ContabilidadController::class, 'index'])->name('contabilidad');
