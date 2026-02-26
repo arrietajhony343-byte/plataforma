@@ -1,8 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
-import jsPDF from 'jspdf';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface TipoCertificado {
@@ -40,7 +39,6 @@ interface Certificado {
     curso_id: number | null;
     curso: string;
     descripcion: string | null;
-    observacion: string | null;
     archivo: string | null;
     fecha_solicitud: string;
     fecha_entrega: string | null;
@@ -110,30 +108,6 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     });
     const [processing, setProcessing] = useState(false);
 
-    // ── Gestionar Panel State ──
-    const [gestionarObservacion, setGestionarObservacion] = useState('');
-    const [processingGestionar, setProcessingGestionar] = useState(false);
-    const [showMensajeForm, setShowMensajeForm] = useState(false);
-    const [mensajeContenido, setMensajeContenido] = useState('');
-    const [processingMensaje, setProcessingMensaje] = useState(false);
-
-    // Reset gestionar state when modal changes
-    useEffect(() => {
-        if (showModalGestionar) {
-            setGestionarObservacion(showModalGestionar.observacion ?? '');
-            setShowMensajeForm(false);
-            setMensajeContenido('');
-        }
-    }, [showModalGestionar?.id]);
-
-    // Orden de estados
-    const estadosOrden = [
-        { key: 'solicitado', label: 'Solicitado' },
-        { key: 'en_proceso', label: 'En Proceso' },
-        { key: 'listo', label: 'Listo' },
-        { key: 'entregado', label: 'Entregado' },
-    ] as const;
-
     // ── Computed ──
     const tiposActivos = useMemo(() => tiposCertificado.filter(t => t.activo), [tiposCertificado]);
 
@@ -154,24 +128,17 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     }, [estudiantes, nivelSeleccionado, cursoSeleccionado]);
 
     const certificadosFiltrados = useMemo(() => {
-        // For legacy records without tipo_certificado_id, compare by the selected tipo's codigo
-        const selectedTipoCodigo = tipoSeleccionado !== 'todos'
-            ? tiposCertificado.find(t => String(t.id) === tipoSeleccionado)?.codigo ?? null
-            : null;
-
         return certificados.filter(cert => {
             const matchNivel = nivelSeleccionado === 'todos' || cert.nivel === nivelSeleccionado;
             const matchCurso = cursoSeleccionado === 'todos' || cert.curso_id?.toString() === cursoSeleccionado;
-            const matchTipo = tipoSeleccionado === 'todos' ||
-                cert.tipo_certificado_id?.toString() === tipoSeleccionado ||
-                (cert.tipo_certificado_id === null && selectedTipoCodigo === cert.tipo_codigo);
+            const matchTipo = tipoSeleccionado === 'todos' || cert.tipo_certificado_id?.toString() === tipoSeleccionado;
             const matchEstado = estadoSeleccionado === 'todos' || cert.estado === estadoSeleccionado;
             const matchBusqueda = busqueda === '' ||
                 cert.estudiante.toLowerCase().includes(busqueda.toLowerCase()) ||
                 cert.tipo_nombre.toLowerCase().includes(busqueda.toLowerCase());
             return matchNivel && matchCurso && matchTipo && matchEstado && matchBusqueda;
         });
-    }, [certificados, tiposCertificado, nivelSeleccionado, cursoSeleccionado, tipoSeleccionado, estadoSeleccionado, busqueda]);
+    }, [certificados, nivelSeleccionado, cursoSeleccionado, tipoSeleccionado, estadoSeleccionado, busqueda]);
 
     const stats = useMemo(() => ({
         solicitado: certificadosFiltrados.filter(c => c.estado === 'solicitado').length,
@@ -263,153 +230,10 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         router.delete(`/admin/certificados/tipos/${tipo.id}`);
     };
 
-    const handleUpdateEstadoPanel = (nuevoEstado: string) => {
-        if (!showModalGestionar) return;
-        router.put(`/admin/certificados/${showModalGestionar.id}`, { estado: nuevoEstado }, {
-            onSuccess: () => {
-                setShowModalGestionar(prev => prev ? {
-                    ...prev,
-                    estado: nuevoEstado as Certificado['estado'],
-                    fecha_entrega: nuevoEstado === 'entregado' ? new Date().toISOString().split('T')[0] : prev.fecha_entrega,
-                } : null);
-            },
+    const handleUpdateEstado = (cert: Certificado, nuevoEstado: string) => {
+        router.put(`/admin/certificados/${cert.id}`, { estado: nuevoEstado }, {
+            onSuccess: () => setShowModalGestionar(null),
         });
-    };
-
-    const handleGuardarObservacion = () => {
-        if (!showModalGestionar) return;
-        setProcessingGestionar(true);
-        router.put(`/admin/certificados/${showModalGestionar.id}`, { observacion: gestionarObservacion }, {
-            onSuccess: () => {
-                setShowModalGestionar(prev => prev ? { ...prev, observacion: gestionarObservacion } : null);
-            },
-            onFinish: () => setProcessingGestionar(false),
-        });
-    };
-
-    const handleEnviarMensaje = () => {
-        if (!showModalGestionar || !mensajeContenido.trim()) return;
-        setProcessingMensaje(true);
-        router.post(`/admin/certificados/${showModalGestionar.id}/mensaje`, { contenido: mensajeContenido }, {
-            onSuccess: () => {
-                setShowMensajeForm(false);
-                setMensajeContenido('');
-            },
-            onFinish: () => setProcessingMensaje(false),
-        });
-    };
-
-    const generarPDF = (cert: Certificado) => {
-        const doc = new jsPDF('p', 'mm', 'letter');
-        const pageW = doc.internal.pageSize.getWidth();
-        const pageH = doc.internal.pageSize.getHeight();
-        const margin = 25;
-        const textW = pageW - margin * 2;
-
-        // Doble borde decorativo
-        doc.setDrawColor(41, 53, 119);
-        doc.setLineWidth(1.5);
-        doc.rect(8, 8, pageW - 16, pageH - 16);
-        doc.setLineWidth(0.4);
-        doc.rect(11, 11, pageW - 22, pageH - 22);
-
-        // Header con fondo
-        doc.setFillColor(41, 53, 119);
-        doc.rect(0, 0, pageW, 42, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.text('INSTITUCIÓN EDUCATIVA', pageW / 2, 18, { align: 'center' });
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Sistema de Gestión Académica  ·  www.institucion.edu.co', pageW / 2, 28, { align: 'center' });
-        doc.setFontSize(8);
-        doc.text(`Documento generado el ${new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}`, pageW / 2, 36, { align: 'center' });
-
-        // Título del certificado
-        doc.setTextColor(41, 53, 119);
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text(cert.tipo_nombre.toUpperCase(), pageW / 2, 60, { align: 'center' });
-        doc.setLineWidth(0.8);
-        doc.setDrawColor(41, 53, 119);
-        doc.line(margin + 10, 64, pageW - margin - 10, 64);
-
-        // Texto introductorio
-        doc.setFontSize(11);
-        doc.setTextColor(100, 100, 100);
-        doc.setFont('helvetica', 'normal');
-        doc.text('LA INSTITUCIÓN EDUCATIVA HACE CONSTAR QUE:', pageW / 2, 76, { align: 'center' });
-
-        // Nombre del estudiante destacado
-        doc.setFontSize(22);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(41, 53, 119);
-        doc.text(cert.estudiante.toUpperCase(), pageW / 2, 90, { align: 'center' });
-
-        // Cuerpo del certificado según tipo
-        const bodyTexts: Record<string, string> = {
-            constancia_estudios: `es estudiante activo/a de esta institución, cursando ${cert.curso || 'el grado correspondiente'}, durante el año lectivo en curso, cumpliendo satisfactoriamente con sus responsabilidades académicas.`,
-            constancia: `es estudiante activo/a de esta institución, cursando ${cert.curso || 'el grado correspondiente'}, cumpliendo con los requisitos académicos establecidos.`,
-            certificado_notas: `ha cursado y aprobado satisfactoriamente los estudios correspondientes a ${cert.curso || 'su grado'}, cumpliendo con todos los requisitos académicos y evaluativos exigidos por la institución.`,
-            constancia_matricula: `se encuentra debidamente matriculado/a para el período académico en curso en ${cert.curso || 'esta institución educativa'}, habiendo cumplido con todos los requisitos de matrícula.`,
-            certificado_conducta: `ha demostrado un comportamiento ejemplar y disciplina durante su permanencia en esta institución, siendo un/a estudiante de ${cert.curso || 'nuestros grados'} con excelente conducta.`,
-            paz_y_salvo: `se encuentra a paz y salvo con todas las obligaciones académicas, financieras y de material con esta institución educativa, sin ningún pendiente a la fecha de expedición.`,
-        };
-        const body = bodyTexts[cert.tipo_codigo] ??
-            `ha cumplido con los requisitos correspondientes al ${cert.tipo_nombre}, siendo estudiante activo/a de ${cert.curso || 'esta institución educativa'}.`;
-
-        doc.setFontSize(12);
-        doc.setTextColor(60, 60, 60);
-        doc.setFont('helvetica', 'normal');
-        const splitBody = doc.splitTextToSize(body, textW);
-        doc.text(splitBody, pageW / 2, 104, { align: 'center' });
-
-        let yPos = 104 + splitBody.length * 7 + 8;
-
-        // Datos adicionales
-        if (cert.curso) {
-            doc.setFontSize(10);
-            doc.setTextColor(80, 80, 80);
-            const details = `Curso: ${cert.curso}${cert.nivel ? '   ·   Nivel: ' + cert.nivel.charAt(0).toUpperCase() + cert.nivel.slice(1) : ''}`;
-            doc.text(details, pageW / 2, yPos, { align: 'center' });
-            yPos += 8;
-        }
-
-        // Observaciones del admin
-        if (cert.observacion) {
-            yPos += 4;
-            doc.setFontSize(9);
-            doc.setTextColor(120, 120, 120);
-            doc.setFont('helvetica', 'italic');
-            const splitObs = doc.splitTextToSize(`Nota: ${cert.observacion}`, textW);
-            doc.text(splitObs, margin, yPos);
-            yPos += splitObs.length * 6 + 4;
-        }
-
-        // Fecha de expedición
-        const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-        const now = new Date();
-        const dateStr = `Se expide la presente constancia a los ${now.getDate()} días del mes de ${months[now.getMonth()]} del año ${now.getFullYear()}.`;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(80, 80, 80);
-        doc.text(dateStr, pageW / 2, pageH - 55, { align: 'center' });
-
-        // Firma
-        doc.setLineWidth(0.5);
-        doc.setDrawColor(100, 100, 100);
-        doc.line(pageW / 2 - 45, pageH - 30, pageW / 2 + 45, pageH - 30);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(41, 53, 119);
-        doc.text('Firma Autorizada', pageW / 2, pageH - 24, { align: 'center' });
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text('Dirección Académica — Institución Educativa', pageW / 2, pageH - 18, { align: 'center' });
-
-        doc.save(`${cert.tipo_codigo}_${cert.estudiante.replace(/\s+/g, '_')}.pdf`);
     };
 
     const handleDeleteCertificado = (cert: Certificado) => {
@@ -694,19 +518,14 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                                             Descargar
                                                         </a>
                                                     )}
-                                                    <button
-                                                        onClick={() => generarPDF(cert)}
-                                                        className="text-red-500 hover:text-red-700 text-sm font-medium"
-                                                        title="Generar PDF"
-                                                    >
-                                                        PDF
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setShowModalGestionar(cert)}
-                                                        className="text-[#293577] hover:text-[#181b49] text-sm font-medium"
-                                                    >
-                                                        Gestionar
-                                                    </button>
+                                                    {cert.estado !== 'entregado' && (
+                                                        <button
+                                                            onClick={() => setShowModalGestionar(cert)}
+                                                            className="text-[#293577] hover:text-[#181b49] text-sm font-medium"
+                                                        >
+                                                            Gestionar
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDeleteCertificado(cert)}
                                                         className="text-red-500 hover:text-red-700 text-sm font-medium"
@@ -757,18 +576,14 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                         </div>
                                     </div>
                                     <div className="flex gap-2 flex-shrink-0">
-                                        <button
-                                            onClick={() => generarPDF(cert)}
-                                            className="text-red-500 text-xs font-medium"
-                                        >
-                                            PDF
-                                        </button>
-                                        <button
-                                            onClick={() => setShowModalGestionar(cert)}
-                                            className="text-[#293577] text-xs font-medium"
-                                        >
-                                            Gestionar
-                                        </button>
+                                        {cert.estado !== 'entregado' && (
+                                            <button
+                                                onClick={() => setShowModalGestionar(cert)}
+                                                className="text-[#293577] text-xs font-medium"
+                                            >
+                                                Gestionar
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -985,246 +800,75 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                 </div>
             )}
 
-            {/* ═══════════════════════════ PANEL GESTIONAR CERTIFICADO ═══════════════════════════ */}
+            {/* ═══════════════════════════ MODAL GESTIONAR CERTIFICADO ═══════════════════════════ */}
             {showModalGestionar && (
-                <div className="fixed inset-0 z-50 flex">
-                    {/* Backdrop */}
-                    <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                        onClick={() => { setShowModalGestionar(null); setShowMensajeForm(false); }}
-                    />
-                    {/* Slide-over panel */}
-                    <div className="relative ml-auto w-full max-w-lg h-full bg-white shadow-2xl flex flex-col">
-                        {/* Header */}
-                        <div className="bg-gradient-to-br from-[#293577] to-[#181b49] p-5 text-white flex-shrink-0">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-[11px] font-bold text-blue-200 uppercase tracking-widest">Gestión de Certificado</span>
-                                <button
-                                    onClick={() => { setShowModalGestionar(null); setShowMensajeForm(false); }}
-                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <h2 className="text-xl font-bold leading-tight">{showModalGestionar.tipo_nombre}</h2>
-                            <div className="flex items-center gap-2 mt-2">
-                                <svg className="w-4 h-4 text-blue-300 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                                </svg>
-                                <span className="text-white text-sm font-semibold">{showModalGestionar.estudiante}</span>
-                                {showModalGestionar.nivel && (
-                                    <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/15 text-white/90">{getNivelLabel(showModalGestionar.nivel)}</span>
-                                )}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                                {showModalGestionar.curso && <span className="text-xs text-blue-300">{showModalGestionar.curso}</span>}
-                                <span className="text-blue-400 text-xs">·</span>
-                                <span className="text-xs text-blue-300">Solicitado: {showModalGestionar.fecha_solicitud}</span>
-                                {showModalGestionar.fecha_entrega && (
-                                    <>
-                                        <span className="text-blue-400 text-xs">·</span>
-                                        <span className="text-xs text-green-300">Entregado: {showModalGestionar.fecha_entrega}</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl p-5 sm:p-6 w-full max-w-md">
+                        <h2 className="text-lg font-bold text-gray-800 mb-4" style={{ fontFamily: "'Inter', sans-serif" }}>
+                            Gestionar Certificado
+                        </h2>
 
-                        {/* Scrollable content */}
-                        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
-                            {/* Info grid */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-0.5">Precio del Certificado</p>
-                                    <p className="text-base font-bold text-green-600">
-                                        {formatPrecio(tiposCertificado.find(t => t.id === showModalGestionar.tipo_certificado_id)?.precio ?? 0)}
-                                    </p>
-                                </div>
-                                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-0.5">Estado actual</p>
-                                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getEstadoBadge(showModalGestionar.estado)}`}>
-                                        {getEstadoLabel(showModalGestionar.estado)}
-                                    </span>
-                                </div>
+                        <div className="space-y-3 mb-6">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Tipo:</span>
+                                <span className="font-medium text-gray-800">{showModalGestionar.tipo_nombre}</span>
                             </div>
-
-                            {/* Status Timeline */}
-                            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Progreso del Proceso</p>
-                                <div className="relative flex items-start justify-between">
-                                    {/* Background progress line */}
-                                    <div className="absolute top-4 left-[16px] right-[16px] h-0.5 bg-gray-200 z-0">
-                                        <div
-                                            className="h-full bg-[#293577] transition-all duration-500"
-                                            style={{ width: `${(estadosOrden.findIndex(e => e.key === showModalGestionar.estado) / (estadosOrden.length - 1)) * 100}%` }}
-                                        />
-                                    </div>
-                                    {estadosOrden.map((est, idx) => {
-                                        const estIdx = estadosOrden.findIndex(e => e.key === showModalGestionar.estado);
-                                        const isPast = idx < estIdx;
-                                        const isCurrent = idx === estIdx;
-                                        return (
-                                            <button
-                                                key={est.key}
-                                                onClick={() => !isCurrent && handleUpdateEstadoPanel(est.key)}
-                                                disabled={isCurrent}
-                                                className="relative z-10 flex flex-col items-center gap-1 flex-1 group"
-                                                title={isCurrent ? est.label : `Cambiar a: ${est.label}`}
-                                            >
-                                                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
-                                                    isCurrent
-                                                        ? 'bg-[#293577] border-[#293577] text-white shadow-lg shadow-[#293577]/40'
-                                                        : isPast
-                                                        ? 'bg-green-500 border-green-500 text-white'
-                                                        : 'bg-white border-gray-300 text-gray-400 group-hover:border-[#293577] group-hover:text-[#293577] cursor-pointer'
-                                                }`}>
-                                                    {isPast ? (
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                                                        </svg>
-                                                    ) : (
-                                                        <span className="text-xs font-bold">{idx + 1}</span>
-                                                    )}
-                                                </div>
-                                                <span className={`text-[9px] font-bold text-center leading-tight ${
-                                                    isCurrent ? 'text-[#293577]' : isPast ? 'text-green-600' : 'text-gray-400'
-                                                }`}>{est.label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {showModalGestionar.estado !== 'entregado' && (() => {
-                                    const nextIdx = estadosOrden.findIndex(e => e.key === showModalGestionar.estado) + 1;
-                                    if (nextIdx >= estadosOrden.length) return null;
-                                    return (
-                                        <button
-                                            onClick={() => handleUpdateEstadoPanel(estadosOrden[nextIdx].key)}
-                                            className="w-full mt-4 py-2.5 bg-[#293577] hover:bg-[#181b49] text-white rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2"
-                                        >
-                                            Avanzar a "{estadosOrden[nextIdx].label}"
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                                            </svg>
-                                        </button>
-                                    );
-                                })()}
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Estudiante:</span>
+                                <span className="font-medium text-gray-800">{showModalGestionar.estudiante}</span>
                             </div>
-
-                            {/* Descripción original del estudiante */}
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Curso:</span>
+                                <span className="text-gray-800">{showModalGestionar.curso || '-'}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Fecha solicitud:</span>
+                                <span className="text-gray-800">{showModalGestionar.fecha_solicitud}</span>
+                            </div>
+                            <div className="flex justify-between text-sm items-center">
+                                <span className="text-gray-500">Estado actual:</span>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getEstadoBadge(showModalGestionar.estado)}`}>
+                                    {getEstadoLabel(showModalGestionar.estado)}
+                                </span>
+                            </div>
                             {showModalGestionar.descripcion && (
-                                <div>
-                                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Solicitud del Estudiante</p>
-                                    <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                                        <p className="text-sm text-gray-700 italic">"{showModalGestionar.descripcion}"</p>
-                                    </div>
+                                <div className="pt-2 border-t">
+                                    <span className="text-xs text-gray-500 block mb-1">Observaciones:</span>
+                                    <p className="text-sm text-gray-700">{showModalGestionar.descripcion}</p>
                                 </div>
                             )}
+                        </div>
 
-                            {/* Observaciones / Notas internas del admin */}
-                            <div>
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notas / Observaciones Internas</p>
-                                <textarea
-                                    value={gestionarObservacion}
-                                    onChange={(e) => setGestionarObservacion(e.target.value)}
-                                    rows={3}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
-                                    placeholder="Agregar notas internas (no visibles para el estudiante)..."
-                                />
-                                {gestionarObservacion !== (showModalGestionar.observacion ?? '') && (
+                        <div className="space-y-2 mb-4">
+                            <p className="text-sm font-medium text-gray-700">Cambiar estado:</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {Object.entries(estadosConfig).map(([key, cfg]) => (
                                     <button
-                                        onClick={handleGuardarObservacion}
-                                        disabled={processingGestionar}
-                                        className="mt-1.5 px-4 py-1.5 bg-[#293577] text-white rounded-lg text-xs font-semibold hover:bg-[#181b49] transition-all disabled:opacity-50"
+                                        key={key}
+                                        onClick={() => handleUpdateEstado(showModalGestionar, key)}
+                                        disabled={showModalGestionar.estado === key}
+                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                            showModalGestionar.estado === key
+                                                ? 'bg-[#293577] text-white cursor-default'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
                                     >
-                                        {processingGestionar ? 'Guardando...' : '✓ Guardar observación'}
+                                        {cfg.label}
                                     </button>
-                                )}
-                            </div>
-
-                            {/* Generar PDF */}
-                            <div>
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Documento Oficial</p>
-                                <button
-                                    onClick={() => generarPDF(showModalGestionar)}
-                                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-red-200"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                    </svg>
-                                    Generar &amp; Descargar Certificado PDF
-                                </button>
-                            </div>
-
-                            {/* Enviar mensaje al estudiante */}
-                            <div>
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notificar al Estudiante</p>
-                                {showMensajeForm ? (
-                                    <div className="space-y-2">
-                                        <textarea
-                                            value={mensajeContenido}
-                                            onChange={(e) => setMensajeContenido(e.target.value)}
-                                            rows={6}
-                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
-                                            placeholder="Escribir mensaje al estudiante..."
-                                        />
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => { setShowMensajeForm(false); setMensajeContenido(''); }}
-                                                className="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all"
-                                            >
-                                                Cancelar
-                                            </button>
-                                            <button
-                                                onClick={handleEnviarMensaje}
-                                                disabled={!mensajeContenido.trim() || processingMensaje}
-                                                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 transition-all flex items-center justify-center gap-1"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                                                </svg>
-                                                {processingMensaje ? 'Enviando...' : 'Enviar'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={() => {
-                                            const estadoLabel = getEstadoLabel(showModalGestionar.estado);
-                                            setMensajeContenido(
-                                                `Estimado/a ${showModalGestionar.estudiante},\n\nLe informamos que su solicitud de "${showModalGestionar.tipo_nombre}" se encuentra actualmente en estado: "${estadoLabel}".\n\n` +
-                                                (showModalGestionar.estado === 'listo'
-                                                    ? 'Su certificado está LISTO para ser recogido en la secretaría de la institución en horario de atención.'
-                                                    : showModalGestionar.estado === 'entregado'
-                                                    ? 'Su certificado ha sido entregado exitosamente. Gracias por su solicitud.'
-                                                    : 'En cuanto esté listo, le notificaremos oportunamente.') +
-                                                `\n\nAtentamente,\nAdministración Académica`
-                                            );
-                                            setShowMensajeForm(true);
-                                        }}
-                                        className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-sm font-semibold transition-all"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
-                                        </svg>
-                                        Enviar mensaje interno al estudiante
-                                    </button>
-                                )}
+                                ))}
                             </div>
                         </div>
 
-                        {/* Footer del panel */}
-                        <div className="border-t border-gray-100 p-4 flex gap-3 flex-shrink-0 bg-gray-50/70">
+                        <div className="flex gap-3 pt-2 border-t">
                             <button
                                 onClick={() => { handleDeleteCertificado(showModalGestionar); setShowModalGestionar(null); }}
-                                className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-all"
+                                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium"
                             >
-                                Eliminar solicitud
+                                Eliminar
                             </button>
                             <button
-                                onClick={() => { setShowModalGestionar(null); setShowMensajeForm(false); }}
-                                className="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 transition-all"
+                                onClick={() => setShowModalGestionar(null)}
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
                             >
                                 Cerrar
                             </button>

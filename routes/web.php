@@ -109,7 +109,6 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::put('/certificados/{certificado}', [CertificadoController::class, 'update'])->name('certificados.update');
     Route::delete('/certificados/{certificado}', [CertificadoController::class, 'destroy'])->name('certificados.destroy');
     Route::get('/certificados/{certificado}/download', [CertificadoController::class, 'download'])->name('certificados.download');
-    Route::post('/certificados/{certificado}/mensaje', [CertificadoController::class, 'enviarMensaje'])->name('certificados.mensaje');
     // Tipos de certificado
     Route::post('/certificados/tipos', [CertificadoController::class, 'storeTipo'])->name('certificados.tipos.store');
     Route::put('/certificados/tipos/{tipo}', [CertificadoController::class, 'updateTipo'])->name('certificados.tipos.update');

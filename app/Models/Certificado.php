@@ -10,9 +10,8 @@ class Certificado extends Model
     protected $fillable = [
         'estudiante_id',
         'tipo_certificado_id',
-        'tipo', // legacy
+        'tipo', // legacy - will migrate to tipo_certificado_id
         'descripcion',
-        'observacion',
         'archivo',
         'estado',
         'fecha_solicitud',

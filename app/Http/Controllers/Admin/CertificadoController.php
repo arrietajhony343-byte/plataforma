@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Certificado, TipoCertificado, User, Curso, Mensaje};
+use App\Models\{Certificado, TipoCertificado, User, Curso};
 use Illuminate\Http\{Request, JsonResponse};
-use Illuminate\Support\Facades\{Storage, Auth};
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -38,7 +38,6 @@ class CertificadoController extends Controller
                     'curso_id'            => $mat?->curso_id,
                     'curso'               => $mat?->curso?->nombre ?? '',
                     'descripcion'         => $c->descripcion,
-                    'observacion'         => $c->observacion,
                     'archivo'             => $c->archivo,
                     'fecha_solicitud'     => $c->fecha_solicitud?->format('Y-m-d'),
                     'fecha_entrega'       => $c->fecha_entrega?->format('Y-m-d'),
@@ -119,55 +118,23 @@ class CertificadoController extends Controller
     }
 
     /**
-     * Update certificate (estado + observacion)
+     * Update certificate status
      */
     public function update(Request $request, Certificado $certificado)
     {
         $data = $request->validate([
-            'estado'      => 'sometimes|required|in:solicitado,en_proceso,listo,entregado',
-            'observacion' => 'sometimes|nullable|string|max:1000',
+            'estado' => 'required|in:solicitado,en_proceso,listo,entregado',
         ]);
 
-        $updates = [];
-
-        if (isset($data['estado'])) {
-            $updates['estado'] = $data['estado'];
-            if ($data['estado'] === 'entregado' && !$certificado->fecha_entrega) {
-                $updates['fecha_entrega'] = now();
-            }
+        $updates = ['estado' => $data['estado']];
+        
+        if ($data['estado'] === 'entregado') {
+            $updates['fecha_entrega'] = now();
         }
 
-        if (array_key_exists('observacion', $data)) {
-            $updates['observacion'] = $data['observacion'];
-        }
+        $certificado->update($updates);
 
-        if (!empty($updates)) {
-            $certificado->update($updates);
-        }
-
-        return redirect()->back()->with('success', 'Certificado actualizado correctamente.');
-    }
-
-    /**
-     * Send internal message to student about certificate
-     */
-    public function enviarMensaje(Request $request, Certificado $certificado)
-    {
-        $data = $request->validate([
-            'contenido' => 'required|string|max:2000',
-        ]);
-
-        $tipNombre = $certificado->tipoCertificado?->nombre ?? $certificado->tipo ?? 'Certificado';
-
-        Mensaje::create([
-            'remitente_id'    => Auth::id(),
-            'destinatario_id' => $certificado->estudiante_id,
-            'asunto'          => 'Certificado: ' . $tipNombre,
-            'contenido'       => $data['contenido'],
-            'leido'           => false,
-        ]);
-
-        return redirect()->back()->with('success', 'Mensaje enviado al estudiante correctamente.');
+        return redirect()->back()->with('success', 'Estado del certificado actualizado.');
     }
 
     /**
