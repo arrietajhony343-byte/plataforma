@@ -5,6 +5,8 @@ import { adminMenuItems } from '@/Config/adminMenu';
 import * as XLSX from 'xlsx';
 
 /* ─── Interfaces ─── */
+interface Sede { id: number; nombre: string; ciudad: string; }
+
 interface Estudiante {
     id: number;
     nombre: string;
@@ -26,6 +28,8 @@ interface Estudiante {
     promedio: number;
     pagos: 'al_dia' | 'pendiente' | 'moroso';
     observaciones: number;
+    sede_id?: number;
+    sede_nombre?: string;
 }
 
 interface Curso { id: number; nombre: string; nivel: string; grado: number | null; grupo: string; }
@@ -38,6 +42,7 @@ interface Props {
     estudiantes: Estudiante[];
     cursos: Curso[];
     padres: Padre[];
+    sedes: Sede[];
 }
 
 const NIVELES: Record<string, { label: string; color: string; activeBg: string; chipBg: string; chipText: string }> = {
@@ -50,7 +55,7 @@ const NIVELES: Record<string, { label: string; color: string; activeBg: string; 
 const NIVEL_KEYS = Object.keys(NIVELES);
 const onlyNumbers = (v: string) => v.replace(/[^0-9]/g, '');
 
-export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
+export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Props) {
     /* ─── Carga diferida ─── */
     const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -60,6 +65,7 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
     const [cursoSel, setCursoSel] = useState('todos');
     const [estadoSel, setEstadoSel] = useState('todos');
     const [pagosSel, setPagosSel] = useState('todos');
+    const [sedeSel, setSedeSel] = useState('todas');
 
     /* ─── Detail modal ─── */
     const [selected, setSelected] = useState<Estudiante | null>(null);
@@ -73,7 +79,7 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
 
     /* ─── Edit modal ─── */
     const [showEditModal, setShowEditModal] = useState(false);
-    const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', documento: '', tipo_documento: 'TI', direccion: '', fecha_nacimiento: '', genero: '', nivel_educativo: '', curso_id: '', acudiente_id: '' });
+    const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', documento: '', tipo_documento: 'TI', direccion: '', fecha_nacimiento: '', genero: '', nivel_educativo: '', curso_id: '', acudiente_id: '', sede_id: '' });
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [editProcessing, setEditProcessing] = useState(false);
 
@@ -109,8 +115,9 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
         const matchCurso = cursoSel === 'todos' || e.curso_nombre === cursoSel;
         const matchEstado = estadoSel === 'todos' || e.estado === estadoSel;
         const matchPagos = pagosSel === 'todos' || e.pagos === pagosSel;
-        return matchSearch && matchNivel && matchCurso && matchEstado && matchPagos;
-    }), [estudiantes, busqueda, nivelSel, cursoSel, estadoSel, pagosSel]);
+        const matchSede = sedeSel === 'todas' || String(e.sede_id ?? '') === sedeSel;
+        return matchSearch && matchNivel && matchCurso && matchEstado && matchPagos && matchSede;
+    }), [estudiantes, busqueda, nivelSel, cursoSel, estadoSel, pagosSel, sedeSel]);
 
     /* ─── Helpers ─── */
     const nivelBadge = (n: string) => `${NIVELES[n]?.chipBg ?? 'bg-gray-100'} ${NIVELES[n]?.chipText ?? 'text-gray-700'}`;
@@ -120,14 +127,14 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
     const pagoLabel = (p: string) => p === 'al_dia' ? 'Al día' : p === 'pendiente' ? 'Pendiente' : 'Moroso';
     const promedioColor = (v: number) => v >= 4 ? 'text-green-600' : v >= 3 ? 'text-yellow-600' : 'text-red-600';
 
-    const hayFiltros = nivelSel !== 'todos' || cursoSel !== 'todos' || estadoSel !== 'todos' || pagosSel !== 'todos' || busqueda !== '';
+    const hayFiltros = nivelSel !== 'todos' || cursoSel !== 'todos' || estadoSel !== 'todos' || pagosSel !== 'todos' || busqueda !== '' || sedeSel !== 'todas';
 
     // Si el usuario aplica algún filtro, cargar automáticamente
     useEffect(() => {
         if (hayFiltros) setHasLoaded(true);
     }, [hayFiltros]);
 
-    const limpiarFiltros = () => { setNivelSel('todos'); setCursoSel('todos'); setEstadoSel('todos'); setPagosSel('todos'); setBusqueda(''); };
+    const limpiarFiltros = () => { setNivelSel('todos'); setCursoSel('todos'); setEstadoSel('todos'); setPagosSel('todos'); setBusqueda(''); setSedeSel('todas'); };
 
     /* ─── Select student ─── */
     const selectStudent = (est: Estudiante) => {
@@ -162,6 +169,7 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
             direccion: est.direccion || '', fecha_nacimiento: est.fecha_nacimiento || '',
             genero: est.genero || '', nivel_educativo: est.nivel || '',
             curso_id: est.curso_id?.toString() || '', acudiente_id: est.acudiente_id?.toString() || '',
+            sede_id: est.sede_id?.toString() || '',
         });
         setEditErrors({});
         setShowEditModal(true);
@@ -330,7 +338,14 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
                     </div>
 
                     {/* Filtros secundarios */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
+                            <select value={sedeSel} onChange={e => setSedeSel(e.target.value)} className="w-full pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] appearance-none bg-white">
+                                <option value="todas">Todas las sedes</option>
+                                {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                            </select>
+                        </div>
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Curso</label>
                             <select value={cursoSel} onChange={e => setCursoSel(e.target.value)} className="w-full pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] appearance-none bg-white">
@@ -362,6 +377,7 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
                         <div className="flex items-center gap-2 flex-wrap pt-1">
                             <span className="text-xs text-gray-500">Filtros:</span>
                             {nivelSel !== 'todos' && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${nivelBadge(nivelSel)}`}>{nivelLabel(nivelSel)} <button onClick={() => { setNivelSel('todos'); setCursoSel('todos'); }} className="hover:opacity-70">×</button></span>}
+                            {sedeSel !== 'todas' && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">{sedes.find(s => String(s.id) === sedeSel)?.nombre ?? sedeSel} <button onClick={() => setSedeSel('todas')} className="hover:opacity-70">×</button></span>}
                             {cursoSel !== 'todos' && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">{cursoSel} <button onClick={() => setCursoSel('todos')} className="hover:opacity-70">×</button></span>}
                             {estadoSel !== 'todos' && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${estadoBadge(estadoSel)}`}>{estadoSel} <button onClick={() => setEstadoSel('todos')} className="hover:opacity-70">×</button></span>}
                             {pagosSel !== 'todos' && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${pagoBadge(pagosSel)}`}>{pagoLabel(pagosSel)} <button onClick={() => setPagosSel('todos')} className="hover:opacity-70">×</button></span>}
@@ -413,6 +429,7 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
                                                 <span className="text-gray-300">•</span>
                                                 {est.nivel && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${nivelBadge(est.nivel)}`}>{nivelLabel(est.nivel)}</span>}
                                                 <span className="text-sm text-gray-500">{est.curso_nombre}</span>
+                                                {est.sede_nombre && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">{est.sede_nombre}</span>}
                                             </div>
                                         </div>
                                     </div>
@@ -796,6 +813,13 @@ export default function Estudiantes({ estudiantes, cursos, padres }: Props) {
                                     <select value={editForm.acudiente_id} onChange={e => setEditForm(f => ({ ...f, acudiente_id: e.target.value }))} className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg text-sm bg-white appearance-none">
                                         <option value="">— Sin asignar —</option>
                                         {padres.map(p => <option key={p.id} value={p.id}>{p.name}{p.documento ? ` — ${p.documento}` : ''}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sede</label>
+                                    <select value={editForm.sede_id} onChange={e => setEditForm(f => ({ ...f, sede_id: e.target.value }))} className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg text-sm bg-white appearance-none">
+                                        <option value="">— Sin asignar —</option>
+                                        {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}{s.ciudad ? ` — ${s.ciudad}` : ''}</option>)}
                                     </select>
                                 </div>
                             </div>

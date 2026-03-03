@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Nota, Observacion, User, Curso, CursoMateria, Matricula, Periodo};
+use App\Models\{Asistencia, Nota, Observacion, Sede, User, Curso, CursoMateria, Matricula, Periodo};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,16 +37,23 @@ class ReporteController extends Controller
             ->orderBy('grupo')
             ->get()
             ->map(fn($c) => [
-                'id'     => $c->id,
-                'nombre' => $c->nombre,
-                'nivel'  => $c->nivel,
-                'grado'  => $c->grado,
+                'id'      => $c->id,
+                'nombre'  => $c->nombre,
+                'nivel'   => $c->nivel,
+                'grado'   => $c->grado,
+                'sede_id' => $c->sede_id,
             ]);
+
+        $sedes = Sede::where('activa', true)
+            ->orderBy('nombre')
+            ->get()
+            ->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
         return Inertia::render('Admin/Reportes', [
             'periodos'         => $periodos,
             'periodoActualId'  => $periodoActualId,
             'cursos'           => $cursos,
+            'sedes'            => $sedes,
             'anioVigente'      => $anio,
         ]);
     }
@@ -56,9 +63,10 @@ class ReporteController extends Controller
      */
     public function rendimiento(Request $request)
     {
-        $periodoId = $request->input('periodo_id');
+        $periodoId   = $request->input('periodo_id');
         $nivelFiltro = $request->input('nivel', 'todos');
-        $cursoId = $request->input('curso_id');
+        $cursoId     = $request->input('curso_id');
+        $sedeId      = $request->input('sede_id');
 
         $nivelOrder = "CASE nivel WHEN 'preescolar' THEN 1 WHEN 'transicion' THEN 2 WHEN 'primaria' THEN 3 WHEN 'secundaria' THEN 4 WHEN 'media' THEN 5 WHEN 'bachillerato' THEN 6 ELSE 7 END";
         $query = Curso::activo()
@@ -67,10 +75,18 @@ class ReporteController extends Controller
             ->orderBy('grupo');
 
         if ($nivelFiltro && $nivelFiltro !== 'todos') {
-            $query->where('nivel', $nivelFiltro);
+            // transicion incluye también preescolar (nivel legado)
+            if ($nivelFiltro === 'transicion') {
+                $query->whereIn('nivel', ['transicion', 'preescolar']);
+            } else {
+                $query->where('nivel', $nivelFiltro);
+            }
         }
         if ($cursoId) {
             $query->where('id', $cursoId);
+        }
+        if ($sedeId) {
+            $query->where('sede_id', $sedeId);
         }
 
         $cursos = $query->get();
@@ -193,20 +209,30 @@ class ReporteController extends Controller
      */
     public function comentarios(Request $request)
     {
-        $periodoId  = $request->input('periodo_id');
-        $cursoId    = $request->input('curso_id');
+        $periodoId   = $request->input('periodo_id');
+        $cursoId     = $request->input('curso_id');
         $nivelFiltro = $request->input('nivel', 'todos');
+        $sedeId      = $request->input('sede_id');
         $anio = now()->year;
 
-        // IDs de estudiantes según filtro de curso/nivel
+        // IDs de estudiantes según filtro de curso/nivel/sede
         $estudianteIds = null;
         if ($cursoId) {
             $estudianteIds = Matricula::where('curso_id', $cursoId)
                 ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
                 ->pluck('estudiante_id');
         } elseif ($nivelFiltro && $nivelFiltro !== 'todos') {
-            $cursosNivel = Curso::activo()->where('nivel', $nivelFiltro)->pluck('id');
+            $niveles = $nivelFiltro === 'transicion' ? ['transicion', 'preescolar'] : [$nivelFiltro];
+            $cursosNivel = Curso::activo()
+                ->whereIn('nivel', $niveles)
+                ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
+                ->pluck('id');
             $estudianteIds = Matricula::whereIn('curso_id', $cursosNivel)
+                ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
+                ->pluck('estudiante_id')->unique();
+        } elseif ($sedeId) {
+            $cursosSede = Curso::activo()->where('sede_id', $sedeId)->pluck('id');
+            $estudianteIds = Matricula::whereIn('curso_id', $cursosSede)
                 ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
                 ->pluck('estudiante_id')->unique();
         }
@@ -313,47 +339,90 @@ class ReporteController extends Controller
         ]);
     }
 
-    /**
-     * Obtener estadísticas de asistencia (placeholder - requiere modelo Asistencia)
-     */
     public function asistencia(Request $request)
     {
         $periodoId   = $request->input('periodo_id');
         $cursoId     = $request->input('curso_id');
         $nivelFiltro = $request->input('nivel', 'todos');
+        $sedeId      = $request->input('sede_id');
 
         $nivelOrder = "CASE nivel WHEN 'preescolar' THEN 1 WHEN 'transicion' THEN 2 WHEN 'primaria' THEN 3 WHEN 'secundaria' THEN 4 WHEN 'media' THEN 5 WHEN 'bachillerato' THEN 6 ELSE 7 END";
 
+        $periodo = $periodoId ? Periodo::find($periodoId) : null;
+
         $cursos = Curso::activo()
             ->when($cursoId, fn($q) => $q->where('id', $cursoId))
-            ->when($nivelFiltro && $nivelFiltro !== 'todos', fn($q) => $q->where('nivel', $nivelFiltro))
+            ->when($nivelFiltro && $nivelFiltro !== 'todos', function ($q) use ($nivelFiltro) {
+                $niveles = $nivelFiltro === 'transicion' ? ['transicion', 'preescolar'] : [$nivelFiltro];
+                $q->whereIn('nivel', $niveles);
+            })
+            ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
             ->orderByRaw($nivelOrder)
             ->orderBy('grado')
             ->get();
 
         $asistenciaPorCurso = [];
+        $totalAusentes      = 0;
+        $totalTardanzas     = 0;
+        $sumaPorcentajes    = 0;
+        $cursosConDatos     = 0;
 
         foreach ($cursos as $curso) {
             $totalEstudiantes = Matricula::where('curso_id', $curso->id)
                 ->when($periodoId, fn($q) => $q->where('periodo_id', $periodoId))
                 ->count();
 
+            $cmIds = CursoMateria::where('curso_id', $curso->id)->pluck('id');
+
+            $stats = Asistencia::whereIn('curso_materia_id', $cmIds)
+                ->when(
+                    $periodo && $periodo->fecha_inicio && $periodo->fecha_fin,
+                    fn($q) => $q->whereBetween('fecha', [$periodo->fecha_inicio, $periodo->fecha_fin])
+                )
+                ->selectRaw("estado, COUNT(*) as total")
+                ->groupBy('estado')
+                ->get()
+                ->keyBy('estado');
+
+            $presentes  = (int) ($stats['presente']->total ?? 0);
+            $ausentes   = (int) ($stats['ausente']->total  ?? 0);
+            $tardes     = (int) ($stats['tarde']->total    ?? 0);
+            $excusas    = (int) ($stats['excusa']->total   ?? 0);
+            $tardanzas  = $tardes + $excusas;
+
+            $totalRegistros = $presentes + $ausentes + $tardanzas;
+            $porcentaje = $totalRegistros > 0
+                ? round(($presentes / $totalRegistros) * 100)
+                : null;
+
             $asistenciaPorCurso[] = [
                 'curso'            => $curso->nombre,
                 'nivel'            => $curso->nivel,
                 'totalEstudiantes' => $totalEstudiantes,
-                'promedioAsist'    => 0,
-                'inasistencias'    => 0,
-                'tardanzas'        => 0,
+                'promedioAsist'    => $porcentaje,
+                'inasistencias'    => $ausentes,
+                'tardanzas'        => $tardanzas,
+                'totalRegistros'   => $totalRegistros,
             ];
+
+            if ($porcentaje !== null) {
+                $sumaPorcentajes += $porcentaje;
+                $cursosConDatos++;
+            }
+            $totalAusentes  += $ausentes;
+            $totalTardanzas += $tardanzas;
         }
+
+        $promedioGeneral = $cursosConDatos > 0
+            ? round($sumaPorcentajes / $cursosConDatos)
+            : null;
 
         return response()->json([
             'porCurso'           => $asistenciaPorCurso,
-            'promedioGeneral'    => 0,
-            'totalInasistencias' => 0,
-            'totalTardanzas'     => 0,
-            'mensaje'            => 'El módulo de asistencia aún no está implementado. Los datos se mostrarán cuando se configure el control de asistencia.',
+            'promedioGeneral'    => $promedioGeneral,
+            'totalInasistencias' => $totalAusentes,
+            'totalTardanzas'     => $totalTardanzas,
+            'mensaje'            => null,
         ]);
     }
 

@@ -1,329 +1,843 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
-import { useState, useMemo } from 'react';
+import { Head, router, Link } from '@inertiajs/react';
+import { useState, useMemo, useCallback } from 'react';
 import { profesorMenuItems } from '@/Config/profesorMenu';
 
-const SearchIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-    </svg>
-);
-
+// ── Types ──
 interface Actividad {
     id: number;
     titulo: string;
-    descripcion: string;
+    descripcion: string | null;
     tipo: string;
     curso: string;
+    cursoId: number;
     materia: string;
-    fechaAsignada: string;
+    cursoMateriaId: number;
+    fechaAsignacion: string;
     fechaEntrega: string;
-    peso: number;
-    entregados: number;
+    porcentaje: number;
+    activa: boolean;
     totalEstudiantes: number;
+    entregados: number;
     calificados: number;
-    estado: 'activa' | 'cerrada' | 'borrador';
+    pendientes: number;
 }
 
-export default function Actividades() {
-    const nombre = 'María García';
-    const [showModal, setShowModal] = useState(false);
+interface CursoMateria {
+    id: number;
+    curso: string;
+    cursoId: number;
+    materia: string;
+    nivel: string;
+}
+
+interface EntregaDetail {
+    id: number;
+    estudianteId: number;
+    estudiante: string;
+    estado: 'pendiente' | 'entregada' | 'calificada' | 'atrasada';
+    contenido: string | null;
+    archivo: string | null;
+    calificacion: number | null;
+    retroalimentacion: string | null;
+    fechaEntrega: string | null;
+}
+
+interface Props {
+    profesor: { nombre: string };
+    actividades: Actividad[];
+    cursoMaterias: CursoMateria[];
+}
+
+// ── Tipo config ──
+const tiposConfig: Record<string, { label: string; color: string; bg: string }> = {
+    tarea:    { label: 'Tarea',    color: 'text-blue-700',   bg: 'bg-blue-100'   },
+    quiz:     { label: 'Quiz',     color: 'text-purple-700', bg: 'bg-purple-100' },
+    examen:   { label: 'Examen',   color: 'text-red-700',    bg: 'bg-red-100'    },
+    proyecto: { label: 'Proyecto', color: 'text-emerald-700',bg: 'bg-emerald-100'},
+    taller:   { label: 'Taller',   color: 'text-amber-700',  bg: 'bg-amber-100'  },
+};
+
+const tiposOpciones = ['tarea', 'quiz', 'examen', 'proyecto', 'taller'] as const;
+
+export default function Actividades({ profesor, actividades, cursoMaterias }: Props) {
+    // ── State ──
     const [searchTerm, setSearchTerm] = useState('');
-    const [filtroCurso, setFiltroCurso] = useState('');
+    const [filtroCm, setFiltroCm] = useState('');
     const [filtroEstado, setFiltroEstado] = useState('todas');
+    const [processing, setProcessing] = useState(false);
+
+    // Modal crear/editar
+    const [showForm, setShowForm] = useState(false);
+    const [editando, setEditando] = useState<Actividad | null>(null);
+    const [form, setForm] = useState({
+        curso_materia_id: '',
+        titulo: '',
+        descripcion: '',
+        tipo: 'tarea' as string,
+        fecha_entrega: '',
+        porcentaje: '',
+        activa: true,
+    });
+
+    // Modal entregas/calificar
+    const [showEntregas, setShowEntregas] = useState<Actividad | null>(null);
+    const [entregas, setEntregas] = useState<EntregaDetail[]>([]);
+    const [loadingEntregas, setLoadingEntregas] = useState(false);
+    const [calificaciones, setCalificaciones] = useState<Record<number, { nota: string; retro: string }>>({});
+    const [filtroEntrega, setFiltroEntrega] = useState('todos');
+
+    // Modal detalle actividad (vista expandida)
     const [showDetalle, setShowDetalle] = useState<Actividad | null>(null);
 
-    const actividades: Actividad[] = [
-        { id: 1, titulo: 'Taller de ecuaciones cuadráticas', descripcion: 'Resolver los 20 ejercicios del capítulo 5. Mostrar procedimiento completo.', tipo: 'Taller', curso: '8° A', materia: 'Matemáticas', fechaAsignada: '20 Feb 2026', fechaEntrega: '26 Feb 2026', peso: 15, entregados: 12, totalEstudiantes: 32, calificados: 0, estado: 'activa' },
-        { id: 2, titulo: 'Quiz factorización', descripcion: 'Evaluación presencial sobre factorización de polinomios.', tipo: 'Evaluación', curso: '8° A', materia: 'Matemáticas', fechaAsignada: '22 Feb 2026', fechaEntrega: '02 Mar 2026', peso: 20, entregados: 0, totalEstudiantes: 32, calificados: 0, estado: 'activa' },
-        { id: 3, titulo: 'Tarea: Funciones lineales', descripcion: 'Graficar 10 funciones lineales e identificar pendiente e intercepto.', tipo: 'Tarea', curso: '8° A', materia: 'Matemáticas', fechaAsignada: '10 Feb 2026', fechaEntrega: '17 Feb 2026', peso: 10, entregados: 30, totalEstudiantes: 32, calificados: 30, estado: 'cerrada' },
-        { id: 4, titulo: 'Examen parcial - Álgebra', descripcion: 'Examen del primer corte cubriendo todos los temas.', tipo: 'Examen', curso: '8° A', materia: 'Matemáticas', fechaAsignada: '05 Feb 2026', fechaEntrega: '05 Feb 2026', peso: 30, entregados: 32, totalEstudiantes: 32, calificados: 32, estado: 'cerrada' },
-        { id: 5, titulo: 'Ejercicios de fracciones', descripcion: 'Taller de refuerzo sobre operaciones con fracciones.', tipo: 'Taller', curso: '6° A', materia: 'Matemáticas', fechaAsignada: '21 Feb 2026', fechaEntrega: '28 Feb 2026', peso: 15, entregados: 8, totalEstudiantes: 32, calificados: 0, estado: 'activa' },
-        { id: 6, titulo: 'Geometría: Áreas y perímetros', descripcion: 'Calcular áreas y perímetros de figuras compuestas.', tipo: 'Tarea', curso: '6° A', materia: 'Matemáticas', fechaAsignada: '15 Feb 2026', fechaEntrega: '22 Feb 2026', peso: 10, entregados: 28, totalEstudiantes: 32, calificados: 25, estado: 'activa' },
-        { id: 7, titulo: 'Probabilidad básica', descripcion: 'Ejercicios introductorios de probabilidad y estadística.', tipo: 'Taller', curso: '7° A', materia: 'Matemáticas', fechaAsignada: '19 Feb 2026', fechaEntrega: '26 Feb 2026', peso: 15, entregados: 5, totalEstudiantes: 28, calificados: 0, estado: 'activa' },
-        { id: 8, titulo: 'Números enteros: operaciones', descripcion: 'Borrador de taller para la próxima semana.', tipo: 'Taller', curso: '7° A', materia: 'Matemáticas', fechaAsignada: '', fechaEntrega: '', peso: 15, entregados: 0, totalEstudiantes: 28, calificados: 0, estado: 'borrador' },
-    ];
-
-    const cursos = [...new Set(actividades.map(a => a.curso))];
-
-    const stats = useMemo(() => ({
-        activas: actividades.filter(a => a.estado === 'activa').length,
-        sinCalificar: actividades.reduce((acc, a) => acc + (a.entregados - a.calificados), 0),
-        porCalificar: actividades.filter(a => a.entregados > a.calificados && a.estado !== 'borrador').length,
-        borradores: actividades.filter(a => a.estado === 'borrador').length,
-    }), []);
+    // ── Computed ──
+    const stats = useMemo(() => {
+        const activas = actividades.filter(a => a.activa).length;
+        const inactivas = actividades.filter(a => !a.activa).length;
+        const porCalificar = actividades.reduce((s, a) => s + Math.max(0, a.entregados - a.calificados), 0);
+        const totalEst = new Set(actividades.map(a => a.cursoId)).size;
+        return { activas, inactivas, porCalificar, total: actividades.length, cursos: totalEst };
+    }, [actividades]);
 
     const filtradas = useMemo(() => {
-        let result = actividades;
-        if (filtroEstado !== 'todas') result = result.filter(a => a.estado === filtroEstado);
-        if (filtroCurso) result = result.filter(a => a.curso === filtroCurso);
+        let r = [...actividades];
+        if (filtroEstado === 'activas') r = r.filter(a => a.activa);
+        else if (filtroEstado === 'cerradas') r = r.filter(a => !a.activa);
+        else if (filtroEstado === 'porCalificar') r = r.filter(a => a.entregados > a.calificados && a.activa);
+        if (filtroCm) r = r.filter(a => a.cursoMateriaId.toString() === filtroCm);
         if (searchTerm) {
             const s = searchTerm.toLowerCase();
-            result = result.filter(a => a.titulo.toLowerCase().includes(s) || a.curso.toLowerCase().includes(s));
+            r = r.filter(a =>
+                a.titulo.toLowerCase().includes(s) ||
+                a.materia.toLowerCase().includes(s) ||
+                a.curso.toLowerCase().includes(s)
+            );
         }
-        return result;
-    }, [filtroEstado, filtroCurso, searchTerm]);
+        return r;
+    }, [actividades, filtroEstado, filtroCm, searchTerm]);
 
-    const getEstadoBadge = (estado: string) => {
-        switch (estado) {
-            case 'activa': return 'bg-green-100 text-green-700 border-green-200';
-            case 'cerrada': return 'bg-gray-100 text-gray-600 border-gray-200';
-            case 'borrador': return 'bg-amber-100 text-amber-700 border-amber-200';
-            default: return 'bg-gray-100 text-gray-700';
+    // ── Handlers ──
+    const openCreate = () => {
+        setEditando(null);
+        setForm({
+            curso_materia_id: cursoMaterias[0]?.id.toString() ?? '',
+            titulo: '', descripcion: '', tipo: 'tarea',
+            fecha_entrega: '', porcentaje: '', activa: true,
+        });
+        setShowForm(true);
+    };
+
+    const openEdit = (act: Actividad) => {
+        setEditando(act);
+        setForm({
+            curso_materia_id: act.cursoMateriaId.toString(),
+            titulo: act.titulo,
+            descripcion: act.descripcion ?? '',
+            tipo: act.tipo,
+            fecha_entrega: act.fechaEntrega,
+            porcentaje: act.porcentaje.toString(),
+            activa: act.activa,
+        });
+        setShowForm(true);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!form.curso_materia_id || !form.titulo || !form.fecha_entrega) return;
+        setProcessing(true);
+
+        const payload = {
+            curso_materia_id: parseInt(form.curso_materia_id),
+            titulo: form.titulo,
+            descripcion: form.descripcion || null,
+            tipo: form.tipo,
+            fecha_entrega: form.fecha_entrega,
+            porcentaje: parseFloat(form.porcentaje) || 0,
+            activa: form.activa,
+        };
+
+        if (editando) {
+            router.put(`/profesor/actividades/${editando.id}`, payload, {
+                onSuccess: () => { setShowForm(false); setEditando(null); },
+                onFinish: () => setProcessing(false),
+            });
+        } else {
+            router.post('/profesor/actividades', payload, {
+                onSuccess: () => setShowForm(false),
+                onFinish: () => setProcessing(false),
+            });
         }
     };
 
-    // Entregas mock para detalle
-    const entregasMock = [
-        { estudiante: 'Andrés F. Muñoz', entregado: true, fecha: '24 Feb 2026', nota: null },
-        { estudiante: 'Laura Rodríguez', entregado: true, fecha: '23 Feb 2026', nota: null },
-        { estudiante: 'Carlos Jiménez', entregado: true, fecha: '25 Feb 2026', nota: null },
-        { estudiante: 'Sofía Herrera', entregado: false, fecha: '', nota: null },
-        { estudiante: 'Miguel Ángel Torres', entregado: false, fecha: '', nota: null },
-    ];
+    const handleDelete = (act: Actividad) => {
+        if (!confirm(`¿Eliminar "${act.titulo}"? Se eliminarán todas las entregas asociadas.`)) return;
+        router.delete(`/profesor/actividades/${act.id}`);
+    };
 
+    const handleToggleActiva = (act: Actividad) => {
+        router.put(`/profesor/actividades/${act.id}`, { activa: !act.activa }, { preserveScroll: true });
+    };
+
+    // ── Entregas ──
+    const openEntregas = useCallback(async (act: Actividad) => {
+        setShowEntregas(act);
+        setLoadingEntregas(true);
+        setFiltroEntrega('todos');
+        setCalificaciones({});
+        try {
+            const res = await fetch(`/profesor/actividades/${act.id}/entregas`);
+            const data = await res.json();
+            const ents: EntregaDetail[] = data.entregas ?? data;
+            setEntregas(ents);
+            const init: Record<number, { nota: string; retro: string }> = {};
+            ents.forEach(e => {
+                init[e.id] = {
+                    nota: e.calificacion?.toString() ?? '',
+                    retro: e.retroalimentacion ?? '',
+                };
+            });
+            setCalificaciones(init);
+        } catch {
+            setEntregas([]);
+        }
+        setLoadingEntregas(false);
+    }, []);
+
+    const handleGuardarCalificaciones = () => {
+        if (!showEntregas) return;
+        const cals = Object.entries(calificaciones)
+            .filter(([, v]) => v.nota !== '')
+            .map(([id, v]) => ({
+                entrega_id: parseInt(id),
+                calificacion: parseFloat(v.nota),
+                retroalimentacion: v.retro || null,
+            }));
+
+        if (cals.length === 0) return;
+        setProcessing(true);
+        router.post(`/profesor/actividades/${showEntregas.id}/calificar`, { calificaciones: cals }, {
+            onSuccess: () => { setShowEntregas(null); },
+            onFinish: () => setProcessing(false),
+        });
+    };
+
+    const handleReenviar = (entregaId: number) => {
+        if (!confirm('¿Permitir que el estudiante reenvíe esta entrega? La calificación actual se eliminará.')) return;
+        router.put(`/profesor/entregas/${entregaId}/extender`, { nuevo_estado: 'pendiente' }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                if (showEntregas) openEntregas(showEntregas);
+            },
+        });
+    };
+
+    const entregasFiltradas = useMemo(() => {
+        if (filtroEntrega === 'todos') return entregas;
+        return entregas.filter(e => e.estado === filtroEntrega);
+    }, [entregas, filtroEntrega]);
+
+    // ── Date helpers ──
+    const formatDate = (d: string) => {
+        if (!d) return '—';
+        const date = new Date(d.slice(0, 10) + 'T00:00:00');
+        return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    const getDaysLeft = (d: string) => {
+        if (!d) return null;
+        const diff = Math.ceil((new Date(d.slice(0, 10) + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
+        return diff;
+    };
+
+    const getEstado = (act: Actividad) => {
+        if (!act.activa) return 'cerrada';
+        const days = getDaysLeft(act.fechaEntrega);
+        if (days !== null && days < 0) return 'vencida';
+        return 'activa';
+    };
+
+    const estadoConfig: Record<string, { label: string; cls: string }> = {
+        activa:  { label: 'Activa',  cls: 'bg-emerald-100 text-emerald-700' },
+        cerrada: { label: 'Cerrada', cls: 'bg-gray-100 text-gray-500' },
+        vencida: { label: 'Vencida', cls: 'bg-red-100 text-red-600' },
+    };
+
+    const entregaEstadoConfig: Record<string, { label: string; cls: string; dot: string }> = {
+        pendiente:  { label: 'Pendiente',  cls: 'text-amber-600', dot: 'bg-amber-400' },
+        entregada:  { label: 'Entregada',  cls: 'text-blue-600',  dot: 'bg-blue-400'  },
+        calificada: { label: 'Calificada', cls: 'text-emerald-600', dot: 'bg-emerald-400' },
+        atrasada:   { label: 'Atrasada',   cls: 'text-red-600',   dot: 'bg-red-400'   },
+    };
+
+    // ── Render ──
     return (
-        <SidebarLayout
-            menuItems={profesorMenuItems}
-            userInfo={{ name: nombre, role: 'Profesor' }}
-        >
-            <Head title="Gestión de Actividades" />
+        <SidebarLayout menuItems={profesorMenuItems} userInfo={{ name: profesor.nombre, role: 'Profesor' }}>
+            <Head title="Actividades" />
 
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900" style={{ fontFamily: "'Inter', sans-serif" }}>
-                        Gestión de Actividades
-                    </h1>
-                    <p className="text-gray-500 mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>Crea, asigna y califica actividades para tus estudiantes</p>
-                </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="px-5 py-2.5 bg-[#293577] text-white rounded-xl text-sm font-semibold hover:bg-[#181b49] transition-colors flex items-center gap-2 shadow-lg"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                    Nueva Actividad
-                </button>
-            </div>
+            <div className="max-w-7xl mx-auto space-y-5">
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                <div className="bg-white rounded-xl border border-green-100 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center"><svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg></div>
+                {/* ── Header ── */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
-                        <p className="text-2xl font-extrabold text-green-600">{stats.activas}</p>
-                        <p className="text-xs text-gray-400">Activas</p>
+                        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900">Gestión de Actividades</h1>
+                        <p className="text-sm text-gray-500 mt-0.5">Crea, asigna y califica actividades para tus estudiantes</p>
                     </div>
+                    <Link
+                        href="/profesor/actividades/crear"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#293577] text-white rounded-xl text-sm font-semibold hover:bg-[#181b49] transition-colors shadow-lg shadow-[#293577]/20"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                        Nueva Actividad
+                    </Link>
                 </div>
-                <div className="bg-white rounded-xl border border-amber-100 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center"><svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg></div>
-                    <div>
-                        <p className="text-2xl font-extrabold text-amber-600">{stats.sinCalificar}</p>
-                        <p className="text-xs text-gray-400">Por calificar</p>
-                    </div>
-                </div>
-                <div className="bg-white rounded-xl border border-blue-100 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center"><svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
-                    <div>
-                        <p className="text-2xl font-extrabold text-blue-600">{stats.porCalificar}</p>
-                        <p className="text-xs text-gray-400">Con entregas</p>
-                    </div>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center"><svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg></div>
-                    <div>
-                        <p className="text-2xl font-extrabold text-gray-600">{stats.borradores}</p>
-                        <p className="text-xs text-gray-400">Borradores</p>
-                    </div>
-                </div>
-            </div>
 
-            {/* Filtros */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-5 flex flex-col sm:flex-row gap-3">
-                <div className="flex-1 relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-800"><SearchIcon className="w-4 h-4" /></span>
-                    <input type="text" placeholder="Buscar actividad..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm" />
-                </div>
-                <select value={filtroCurso} onChange={(e) => setFiltroCurso(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 min-w-[140px]">
-                    <option value="">Todos los cursos</option>
-                    {cursos.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <div className="flex gap-1 flex-wrap">
-                    {[{ k: 'todas', l: 'Todas' }, { k: 'activa', l: 'Activas' }, { k: 'cerrada', l: 'Cerradas' }, { k: 'borrador', l: 'Borradores' }].map(f => (
-                        <button key={f.k} onClick={() => setFiltroEstado(f.k)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${filtroEstado === f.k ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                            {f.l}
-                        </button>
+                {/* ── Stats ── */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                        { label: 'Activas', value: stats.activas, color: 'emerald', icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+                        { label: 'Por calificar', value: stats.porCalificar, color: 'amber', icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z' },
+                        { label: 'Cerradas', value: stats.inactivas, color: 'gray', icon: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z' },
+                        { label: 'Total', value: stats.total, color: 'blue', icon: 'M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z' },
+                    ].map((s, i) => (
+                        <div key={i} className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                            <div className={`w-9 h-9 rounded-lg bg-${s.color}-100 flex items-center justify-center mb-2`}>
+                                <svg className={`w-5 h-5 text-${s.color}-600`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={s.icon} /></svg>
+                            </div>
+                            <p className="text-xl sm:text-2xl font-extrabold text-gray-800">{s.value}</p>
+                            <p className="text-xs text-gray-500">{s.label}</p>
+                        </div>
                     ))}
                 </div>
-            </div>
 
-            {/* Lista actividades */}
-            <div className="space-y-3">
-                {filtradas.map(act => (
-                    <div key={act.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-all">
-                        <div className="p-4 flex items-start gap-4">
-                            <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                                <span className="text-xl"><svg className="w-5 h-5 text-[#293577]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg></span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                    <h4 className="font-bold text-gray-900 text-sm">{act.titulo}</h4>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getEstadoBadge(act.estado)}`}>{act.estado}</span>
-                                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{act.tipo}</span>
-                                </div>
-                                <p className="text-xs text-gray-500">{act.descripcion}</p>
-                                <div className="flex items-center gap-4 mt-2 text-[11px] text-gray-400 flex-wrap">
-                                    <span className="font-semibold text-blue-600">{act.curso}</span>
-                                    <span>Peso: {act.peso}%</span>
-                                    {act.fechaEntrega && <span>Entrega: {act.fechaEntrega}</span>}
-                                </div>
-                                {/* Barra de progreso */}
-                                {act.estado !== 'borrador' && (
-                                    <div className="mt-2 flex items-center gap-3">
-                                        <div className="flex-1 bg-gray-100 rounded-full h-2 max-w-xs">
-                                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(act.entregados / act.totalEstudiantes) * 100}%` }}></div>
-                                        </div>
-                                        <span className="text-[11px] text-gray-500">{act.entregados}/{act.totalEstudiantes} entregados</span>
-                                        {act.calificados > 0 && (
-                                            <span className="text-[11px] text-green-600">{act.calificados} calificados</span>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="flex flex-col gap-2 flex-shrink-0">
-                                <button
-                                    onClick={() => setShowDetalle(act)}
-                                    className="px-3 py-1.5 bg-[#293577] text-white rounded-lg text-xs font-semibold hover:bg-[#181b49] transition"
-                                >
-                                    {act.estado === 'borrador' ? 'Editar' : 'Ver entregas'}
-                                </button>
-                                {act.entregados > act.calificados && act.estado !== 'borrador' && (
-                                    <button className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600 transition">
-                                        Calificar
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                {/* ── Filters ── */}
+                <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1 relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            placeholder="Buscar por título, materia o curso..."
+                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/20 focus:border-[#293577]"
+                        />
                     </div>
-                ))}
-            </div>
+                    <select
+                        value={filtroCm}
+                        onChange={e => setFiltroCm(e.target.value)}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/20 min-w-[180px]"
+                    >
+                        <option value="">Todos los cursos</option>
+                        {cursoMaterias.map(cm => (
+                            <option key={cm.id} value={cm.id}>{cm.materia} — {cm.curso}</option>
+                        ))}
+                    </select>
+                    <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hidden">
+                        {[
+                            { k: 'todas', l: 'Todas' },
+                            { k: 'activas', l: 'Activas' },
+                            { k: 'porCalificar', l: 'Por calificar' },
+                            { k: 'cerradas', l: 'Cerradas' },
+                        ].map(f => (
+                            <button
+                                key={f.k}
+                                onClick={() => setFiltroEstado(f.k)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                                    filtroEstado === f.k
+                                        ? 'bg-[#293577] text-white shadow-sm'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                {f.l}
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
-            {/* Modal Nueva Actividad */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl">
-                            <h3 className="font-bold text-gray-900 text-lg">Nueva Actividad</h3>
-                            <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                {/* ── Activity List ── */}
+                <div className="space-y-3">
+                    {filtradas.length === 0 && (
+                        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                            <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
+                            <p className="text-sm text-gray-500">No se encontraron actividades</p>
+                            <button onClick={openCreate} className="mt-3 text-sm text-[#293577] font-semibold hover:underline">
+                                Crear primera actividad
                             </button>
                         </div>
-                        <div className="p-5 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
-                                <input type="text" placeholder="Ej: Taller de ecuaciones cuadráticas" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] text-sm" />
+                    )}
+
+                    {filtradas.map(act => {
+                        const estado = getEstado(act);
+                        const ec = estadoConfig[estado];
+                        const tc = tiposConfig[act.tipo] || tiposConfig.tarea;
+                        const days = getDaysLeft(act.fechaEntrega);
+                        const progreso = act.totalEstudiantes > 0 ? (act.entregados / act.totalEstudiantes) * 100 : 0;
+                        const progresoCalif = act.totalEstudiantes > 0 ? (act.calificados / act.totalEstudiantes) * 100 : 0;
+                        const sinCalificar = act.entregados - act.calificados;
+
+                        return (
+                            <div key={act.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${
+                                estado === 'cerrada' ? 'border-gray-200 opacity-75' : 'border-gray-200'
+                            }`}>
+                                <div className="p-4 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                                    {/* Icon */}
+                                    <div className={`w-11 h-11 rounded-xl ${tc.bg} flex items-center justify-center flex-shrink-0 hidden sm:flex`}>
+                                        <svg className={`w-5 h-5 ${tc.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                                    </div>
+
+                                    {/* Content */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                            <h3 className="font-bold text-gray-900 text-sm sm:text-base truncate">{act.titulo}</h3>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${ec.cls}`}>{ec.label}</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tc.bg} ${tc.color}`}>{tc.label}</span>
+                                        </div>
+
+                                        {act.descripcion && (
+                                            <p className="text-xs text-gray-500 line-clamp-2 mb-2">{act.descripcion}</p>
+                                        )}
+
+                                        <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+                                            <span className="flex items-center gap-1 font-semibold text-[#293577]">
+                                                {act.materia} · {act.curso}
+                                            </span>
+                                            <span>Peso: {act.porcentaje}%</span>
+                                            <span className="flex items-center gap-1">
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+                                                {formatDate(act.fechaEntrega)}
+                                            </span>
+                                            {days !== null && act.activa && (
+                                                <span className={`font-semibold ${
+                                                    days < 0 ? 'text-red-500' : days <= 2 ? 'text-amber-500' : 'text-emerald-500'
+                                                }`}>
+                                                    {days < 0 ? `Vencida (${Math.abs(days)}d)` : days === 0 ? 'Hoy' : days === 1 ? 'Mañana' : `${days} días`}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Progress bar */}
+                                        <div className="mt-2.5 flex items-center gap-3">
+                                            <div className="flex-1 max-w-xs">
+                                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                                                    <div className="bg-emerald-500 h-full transition-all" style={{ width: `${progresoCalif}%` }} />
+                                                    <div className="bg-blue-400 h-full transition-all" style={{ width: `${Math.max(0, progreso - progresoCalif)}%` }} />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[11px] flex-shrink-0">
+                                                <span className="text-gray-500">{act.entregados}/{act.totalEstudiantes}</span>
+                                                {act.calificados > 0 && (
+                                                    <span className="text-emerald-600 font-semibold">{act.calificados} calif.</span>
+                                                )}
+                                                {sinCalificar > 0 && (
+                                                    <span className="text-amber-600 font-semibold">{sinCalificar} pend.</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex sm:flex-col gap-2 flex-shrink-0 sm:items-end">
+                                        <button
+                                            onClick={() => openEntregas(act)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#293577] text-white rounded-lg text-xs font-semibold hover:bg-[#181b49] transition-colors"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
+                                            Entregas
+                                        </button>
+                                        {sinCalificar > 0 && (
+                                            <button
+                                                onClick={() => openEntregas(act)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600 transition-colors"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+                                                Calificar
+                                            </button>
+                                        )}
+                                        <div className="flex gap-1">
+                                            <Link
+                                                href={`/profesor/actividades/${act.id}/editar`}
+                                                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-[#293577] transition-colors"
+                                                title="Editar"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                                            </Link>
+                                            <button
+                                                onClick={() => handleToggleActiva(act)}
+                                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+                                                    act.activa
+                                                        ? 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                                                        : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                                                }`}
+                                                title={act.activa ? 'Cerrar actividad' : 'Reactivar'}
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={act.activa ? 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z' : 'M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z'} /></svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(act)}
+                                                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
+                                                title="Eliminar"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                                <textarea rows={3} placeholder="Instrucciones detalladas para los estudiantes..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] text-sm resize-none"></textarea>
+                        );
+                    })}
+                </div>
+
+                {/* ── Legend ── */}
+                <div className="flex items-center gap-4 text-[10px] text-gray-400 px-1">
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-emerald-500" /> Calificados</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-blue-400" /> Entregados sin calificar</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-gray-200" /> Pendientes</span>
+                </div>
+            </div>
+
+            {/* ════════════════════════════════════════════════════
+                █  Modal: Crear / Editar Actividad
+                ════════════════════════════════════════════════════ */}
+            {showForm && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowForm(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh]" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="bg-gradient-to-br from-[#293577] to-[#181b49] p-5 text-white flex-shrink-0">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                    </div>
+                                    <div>
+                                        <h2 className="font-extrabold">{editando ? 'Editar Actividad' : 'Nueva Actividad'}</h2>
+                                        <p className="text-white/60 text-xs">Configura los detalles de la actividad</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                        </div>
+
+                        {/* Body */}
+                        <div className="overflow-y-auto p-5">
+                            <form id="form-actividad" onSubmit={handleSubmit} className="space-y-4">
+                                {/* Curso-Materia */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Curso</label>
-                                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] text-sm">
-                                        <option>8° A</option><option>6° A</option><option>6° B</option><option>7° A</option>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Curso y Materia *</label>
+                                    <select
+                                        value={form.curso_materia_id}
+                                        onChange={e => setForm({ ...form, curso_materia_id: e.target.value })}
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                        disabled={!!editando}
+                                        required
+                                    >
+                                        <option value="">Seleccionar...</option>
+                                        {cursoMaterias.map(cm => (
+                                            <option key={cm.id} value={cm.id}>{cm.materia} — {cm.curso}</option>
+                                        ))}
                                     </select>
                                 </div>
+
+                                {/* Titulo */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] text-sm">
-                                        <option>Taller</option><option>Tarea</option><option>Evaluación</option><option>Examen</option>
-                                        <option>Proyecto</option><option>Exposición</option><option>Laboratorio</option><option>Ensayo</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Título *</label>
+                                    <input
+                                        type="text"
+                                        value={form.titulo}
+                                        onChange={e => setForm({ ...form, titulo: e.target.value })}
+                                        placeholder="Ej: Taller de ecuaciones cuadráticas"
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                        required
+                                    />
                                 </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
+
+                                {/* Instrucciones */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de entrega</label>
-                                    <input type="date" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] text-sm" />
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Instrucciones / Descripción</label>
+                                    <textarea
+                                        value={form.descripcion}
+                                        onChange={e => setForm({ ...form, descripcion: e.target.value })}
+                                        rows={4}
+                                        placeholder="Escribe las instrucciones detalladas para tus estudiantes..."
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                    />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Peso (%)</label>
-                                    <input type="number" min={1} max={100} placeholder="15" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] text-sm" />
+
+                                {/* Tipo + Porcentaje */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">Tipo *</label>
+                                        <div className="grid grid-cols-1 gap-1.5">
+                                            {tiposOpciones.map(t => {
+                                                const tc = tiposConfig[t];
+                                                return (
+                                                    <button
+                                                        key={t}
+                                                        type="button"
+                                                        onClick={() => setForm({ ...form, tipo: t })}
+                                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                                                            form.tipo === t
+                                                                ? `${tc.bg} ${tc.color} border-current`
+                                                                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <span className={`w-2 h-2 rounded-full ${form.tipo === t ? 'bg-current' : 'bg-gray-300'}`} />
+                                                        {tc.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Fecha Entrega *</label>
+                                            <input
+                                                type="date"
+                                                value={form.fecha_entrega}
+                                                onChange={e => setForm({ ...form, fecha_entrega: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Peso (%)</label>
+                                            <input
+                                                type="number"
+                                                value={form.porcentaje}
+                                                onChange={e => setForm({ ...form, porcentaje: e.target.value })}
+                                                min={0}
+                                                max={100}
+                                                step={0.01}
+                                                placeholder="15"
+                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                            />
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={form.activa}
+                                                onChange={e => setForm({ ...form, activa: e.target.checked })}
+                                                className="w-4 h-4 rounded border-gray-300 text-[#293577] focus:ring-[#293577]"
+                                            />
+                                            <span className="text-sm text-gray-700 font-medium">Publicar al guardar</span>
+                                        </label>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Adjuntar archivo (opcional)</label>
-                                <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center hover:border-[#293577]/30 transition cursor-pointer">
-                                    <p className="text-xs text-gray-400">Arrastra o selecciona un archivo de apoyo</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button onClick={() => setShowModal(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-200 transition">
-                                    Guardar borrador
-                                </button>
-                                <button onClick={() => { alert('Actividad publicada'); setShowModal(false); }}
-                                    className="flex-1 py-2.5 bg-[#293577] text-white rounded-lg text-sm font-semibold hover:bg-[#181b49] transition">
-                                    Publicar actividad
-                                </button>
-                            </div>
+                            </form>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex gap-3 flex-shrink-0">
+                            <button type="button" onClick={() => setShowForm(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors">
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                form="form-actividad"
+                                disabled={processing}
+                                className="flex-1 flex items-center justify-center gap-2 bg-[#293577] text-white px-4 py-2.5 rounded-xl hover:bg-[#181b49] text-sm font-semibold disabled:opacity-50 transition-colors"
+                            >
+                                {processing ? (
+                                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
+                                ) : (
+                                    <>{editando ? 'Guardar Cambios' : 'Crear Actividad'}</>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Modal Detalle / Entregas */}
-            {showDetalle && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl">
-                            <div>
-                                <h3 className="font-bold text-gray-900">{showDetalle.titulo}</h3>
-                                <p className="text-xs text-gray-400">{showDetalle.curso} • {showDetalle.tipo} • Peso: {showDetalle.peso}%</p>
-                            </div>
-                            <button onClick={() => setShowDetalle(null)} className="text-gray-400 hover:text-gray-600">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div className="p-5">
-                            <p className="text-sm text-gray-600 mb-4">{showDetalle.descripcion}</p>
-                            <div className="flex items-center gap-4 mb-4">
-                                <div className="flex-1 bg-gray-100 rounded-full h-3">
-                                    <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${(showDetalle.entregados / showDetalle.totalEstudiantes) * 100}%` }}></div>
-                                </div>
-                                <span className="text-sm font-bold text-gray-700">{showDetalle.entregados}/{showDetalle.totalEstudiantes}</span>
-                            </div>
-                            <h4 className="font-bold text-gray-800 text-sm mb-3">Entregas de estudiantes</h4>
-                            <div className="space-y-2">
-                                {entregasMock.map((e, i) => (
-                                    <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border ${e.entregado ? 'bg-green-50/30 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${e.entregado ? 'bg-green-500' : 'bg-gray-300'}`}>
-                                            {e.entregado ? '✓' : '—'}
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-semibold text-gray-800">{e.estudiante}</p>
-                                            <p className="text-[11px] text-gray-400">{e.entregado ? `Entregado: ${e.fecha}` : 'Sin entregar'}</p>
-                                        </div>
-                                        {e.entregado && (
-                                            <div className="flex gap-2">
-                                                <button className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-[11px] font-semibold hover:bg-blue-200">Ver</button>
-                                                <input type="number" min={0} max={5} step={0.1} placeholder="Nota" className="w-16 px-2 py-1 border border-gray-300 rounded text-xs text-center" />
-                                            </div>
-                                        )}
+            {/* ════════════════════════════════════════════════════
+                █  Modal: Entregas + Calificar
+                ════════════════════════════════════════════════════ */}
+            {showEntregas && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4" onClick={() => setShowEntregas(null)}>
+                    <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="bg-gradient-to-br from-[#293577] to-[#181b49] p-5 text-white flex-shrink-0">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h2 className="font-extrabold text-base">{showEntregas.titulo}</h2>
+                                    <div className="flex items-center gap-2 mt-1 text-xs text-white/60">
+                                        <span>{showEntregas.materia} · {showEntregas.curso}</span>
+                                        <span>·</span>
+                                        <span>Peso: {showEntregas.porcentaje}%</span>
+                                        <span>·</span>
+                                        <span>Entrega: {formatDate(showEntregas.fechaEntrega)}</span>
                                     </div>
-                                ))}
-                            </div>
-                            <div className="mt-4 flex gap-3">
-                                <button className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition">
-                                    Guardar calificaciones
-                                </button>
-                                <button className="px-4 py-2.5 bg-red-100 text-red-700 rounded-lg text-sm font-semibold hover:bg-red-200 transition">
-                                    Recordatorio
+                                </div>
+                                <button onClick={() => setShowEntregas(null)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors flex-shrink-0">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>
+
+                            {/* Progress summary */}
+                            <div className="grid grid-cols-3 gap-3 mt-4">
+                                <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+                                    <p className="text-lg font-extrabold">{showEntregas.entregados}/{showEntregas.totalEstudiantes}</p>
+                                    <p className="text-[10px] text-white/50">Entregados</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+                                    <p className="text-lg font-extrabold text-emerald-300">{showEntregas.calificados}</p>
+                                    <p className="text-[10px] text-white/50">Calificados</p>
+                                </div>
+                                <div className="bg-white/10 rounded-xl px-3 py-2 text-center">
+                                    <p className="text-lg font-extrabold text-amber-300">{showEntregas.pendientes}</p>
+                                    <p className="text-[10px] text-white/50">Pendientes</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Filter entregas */}
+                        <div className="px-5 pt-3 pb-2 border-b border-gray-100 flex items-center gap-2 overflow-x-auto scrollbar-hidden flex-shrink-0">
+                            {[
+                                { k: 'todos', l: 'Todos' },
+                                { k: 'pendiente', l: 'Pendientes' },
+                                { k: 'entregada', l: 'Entregadas' },
+                                { k: 'calificada', l: 'Calificadas' },
+                            ].map(f => (
+                                <button
+                                    key={f.k}
+                                    onClick={() => setFiltroEntrega(f.k)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                                        filtroEntrega === f.k ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {f.l}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Entregas list */}
+                        <div className="overflow-y-auto flex-1 p-4 space-y-2">
+                            {loadingEntregas ? (
+                                <div className="py-12 text-center">
+                                    <div className="w-8 h-8 border-3 border-[#293577] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                    <p className="text-sm text-gray-400">Cargando entregas...</p>
+                                </div>
+                            ) : entregasFiltradas.length === 0 ? (
+                                <div className="py-12 text-center">
+                                    <svg className="w-10 h-10 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
+                                    <p className="text-sm text-gray-400">No hay entregas en este estado</p>
+                                </div>
+                            ) : (
+                                entregasFiltradas.map(e => {
+                                    const ec = entregaEstadoConfig[e.estado] || entregaEstadoConfig.pendiente;
+                                    const cal = calificaciones[e.id] || { nota: '', retro: '' };
+                                    return (
+                                        <div key={e.id} className={`rounded-xl border p-3 sm:p-4 transition-all ${
+                                            e.estado === 'calificada' ? 'bg-emerald-50/30 border-emerald-200' :
+                                            e.estado === 'entregada' ? 'bg-blue-50/30 border-blue-200' :
+                                            'bg-gray-50/50 border-gray-200'
+                                        }`}>
+                                            <div className="flex items-start gap-3">
+                                                {/* Avatar */}
+                                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
+                                                    e.estado === 'calificada' ? 'bg-emerald-500' :
+                                                    e.estado === 'entregada' ? 'bg-blue-500' :
+                                                    'bg-gray-300'
+                                                }`}>
+                                                    {e.estudiante.charAt(0)}
+                                                </div>
+
+                                                {/* Info */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="text-sm font-semibold text-gray-800">{e.estudiante}</p>
+                                                        <span className={`flex items-center gap-1 text-[10px] font-bold ${ec.cls}`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${ec.dot}`} />
+                                                            {ec.label}
+                                                        </span>
+                                                    </div>
+                                                    {e.fechaEntrega && (
+                                                        <p className="text-[11px] text-gray-400 mt-0.5">Entregado: {e.fechaEntrega}</p>
+                                                    )}
+                                                    {e.contenido && (
+                                                        <p className="text-xs text-gray-500 mt-1 bg-white rounded-lg px-2.5 py-1.5 border border-gray-100">{e.contenido}</p>
+                                                    )}
+
+                                                    {/* Grade inputs */}
+                                                    {(e.estado === 'entregada' || e.estado === 'calificada') && (
+                                                        <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <label className="text-[11px] text-gray-500 font-medium whitespace-nowrap">Nota:</label>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    max={5}
+                                                                    step={0.1}
+                                                                    value={cal.nota}
+                                                                    onChange={ev => setCalificaciones(prev => ({
+                                                                        ...prev,
+                                                                        [e.id]: { ...prev[e.id], nota: ev.target.value },
+                                                                    }))}
+                                                                    placeholder="0-5"
+                                                                    className="w-20 px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                                                />
+                                                            </div>
+                                                            <input
+                                                                type="text"
+                                                                value={cal.retro}
+                                                                onChange={ev => setCalificaciones(prev => ({
+                                                                    ...prev,
+                                                                    [e.id]: { ...prev[e.id], retro: ev.target.value },
+                                                                }))}
+                                                                placeholder="Retroalimentación (opcional)..."
+                                                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Actions per entrega */}
+                                                <div className="flex flex-col gap-1 flex-shrink-0">
+                                                    {e.estado === 'calificada' && (
+                                                        <button
+                                                            onClick={() => handleReenviar(e.id)}
+                                                            className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-200 transition-colors"
+                                                            title="Permitir reenvío"
+                                                        >
+                                                            Reenviar
+                                                        </button>
+                                                    )}
+                                                    {e.estado === 'pendiente' && (
+                                                        <span className="px-2.5 py-1 bg-gray-100 text-gray-400 rounded-lg text-[10px] font-medium text-center">
+                                                            Sin entrega
+                                                        </span>
+                                                    )}
+                                                    {e.estado === 'atrasada' && (
+                                                        <button
+                                                            onClick={() => handleReenviar(e.id)}
+                                                            className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-200 transition-colors"
+                                                        >
+                                                            Extender
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-3 flex-shrink-0">
+                            <button type="button" onClick={() => setShowEntregas(null)} className="sm:flex-1 px-4 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors">
+                                Cerrar
+                            </button>
+                            <button
+                                onClick={handleGuardarCalificaciones}
+                                disabled={processing || Object.values(calificaciones).every(c => c.nota === '')}
+                                className="sm:flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-700 text-sm font-semibold disabled:opacity-50 transition-colors"
+                            >
+                                {processing ? (
+                                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
+                                ) : (
+                                    <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" /></svg> Guardar Calificaciones</>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 /* ─── SVG Icons ─── */
@@ -15,6 +15,12 @@ const TrashIcon = ({ className = "w-4 h-4" }: { className?: string }) => <svg cl
 const EyeIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>;
 const GridIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" /></svg>;
 const ListIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>;
+
+interface Sede {
+    id: number;
+    nombre: string;
+    ciudad: string;
+}
 
 /* ─── Interfaces ─── */
 interface CursoMateria {
@@ -38,6 +44,8 @@ interface Curso {
     profesor_guia: string;
     estudiantes: number;
     activo: boolean;
+    sede_id?: number;
+    sede_nombre?: string;
 }
 
 interface Materia {
@@ -63,26 +71,26 @@ interface Props {
     materiasProfesores: Record<number, { id: number; name: string }[]>;
     totalEstudiantes: number;
     anio: number;
+    sedes: Sede[];
 }
 
 /* ─── Configuración visual ─── */
 const nivelesEducativos: Record<string, { label: string; color: string; bg: string; border: string }> = {
-    preescolar:   { label: 'Pre-escolar',  color: 'text-pink-700',    bg: 'bg-pink-50',    border: 'border-pink-200' },
-    transicion:   { label: 'Transición',   color: 'text-purple-700',  bg: 'bg-purple-50',  border: 'border-purple-200' },
+    transicion:   { label: 'Transición / Pre-escolar', color: 'text-purple-700',  bg: 'bg-purple-50',  border: 'border-purple-200' },
     primaria:     { label: 'Primaria',     color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-200' },
     bachillerato: { label: 'Bachillerato', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
 };
 const nivelesKeys = Object.keys(nivelesEducativos);
 
 const nivelBadgeColors: Record<string, string> = {
-    preescolar: 'bg-pink-100 text-pink-700 border-pink-200',
+    preescolar: 'bg-purple-100 text-purple-700 border-purple-200',
     transicion: 'bg-purple-100 text-purple-700 border-purple-200',
     primaria: 'bg-blue-100 text-blue-700 border-blue-200',
     bachillerato: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
 
 const nivelCardAccent: Record<string, string> = {
-    preescolar: 'from-pink-500 to-pink-600',
+    preescolar: 'from-purple-500 to-purple-600',
     transicion: 'from-purple-500 to-purple-600',
     primaria: 'from-blue-500 to-blue-600',
     bachillerato: 'from-emerald-500 to-emerald-600',
@@ -103,16 +111,92 @@ const materiaColors: Record<string, { icono: React.ReactNode; colorBg: string; c
 const defaultMateriaColor: { icono: React.ReactNode; colorBg: string; colorText: string; colorBorder: string } = { icono: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>, colorBg: 'bg-gray-50', colorText: 'text-gray-600', colorBorder: 'border-gray-200' };
 const getMateriaStyle = (nombre: string) => materiaColors[nombre] ?? defaultMateriaColor;
 
+/* ─── ProfSearchSelect ─── */
+function ProfSearchSelect({ options, value, onChange }: {
+    options: { id: number; name: string }[];
+    value: number | null;
+    onChange: (id: number | null) => void;
+}) {
+    const [search, setSearch] = useState('');
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    const selected = options.find(o => o.id === value);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filtered = search ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase())) : options;
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={() => { setOpen(o => !o); setSearch(''); }}
+                className="w-full flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-left"
+            >
+                <span className={`flex-1 truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>
+                    {selected ? selected.name : '— Seleccionar profesor —'}
+                </span>
+                <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+            </button>
+            {open && (
+                <div className="absolute z-[70] top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+                    <div className="p-2 border-b border-gray-100">
+                        <input
+                            autoFocus
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Buscar profesor..."
+                            className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#293577]/30"
+                        />
+                    </div>
+                    <div className="max-h-44 overflow-y-auto">
+                        <button
+                            type="button"
+                            onMouseDown={() => { onChange(null); setOpen(false); setSearch(''); }}
+                            className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50"
+                        >
+                            — Sin asignar —
+                        </button>
+                        {filtered.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-400 italic">Sin resultados</div>
+                        )}
+                        {filtered.map(o => (
+                            <button
+                                key={o.id}
+                                type="button"
+                                onMouseDown={() => { onChange(o.id); setOpen(false); setSearch(''); }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-[#293577]/5 hover:text-[#293577] transition-colors ${value === o.id ? 'bg-[#293577]/10 text-[#293577] font-medium' : 'text-gray-700'}`}
+                            >
+                                {o.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ─── Form defaults ─── */
-const EMPTY_CURSO = { nombre: '', nivel: '', grado: '', grupo: '', jornada: 'Mañana', cupo_maximo: '35', director_grupo_id: '' };
+const EMPTY_CURSO = { nombre: '', nivel: '', grado: '', grupo: '', jornada: 'Mañana', cupo_maximo: '35', director_grupo_id: '', sede_id: '' };
 const EMPTY_MATERIA = { nombre: '', area: '', codigo: '', horas_semanales: '4' };
 
 /* ═══════════════════════════════════════════════════════ */
-export default function Cursos({ cursos, materias, profesores: listaProfesores, materiasProfesores, totalEstudiantes, anio }: Props) {
+export default function Cursos({ cursos, materias, profesores: listaProfesores, materiasProfesores, totalEstudiantes, anio, sedes }: Props) {
     // Tabs & Filters
     const [activeTab, setActiveTab] = useState<'cursos' | 'materias'>('cursos');
     const [searchTerm, setSearchTerm] = useState('');
     const [nivelActivo, setNivelActivo] = useState('');
+    const [sedeSel, setSedeSel] = useState('todas');
     const [vistaGrid, setVistaGrid] = useState(true);
     const [areaFiltro, setAreaFiltro] = useState('');
 
@@ -141,7 +225,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
 
     const filteredCursos = useMemo(() => {
         return cursos.filter(c => {
-            if (nivelActivo && c.nivel !== nivelActivo) return false;
+            const nivelNorm = c.nivel === 'preescolar' ? 'transicion' : c.nivel;
+            if (nivelActivo && nivelNorm !== nivelActivo) return false;
+            if (sedeSel !== 'todas' && String(c.sede_id ?? '') !== sedeSel) return false;
             if (searchTerm) {
                 const s = searchTerm.toLowerCase();
                 return (
@@ -154,7 +240,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             }
             return true;
         });
-    }, [cursos, nivelActivo, searchTerm]);
+    }, [cursos, nivelActivo, searchTerm, sedeSel]);
 
     const filteredMaterias = useMemo(() => {
         return materias.filter(m => {
@@ -167,6 +253,12 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
         });
     }, [materias, areaFiltro, searchTerm]);
 
+    // Profesores filtrados por la sede del curso (o todos si no hay sede)
+    const profesoresBySedeOrAll = useMemo(() => {
+        if (!cursoForm.sede_id) return listaProfesores;
+        return listaProfesores.filter(p => !p.sede_id || String(p.sede_id) === cursoForm.sede_id);
+    }, [listaProfesores, cursoForm.sede_id]);
+
     const stats = useMemo(() => ({
         totalCursos: cursos.length,
         totalMaterias: materias.length,
@@ -178,8 +270,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
     const cursosAgrupados = useMemo(() => {
         const agrupados: Record<string, Curso[]> = {};
         filteredCursos.forEach(c => {
-            if (!agrupados[c.nivel]) agrupados[c.nivel] = [];
-            agrupados[c.nivel].push(c);
+            const grupo = c.nivel === 'preescolar' ? 'transicion' : c.nivel;
+            if (!agrupados[grupo]) agrupados[grupo] = [];
+            agrupados[grupo].push(c);
         });
         return agrupados;
     }, [filteredCursos]);
@@ -204,6 +297,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             jornada: curso.jornada,
             cupo_maximo: curso.cupo_maximo?.toString() || '35',
             director_grupo_id: curso.director_grupo_id?.toString() || '',
+            sede_id: curso.sede_id?.toString() || '',
         });
         // Cargar materias existentes del curso con sus profesor_id reales
         setMateriasAsignadas(
@@ -268,6 +362,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             jornada: cursoForm.jornada,
             cupo_maximo: cursoForm.cupo_maximo ? parseInt(cursoForm.cupo_maximo) : null,
             director_grupo_id: cursoForm.director_grupo_id ? parseInt(cursoForm.director_grupo_id) : null,
+            sede_id: cursoForm.sede_id ? parseInt(cursoForm.sede_id) : null,
             materias_asignadas: validMaterias.map(m => ({ materia_id: m.materia_id, profesor_id: m.profesor_id })),
         };
 
@@ -479,15 +574,25 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                         )}
                     </div>
                     {activeTab === 'cursos' && (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 items-center">
                             <button onClick={() => setNivelActivo('')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all border ${!nivelActivo ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                                 Todos
                             </button>
                             {nivelesKeys.map(k => (
                                 <button key={k} onClick={() => setNivelActivo(nivelActivo === k ? '' : k)} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all border ${nivelActivo === k ? `${nivelesEducativos[k].bg} ${nivelesEducativos[k].color} ${nivelesEducativos[k].border}` : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                                    {nivelesEducativos[k].label} ({cursos.filter(c => c.nivel === k).length})
+                                    {nivelesEducativos[k].label} ({cursos.filter(c => c.nivel === k || (k === 'transicion' && c.nivel === 'preescolar')).length})
                                 </button>
                             ))}
+                            {sedes.length > 0 && (
+                                <select
+                                    value={sedeSel}
+                                    onChange={e => setSedeSel(e.target.value)}
+                                    className="ml-auto min-w-[160px] pl-3 pr-8 py-1.5 border border-gray-200 rounded-lg text-xs bg-white appearance-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                >
+                                    <option value="todas">Todas las sedes</option>
+                                    {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                </select>
+                            )}
                         </div>
                     )}
                 </div>
@@ -533,6 +638,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                                     <span className={`inline-block text-xs px-2 py-0.5 rounded-full border ${nivelBadgeColors[curso.nivel] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                                                                         {nivelesEducativos[curso.nivel]?.label || curso.nivel}
                                                                     </span>
+                                                                    {curso.sede_nombre && <span className="ml-1 inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">{curso.sede_nombre}</span>}
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -609,6 +715,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                         <span className={`text-xs px-2 py-1 rounded-full border font-medium ${nivelBadgeColors[curso.nivel] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                                                             {nivelesEducativos[curso.nivel]?.label || curso.nivel}
                                                         </span>
+                                                        {curso.sede_nombre && <span className="ml-1 text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">{curso.sede_nombre}</span>}
                                                     </td>
                                                     <td className="px-4 py-3 text-sm text-gray-600">{curso.profesor_guia}</td>
                                                     <td className="px-4 py-3 text-center"><span className="text-sm font-bold text-[#293577]">{curso.estudiantes}</span></td>
@@ -802,6 +909,15 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                 {listaProfesores.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                             </select>
                                         </div>
+                                        {sedes.length > 0 && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Sede</label>
+                                                <select value={cursoForm.sede_id} onChange={e => setCursoForm({ ...cursoForm, sede_id: e.target.value })} className={inputClass('sede_id')}>
+                                                    <option value="">Sin asignar</option>
+                                                    {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}{s.ciudad ? ` — ${s.ciudad}` : ''}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
                                     </>
                                 )}
 
@@ -849,20 +965,19 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                                 </div>
                                                                 <div>
                                                                     <label className="block text-[11px] font-medium text-gray-500 mb-1">Profesor</label>
-                                                                    <select
-                                                                        value={ma.profesor_id || ''}
-                                                                        onChange={e => updateMateriaAsignada(idx, 'profesor_id', parseInt(e.target.value) || null)}
-                                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] bg-white"
-                                                                    >
-                                                                        <option value="">— Seleccionar profesor —</option>
-                                                                        {/* Si la materia tiene profesores asignados en materia_profesor, filtrar; si no, mostrar todos */}
-                                                                        {(ma.materia_id > 0 && (materiasProfesores[ma.materia_id]?.length ?? 0) > 0
-                                                                            ? materiasProfesores[ma.materia_id]
-                                                                            : listaProfesores
-                                                                        ).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                                                    </select>
+                                                                    <ProfSearchSelect
+                                                                        options={
+                                                                            ma.materia_id > 0 && (materiasProfesores[ma.materia_id]?.length ?? 0) > 0
+                                                                                ? materiasProfesores[ma.materia_id]
+                                                                                : profesoresBySedeOrAll
+                                                                        }
+                                                                        value={ma.profesor_id}
+                                                                        onChange={v => updateMateriaAsignada(idx, 'profesor_id', v)}
+                                                                    />
                                                                     {ma.materia_id > 0 && (materiasProfesores[ma.materia_id]?.length ?? 0) === 0 && (
-                                                                        <p className="text-[10px] text-amber-500 mt-0.5">⚠ Sin profesores asignados a esta materia — mostrando todos</p>
+                                                                        <p className="text-[10px] text-amber-500 mt-0.5">
+                                                                            ⚠ Sin profesores asignados — {cursoForm.sede_id ? 'mostrando profesores de la sede' : 'mostrando todos'}
+                                                                        </p>
                                                                     )}
                                                                 </div>
                                                             </div>

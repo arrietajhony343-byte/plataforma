@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{User, Matricula, Nota, Pago, Observacion, Curso, Periodo, Mensaje, UserActivityLog};
+use App\Models\{User, Matricula, Nota, Pago, Observacion, Curso, Periodo, Mensaje, UserActivityLog, Sede};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Hash, Response};
 use Illuminate\Validation\Rule;
@@ -25,10 +25,14 @@ class EstudianteController extends Controller
             ->orderBy('name')->get()
             ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'documento' => $p->documento]);
 
+        $sedes = Sede::orderBy('nombre')->get()
+            ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
+
         return Inertia::render('Admin/Estudiantes', [
             'estudiantes' => $estudiantes,
             'cursos'      => $cursos,
             'padres'      => $padres,
+            'sedes'       => $sedes,
         ]);
     }
 
@@ -46,6 +50,7 @@ class EstudianteController extends Controller
             'genero'           => 'nullable|in:M,F,otro',
             'curso_id'         => 'nullable|exists:cursos,id',
             'acudiente_id'     => 'nullable|integer',
+            'sede_id'          => 'nullable|exists:sedes,id',
         ], [
             'documento.regex'  => 'El documento solo debe contener números (5–15 dígitos).',
             'documento.unique' => 'Este número de documento ya está registrado.',
@@ -61,6 +66,7 @@ class EstudianteController extends Controller
             'direccion'        => $data['direccion'] ?? $estudiante->direccion,
             'fecha_nacimiento' => $data['fecha_nacimiento'] ?? $estudiante->fecha_nacimiento,
             'genero'           => $data['genero'] ?? $estudiante->genero,
+            'sede_id'          => array_key_exists('sede_id', $data) ? $data['sede_id'] : $estudiante->sede_id,
         ]);
 
         // Actualizar matrícula
@@ -283,6 +289,7 @@ class EstudianteController extends Controller
             ->with([
                 'matriculas' => fn ($q) => $q->where('estado', 'activa')->with('curso'),
                 'padres',
+                'sede',
             ])
             ->get()
             ->map(function (User $est) {
@@ -325,6 +332,8 @@ class EstudianteController extends Controller
                     'promedio'         => $promedio ? round($promedio, 1) : 0,
                     'pagos'            => $estadoPagos,
                     'observaciones'    => $obsCount,
+                    'sede_id'          => $est->sede_id,
+                    'sede_nombre'      => $est->sede?->nombre ?? 'Sin sede',
                 ];
             });
     }

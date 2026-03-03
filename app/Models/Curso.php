@@ -11,7 +11,7 @@ class Curso extends Model
 {
     protected $fillable = [
         'nombre', 'nivel', 'grado', 'grupo', 'jornada', 'anio',
-        'cupo_maximo', 'director_grupo_id', 'activo',
+        'cupo_maximo', 'director_grupo_id', 'activo', 'sede_id',
     ];
 
     protected function casts(): array
@@ -26,6 +26,11 @@ class Curso extends Model
     public function directorGrupo(): BelongsTo
     {
         return $this->belongsTo(User::class, 'director_grupo_id');
+    }
+
+    public function sede(): BelongsTo
+    {
+        return $this->belongsTo(Sede::class);
     }
 
     public function materias(): BelongsToMany

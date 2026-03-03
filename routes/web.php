@@ -13,6 +13,8 @@ use App\Http\Controllers\Admin\CertificadoController;
 use App\Http\Controllers\Admin\HorarioController;
 use App\Http\Controllers\Admin\ReporteController;
 use App\Http\Controllers\Admin\ContabilidadController;
+use App\Http\Controllers\Admin\SedeController;
+use App\Http\Controllers\Admin\JornadaController;
 use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Profesor\DashboardController as ProfesorDashboardController;
 use App\Http\Controllers\Profesor\NotaController as ProfesorNotaController;
@@ -20,6 +22,7 @@ use App\Http\Controllers\Profesor\ObservadorController as ProfesorObservadorCont
 use App\Http\Controllers\Profesor\CalendarioController as ProfesorCalendarioController;
 use App\Http\Controllers\Profesor\ActividadController as ProfesorActividadController;
 use App\Http\Controllers\Profesor\MensajeController as ProfesorMensajeController;
+use App\Http\Controllers\Profesor\AsistenciaController as ProfesorAsistenciaController;
 use App\Http\Controllers\Estudiante\DashboardController as EstudianteDashboardController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -59,7 +62,13 @@ Route::middleware('auth')->group(function () {
 // Rutas de Administrador
 Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
-    
+
+    // Sedes
+    Route::get('/sedes', [SedeController::class, 'index'])->name('sedes');
+    Route::post('/sedes', [SedeController::class, 'store'])->name('sedes.store');
+    Route::put('/sedes/{sede}', [SedeController::class, 'update'])->name('sedes.update');
+    Route::delete('/sedes/{sede}', [SedeController::class, 'destroy'])->name('sedes.destroy');
+
     Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios');
     Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
     Route::put('/usuarios/{user}', [UsuarioController::class, 'update'])->name('usuarios.update');
@@ -124,6 +133,9 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::put('/horarios/{horarioBloque}', [HorarioController::class, 'update'])->name('horarios.update');
     Route::delete('/horarios/{horarioBloque}', [HorarioController::class, 'destroy'])->name('horarios.destroy');
 
+    // Jornadas por nivel
+    Route::post('/jornadas', [JornadaController::class, 'store'])->name('jornadas.store');
+
     // Reportes
     Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes');
     Route::get('/reportes/rendimiento', [ReporteController::class, 'rendimiento'])->name('reportes.rendimiento');
@@ -142,7 +154,8 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
 
     // Notas
     Route::get('/notas', [ProfesorNotaController::class, 'index'])->name('notas');
-    Route::get('/notas/estudiantes', [ProfesorNotaController::class, 'estudiantes'])->name('notas.estudiantes');
+    Route::get('/notas/datos', [ProfesorNotaController::class, 'datos'])->name('notas.datos');
+    Route::post('/notas/conceptos', [ProfesorNotaController::class, 'guardarConceptos'])->name('notas.conceptos');
     Route::post('/notas', [ProfesorNotaController::class, 'store'])->name('notas.store');
 
     // Observador
@@ -154,14 +167,24 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
 
     // Actividades
     Route::get('/actividades', [ProfesorActividadController::class, 'index'])->name('actividades');
+    Route::get('/actividades/crear', [ProfesorActividadController::class, 'create'])->name('actividades.create');
     Route::post('/actividades', [ProfesorActividadController::class, 'store'])->name('actividades.store');
+    Route::get('/actividades/{actividad}/editar', [ProfesorActividadController::class, 'edit'])->name('actividades.edit');
     Route::put('/actividades/{actividad}', [ProfesorActividadController::class, 'update'])->name('actividades.update');
     Route::delete('/actividades/{actividad}', [ProfesorActividadController::class, 'destroy'])->name('actividades.destroy');
     Route::get('/actividades/{actividad}/entregas', [ProfesorActividadController::class, 'entregas'])->name('actividades.entregas');
+    Route::post('/actividades/{actividad}/calificar', [ProfesorActividadController::class, 'calificar'])->name('actividades.calificar');
+    Route::put('/entregas/{entrega}/extender', [ProfesorActividadController::class, 'extenderEntrega'])->name('entregas.extender');
 
     // Mensajes
     Route::get('/mensajes', [ProfesorMensajeController::class, 'index'])->name('mensajes');
     Route::post('/mensajes', [ProfesorMensajeController::class, 'store'])->name('mensajes.store');
+
+    // Asistencias
+    Route::get('/asistencias', [ProfesorAsistenciaController::class, 'index'])->name('asistencias');
+    Route::get('/asistencias/datos', [ProfesorAsistenciaController::class, 'datos'])->name('asistencias.datos');
+    Route::post('/asistencias', [ProfesorAsistenciaController::class, 'store'])->name('asistencias.store');
+    Route::get('/asistencias/resumen', [ProfesorAsistenciaController::class, 'resumen'])->name('asistencias.resumen');
 });
 
 // Rutas de Estudiante

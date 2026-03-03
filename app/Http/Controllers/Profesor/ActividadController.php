@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Profesor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{CursoMateria, Actividad, Entrega};
+use App\Models\{CursoMateria, Actividad, Entrega, Matricula, Periodo, Pregunta, Opcion};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,31 +22,65 @@ class ActividadController extends Controller
             ->with(['curso', 'materia'])
             ->get();
 
-        $cmIds = $cursoMaterias->pluck('id');
+        $cmIds = $cursoMaterias->pluck('id')->toArray();
+
+        // Estudiantes matriculados por curso (sin duplicados)
+        $estudiantesPorCurso = DB::table('matriculas')
+            ->whereIn('curso_id', $cursoMaterias->pluck('curso_id')->unique())
+            ->where('estado', 'activa')
+            ->select('curso_id', DB::raw('COUNT(DISTINCT estudiante_id) as total'))
+            ->groupBy('curso_id')
+            ->pluck('total', 'curso_id');
+
+        // Conteos de entregas por actividad
+        $entregaStats = DB::table('entregas')
+            ->join('actividades', 'actividades.id', '=', 'entregas.actividad_id')
+            ->whereIn('actividades.curso_materia_id', $cmIds)
+            ->select(
+                'entregas.actividad_id',
+                DB::raw("SUM(CASE WHEN entregas.estado IN ('entregada','calificada') THEN 1 ELSE 0 END) as entregados"),
+                DB::raw("SUM(CASE WHEN entregas.estado = 'calificada' THEN 1 ELSE 0 END) as calificados"),
+                DB::raw("SUM(CASE WHEN entregas.estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes"),
+            )
+            ->groupBy('entregas.actividad_id')
+            ->get()
+            ->keyBy('actividad_id');
 
         $actividades = Actividad::whereIn('curso_materia_id', $cmIds)
             ->with(['cursoMateria.curso', 'cursoMateria.materia'])
-            ->withCount('entregas')
             ->latest()
             ->get()
-            ->map(fn($a) => [
-                'id'           => $a->id,
-                'titulo'       => $a->titulo,
-                'descripcion'  => $a->descripcion,
-                'tipo'         => $a->tipo,
-                'curso'        => $a->cursoMateria?->curso?->nombre,
-                'materia'      => $a->cursoMateria?->materia?->nombre,
-                'cursoMateriaId' => $a->curso_materia_id,
-                'fechaEntrega' => $a->fecha_entrega?->format('Y-m-d'),
-                'fechaCreacion' => $a->created_at->format('Y-m-d'),
-                'activa'       => $a->activa,
-                'entregas'     => $a->entregas_count,
-            ]);
+            ->map(function ($a) use ($entregaStats, $estudiantesPorCurso) {
+                $cursoId = $a->cursoMateria?->curso_id;
+                $totalEst = $estudiantesPorCurso->get($cursoId, 0);
+                $stats = $entregaStats->get($a->id);
+
+                return [
+                    'id'              => $a->id,
+                    'titulo'          => $a->titulo,
+                    'descripcion'     => $a->descripcion,
+                    'tipo'            => $a->tipo,
+                    'curso'           => $a->cursoMateria?->curso?->nombre,
+                    'cursoId'         => $cursoId,
+                    'materia'         => $a->cursoMateria?->materia?->nombre,
+                    'cursoMateriaId'  => $a->curso_materia_id,
+                    'fechaAsignacion' => $a->fecha_asignacion?->format('Y-m-d'),
+                    'fechaEntrega'    => $a->fecha_entrega?->format('Y-m-d H:i'),
+                    'porcentaje'      => (float)$a->porcentaje,
+                    'activa'          => $a->activa,
+                    'totalEstudiantes'=> $totalEst,
+                    'entregados'      => (int)($stats->entregados ?? 0),
+                    'calificados'     => (int)($stats->calificados ?? 0),
+                    'pendientes'      => (int)($stats->pendientes ?? 0),
+                ];
+            });
 
         $cursoMateriasMap = $cursoMaterias->map(fn($cm) => [
             'id'      => $cm->id,
             'curso'   => $cm->curso->nombre,
+            'cursoId' => $cm->curso->id,
             'materia' => $cm->materia->nombre,
+            'nivel'   => $cm->curso->nivel,
         ]);
 
         return Inertia::render('Profesor/Actividades', [
@@ -56,59 +92,381 @@ class ActividadController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+
         $data = $request->validate([
             'curso_materia_id' => 'required|exists:curso_materia,id',
             'titulo'           => 'required|string|max:255',
-            'descripcion'      => 'nullable|string|max:2000',
-            'tipo'             => 'required|in:tarea,examen,quiz,proyecto,exposicion',
-            'fecha_entrega'    => 'required|date|after:today',
+            'descripcion'      => 'nullable|string|max:5000',
+            'tipo'             => 'required|in:tarea,examen,quiz,proyecto,taller',
+            'fecha_entrega'    => 'required|date',
+            'porcentaje'       => 'required|numeric|min:0|max:100',
             'activa'           => 'boolean',
+            'archivo_instrucciones' => 'nullable|file|max:10240',
+            'preguntas'        => 'nullable|array',
+            'preguntas.*.enunciado' => 'required_with:preguntas|string',
+            'preguntas.*.tipo'      => 'required_with:preguntas|in:seleccion_multiple,verdadero_falso,abierta',
+            'preguntas.*.puntos'    => 'required_with:preguntas|numeric|min:0',
+            'preguntas.*.imagen'    => 'nullable|file|max:5120',
+            'preguntas.*.opciones'  => 'nullable|array',
+            'preguntas.*.opciones.*.texto'       => 'required|string',
+            'preguntas.*.opciones.*.es_correcta' => 'boolean',
         ]);
 
-        Actividad::create($data);
+        // Verify ownership
+        $cm = CursoMateria::findOrFail($data['curso_materia_id']);
+        if ($cm->profesor_id !== $user->id) {
+            abort(403);
+        }
 
-        return redirect()->back()->with('success', 'Actividad creada exitosamente.');
+        $data['fecha_asignacion'] = now()->toDateString();
+        $data['activa'] = $data['activa'] ?? true;
+
+        // Periodo activo
+        $periodoActivo = Periodo::where('anio', now()->year)
+            ->where('estado', 'activo')
+            ->first();
+        $data['periodo_id'] = $periodoActivo?->id;
+
+        // Handle file upload
+        $archivoPath = null;
+        if ($request->hasFile('archivo_instrucciones')) {
+            $archivoPath = $request->file('archivo_instrucciones')->store('actividades/instrucciones', 'public');
+        }
+
+        $tienePreguntas = !empty($data['preguntas']) && in_array($data['tipo'], ['quiz', 'examen']);
+
+        $actividad = Actividad::create([
+            'curso_materia_id'       => $data['curso_materia_id'],
+            'periodo_id'             => $data['periodo_id'],
+            'titulo'                 => $data['titulo'],
+            'descripcion'            => $data['descripcion'] ?? null,
+            'archivo_instrucciones'  => $archivoPath,
+            'tipo'                   => $data['tipo'],
+            'fecha_asignacion'       => $data['fecha_asignacion'],
+            'fecha_entrega'          => $data['fecha_entrega'],
+            'porcentaje'             => $data['porcentaje'],
+            'activa'                 => $data['activa'],
+            'tiene_preguntas'        => $tienePreguntas,
+        ]);
+
+        // Create questions if quiz/examen
+        if ($tienePreguntas) {
+            foreach ($data['preguntas'] as $idx => $preguntaData) {
+                $imagenPath = null;
+                if ($request->hasFile("preguntas.{$idx}.imagen")) {
+                    $imagenPath = $request->file("preguntas.{$idx}.imagen")->store('actividades/preguntas', 'public');
+                }
+
+                $pregunta = $actividad->preguntas()->create([
+                    'enunciado' => $preguntaData['enunciado'],
+                    'imagen'    => $imagenPath,
+                    'tipo'      => $preguntaData['tipo'],
+                    'puntos'    => $preguntaData['puntos'],
+                    'orden'     => $idx,
+                ]);
+
+                if (isset($preguntaData['opciones']) && $preguntaData['tipo'] !== 'abierta') {
+                    foreach ($preguntaData['opciones'] as $oidx => $opcionData) {
+                        $pregunta->opciones()->create([
+                            'texto'       => $opcionData['texto'],
+                            'es_correcta' => $opcionData['es_correcta'] ?? false,
+                            'orden'       => $oidx,
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // Create entrega rows for all enrolled students
+        $estudianteIds = Matricula::where('curso_id', $cm->curso_id)
+            ->where('estado', 'activa')
+            ->distinct()
+            ->pluck('estudiante_id');
+
+        $rows = $estudianteIds->map(fn($eid) => [
+            'actividad_id'  => $actividad->id,
+            'estudiante_id' => $eid,
+            'estado'        => 'pendiente',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ])->toArray();
+
+        if (!empty($rows)) {
+            Entrega::insert($rows);
+        }
+
+        return redirect()->route('profesor.actividades')->with('success', 'Actividad creada exitosamente.');
+    }
+
+    /**
+     * Shared helper: load cursoMaterias with porcentaje already used.
+     */
+    private function loadCursoMaterias(int $profesorId, ?int $excludeActividadId = null): \Illuminate\Support\Collection
+    {
+        $anio = now()->year;
+        $cms = CursoMateria::where('profesor_id', $profesorId)
+            ->whereHas('curso', fn($q) => $q->where('anio', $anio))
+            ->with(['curso', 'materia'])
+            ->get();
+
+        // Peso ya usado por curso_materia
+        $query = DB::table('actividades')
+            ->whereIn('curso_materia_id', $cms->pluck('id'))
+            ->select('curso_materia_id', DB::raw('SUM(porcentaje) as usado'));
+        if ($excludeActividadId) {
+            $query->where('id', '!=', $excludeActividadId);
+        }
+        $pesoUsado = $query->groupBy('curso_materia_id')->pluck('usado', 'curso_materia_id');
+
+        return $cms->map(fn($cm) => [
+            'id'          => $cm->id,
+            'curso'       => $cm->curso->nombre,
+            'cursoId'     => $cm->curso->id,
+            'materia'     => $cm->materia->nombre,
+            'nivel'       => $cm->curso->nivel,
+            'pesoUsado'   => (float)($pesoUsado->get($cm->id, 0)),
+        ]);
+    }
+
+    /**
+     * Show create activity form.
+     */
+    public function create(): Response
+    {
+        $user = auth()->user();
+        $cursoMaterias = $this->loadCursoMaterias($user->id);
+
+        return Inertia::render('Profesor/CrearActividad', [
+            'profesor'      => ['nombre' => $user->name],
+            'cursoMaterias' => $cursoMaterias,
+            'actividad'     => null,
+        ]);
+    }
+
+    public function edit(Actividad $actividad): Response
+    {
+        $user = auth()->user();
+        if ($actividad->cursoMateria->profesor_id !== $user->id) abort(403);
+
+        $cursoMaterias = $this->loadCursoMaterias($user->id, $actividad->id);
+
+        $actividadData = [
+            'id'                   => $actividad->id,
+            'cursoMateriaId'       => $actividad->curso_materia_id,
+            'titulo'               => $actividad->titulo,
+            'descripcion'          => $actividad->descripcion,
+            'archivoInstrucciones' => $actividad->archivo_instrucciones,
+            'tipo'                 => $actividad->tipo,
+            'fechaEntrega'         => $actividad->fecha_entrega?->format('Y-m-d\TH:i'),
+            'porcentaje'           => (float)$actividad->porcentaje,
+            'activa'               => $actividad->activa,
+            'tienePreguntas'       => $actividad->tiene_preguntas,
+            'preguntas'            => $actividad->preguntas->map(fn($p) => [
+                'id'        => $p->id,
+                'enunciado' => $p->enunciado,
+                'imagen'    => $p->imagen,
+                'tipo'      => $p->tipo,
+                'puntos'    => (float)$p->puntos,
+                'orden'     => $p->orden,
+                'opciones'  => $p->opciones->map(fn($o) => [
+                    'id'          => $o->id,
+                    'texto'       => $o->texto,
+                    'imagen'      => $o->imagen,
+                    'es_correcta' => $o->es_correcta,
+                    'orden'       => $o->orden,
+                ])->toArray(),
+            ])->toArray(),
+        ];
+
+        return Inertia::render('Profesor/CrearActividad', [
+            'profesor'      => ['nombre' => $user->name],
+            'cursoMaterias' => $cursoMaterias,
+            'actividad'     => $actividadData,
+        ]);
     }
 
     public function update(Request $request, Actividad $actividad)
     {
+        $user = auth()->user();
+        if ($actividad->cursoMateria->profesor_id !== $user->id) {
+            abort(403);
+        }
+
         $data = $request->validate([
-            'titulo'        => 'required|string|max:255',
-            'descripcion'   => 'nullable|string|max:2000',
-            'tipo'          => 'required|in:tarea,examen,quiz,proyecto,exposicion',
-            'fecha_entrega' => 'required|date',
-            'activa'        => 'boolean',
+            'titulo'        => 'sometimes|required|string|max:255',
+            'descripcion'   => 'nullable|string|max:5000',
+            'tipo'          => 'sometimes|required|in:tarea,examen,quiz,proyecto,taller',
+            'fecha_entrega' => 'sometimes|required|date',
+            'porcentaje'    => 'sometimes|required|numeric|min:0|max:100',
+            'activa'        => 'nullable',
+            'archivo_instrucciones' => 'nullable|file|max:10240',
+            'preguntas'     => 'nullable|array',
+            'preguntas.*.enunciado' => 'required_with:preguntas|string',
+            'preguntas.*.tipo'      => 'required_with:preguntas|in:seleccion_multiple,verdadero_falso,abierta',
+            'preguntas.*.puntos'    => 'required_with:preguntas|numeric|min:0',
+            'preguntas.*.opciones'  => 'nullable|array',
+            'preguntas.*.opciones.*.texto'       => 'required|string',
+            'preguntas.*.opciones.*.es_correcta' => 'nullable',
         ]);
 
+        // Handle file upload
+        if ($request->hasFile('archivo_instrucciones')) {
+            if ($actividad->archivo_instrucciones) {
+                Storage::disk('public')->delete($actividad->archivo_instrucciones);
+            }
+            $data['archivo_instrucciones'] = $request->file('archivo_instrucciones')->store('actividades/instrucciones', 'public');
+        }
+
+        // Cast activa desde string FormData ('1'/'0') a boolean
+        if (array_key_exists('activa', $data)) {
+            $data['activa'] = filter_var($data['activa'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $tienePreguntas = !empty($data['preguntas']) && in_array($data['tipo'] ?? $actividad->tipo, ['quiz', 'examen']);
+        $data['tiene_preguntas'] = $tienePreguntas;
+
+        unset($data['preguntas']);
         $actividad->update($data);
 
-        return redirect()->back()->with('success', 'Actividad actualizada.');
+        // Replace questions if quiz/examen
+        if ($tienePreguntas) {
+            $actividad->preguntas()->delete(); // cascade deletes opciones too
+            $preguntas = $request->input('preguntas', []);
+            foreach ($preguntas as $idx => $preguntaData) {
+                $imagenPath = null;
+                if ($request->hasFile("preguntas.{$idx}.imagen")) {
+                    $imagenPath = $request->file("preguntas.{$idx}.imagen")->store('actividades/preguntas', 'public');
+                }
+
+                $pregunta = $actividad->preguntas()->create([
+                    'enunciado' => $preguntaData['enunciado'],
+                    'imagen'    => $imagenPath,
+                    'tipo'      => $preguntaData['tipo'],
+                    'puntos'    => $preguntaData['puntos'],
+                    'orden'     => $idx,
+                ]);
+
+                if (isset($preguntaData['opciones']) && $preguntaData['tipo'] !== 'abierta') {
+                    foreach ($preguntaData['opciones'] as $oidx => $opcionData) {
+                        $pregunta->opciones()->create([
+                            'texto'       => $opcionData['texto'],
+                            'es_correcta' => $opcionData['es_correcta'] ?? false,
+                            'orden'       => $oidx,
+                        ]);
+                    }
+                }
+            }
+        } elseif (!in_array($actividad->tipo, ['quiz', 'examen'])) {
+            $actividad->preguntas()->delete();
+            $actividad->update(['tiene_preguntas' => false]);
+        }
+
+        return redirect()->route('profesor.actividades')->with('success', 'Actividad actualizada.');
     }
 
     public function destroy(Actividad $actividad)
     {
+        $user = auth()->user();
+        if ($actividad->cursoMateria->profesor_id !== $user->id) {
+            abort(403);
+        }
+
         $actividad->delete();
         return redirect()->back()->with('success', 'Actividad eliminada.');
     }
 
     /**
-     * Ver entregas de una actividad específica.
+     * Get entregas for an actividad with all student info.
      */
     public function entregas(Actividad $actividad)
     {
+        $user = auth()->user();
+        if ($actividad->cursoMateria->profesor_id !== $user->id) {
+            abort(403);
+        }
+
         $entregas = Entrega::where('actividad_id', $actividad->id)
             ->with('estudiante')
+            ->orderBy('estudiante_id')
             ->get()
             ->map(fn($e) => [
-                'id'            => $e->id,
-                'estudiante'    => $e->estudiante->name,
-                'fechaEntrega'  => $e->created_at->format('Y-m-d H:i'),
-                'archivo'       => $e->archivo,
-                'comentario'    => $e->comentario,
-                'calificacion'  => $e->calificacion,
+                'id'              => $e->id,
+                'estudianteId'    => $e->estudiante_id,
+                'estudiante'      => $e->estudiante->name ?? 'N/A',
+                'estado'          => $e->estado,
+                'contenido'       => $e->contenido,
+                'archivo'         => $e->archivo,
+                'calificacion'    => $e->calificacion,
                 'retroalimentacion' => $e->retroalimentacion,
+                'fechaEntrega'    => $e->fecha_entrega?->format('d M Y H:i'),
             ]);
 
-        return response()->json($entregas);
+        return response()->json([
+            'entregas' => $entregas,
+            'actividad' => [
+                'id'          => $actividad->id,
+                'titulo'      => $actividad->titulo,
+                'tipo'        => $actividad->tipo,
+                'fechaEntrega'=> $actividad->fecha_entrega?->format('Y-m-d'),
+            ],
+        ]);
+    }
+
+    /**
+     * Bulk grade entregas.
+     */
+    public function calificar(Request $request, Actividad $actividad)
+    {
+        $user = auth()->user();
+        if ($actividad->cursoMateria->profesor_id !== $user->id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'calificaciones'                    => 'required|array',
+            'calificaciones.*.entrega_id'       => 'required|exists:entregas,id',
+            'calificaciones.*.calificacion'     => 'nullable|numeric|min:0|max:5',
+            'calificaciones.*.retroalimentacion'=> 'nullable|string|max:500',
+        ]);
+
+        foreach ($data['calificaciones'] as $cal) {
+            $entrega = Entrega::where('id', $cal['entrega_id'])
+                ->where('actividad_id', $actividad->id)
+                ->first();
+
+            if ($entrega && $cal['calificacion'] !== null) {
+                $entrega->update([
+                    'calificacion'     => $cal['calificacion'],
+                    'retroalimentacion'=> $cal['retroalimentacion'] ?? null,
+                    'estado'           => 'calificada',
+                ]);
+            }
+        }
+
+        return redirect()->back()->with('success', 'Calificaciones guardadas exitosamente.');
+    }
+
+    /**
+     * Extend deadline for a specific entrega (reenviar/extensión).
+     */
+    public function extenderEntrega(Request $request, Entrega $entrega)
+    {
+        $user = auth()->user();
+        if ($entrega->actividad->cursoMateria->profesor_id !== $user->id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'nuevo_estado' => 'required|in:pendiente,entregada',
+        ]);
+
+        $entrega->update([
+            'estado'        => $data['nuevo_estado'],
+            'calificacion'  => null,
+            'fecha_entrega' => null,
+        ]);
+
+        return redirect()->back()->with('success', 'Estado de entrega actualizado. El estudiante puede reenviar.');
     }
 }

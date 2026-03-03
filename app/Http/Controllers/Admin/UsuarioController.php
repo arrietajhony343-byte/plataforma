@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Curso;
 use App\Models\Matricula;
 use App\Models\Periodo;
+use App\Models\Sede;
 use App\Models\User;
 use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ class UsuarioController extends Controller
 {
     public function index(): Response
     {
-        $users = User::with('roles')
+        $users = User::with(['roles', 'sede'])
             ->orderByDesc('created_at')
             ->get()
             ->map(function (User $u) {
@@ -67,6 +68,8 @@ class UsuarioController extends Controller
                     'nivel_educativo'  => $matricula?->curso?->nivel,
                     'acudiente_id'     => $acudienteId,
                     'acudiente_name'   => $acudienteNombre,
+                    'sede_id'          => $u->sede_id,
+                    'sede_nombre'      => $u->sede?->nombre ?? null,
                 ];
             });
 
@@ -110,11 +113,15 @@ class UsuarioController extends Controller
                 'documento' => $p->documento,
             ]);
 
+        $sedes = Sede::activa()->orderBy('nombre')->get()
+            ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
+
         return Inertia::render('Admin/Usuarios', [
             'users'      => $users,
             'actionLogs' => $actionLogs,
             'cursos'     => $cursos,
             'padres'     => $padres,
+            'sedes'      => $sedes,
         ]);
     }
 
@@ -134,6 +141,7 @@ class UsuarioController extends Controller
             // Campos académicos (solo estudiantes)
             'curso_id'         => 'nullable|exists:cursos,id',
             'acudiente_id'     => 'nullable|exists:users,id',
+            'sede_id'          => 'nullable|exists:sedes,id',
         ], [
             'documento.regex'   => 'El documento solo debe contener números (5–15 dígitos), sin puntos ni espacios.',
             'documento.unique'  => 'Este número de documento ya está registrado.',
@@ -154,6 +162,7 @@ class UsuarioController extends Controller
             'activo'               => true,
             'must_change_password' => true,
             'email_verified_at'    => now(),
+            'sede_id'              => $data['sede_id'] ?? null,
         ]);
 
         $user->assignRole($data['role']);
@@ -204,6 +213,7 @@ class UsuarioController extends Controller
             // Campos académicos
             'curso_id'         => 'nullable|exists:cursos,id',
             'acudiente_id'     => 'nullable|integer',
+            'sede_id'          => 'nullable|exists:sedes,id',
         ], [
             'documento.regex'  => 'El documento solo debe contener números (5–15 dígitos), sin puntos ni espacios.',
             'documento.unique' => 'Este número de documento ya está registrado.',
@@ -220,6 +230,7 @@ class UsuarioController extends Controller
             'fecha_nacimiento' => $data['fecha_nacimiento'] ?? $user->fecha_nacimiento,
             'genero'           => $data['genero'] ?? $user->genero,
             'activo'           => ($data['status'] ?? 'activo') !== 'bloqueado',
+            'sede_id'          => array_key_exists('sede_id', $data) ? $data['sede_id'] : $user->sede_id,
         ];
 
         if (!empty($data['password'])) {

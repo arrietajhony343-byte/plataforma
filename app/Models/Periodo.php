@@ -8,15 +8,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Periodo extends Model
 {
     protected $fillable = [
-        'anio', 'nombre', 'numero', 'fecha_inicio', 'fecha_fin', 'porcentaje', 'estado',
+        'anio', 'nombre', 'numero', 'fecha_inicio', 'fecha_fin', 'porcentaje', 'estado', 'notas_abiertas',
     ];
 
     protected function casts(): array
     {
         return [
-            'fecha_inicio' => 'date',
-            'fecha_fin'    => 'date',
-            'porcentaje'   => 'decimal:2',
+            'fecha_inicio'    => 'date',
+            'fecha_fin'       => 'date',
+            'porcentaje'      => 'decimal:2',
+            'notas_abiertas'  => 'boolean',
         ];
     }
 

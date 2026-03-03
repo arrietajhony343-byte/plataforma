@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Curso, Materia, CursoMateria, User, Matricula};
+use App\Models\{Curso, Materia, CursoMateria, User, Matricula, Sede};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,7 +15,7 @@ class CursoController extends Controller
         $anio = Curso::max('anio') ?? now()->year;
 
         $cursos = Curso::where('anio', $anio)
-            ->with(['directorGrupo', 'cursoMaterias.materia', 'cursoMaterias.profesor'])
+            ->with(['directorGrupo', 'cursoMaterias.materia', 'cursoMaterias.profesor', 'sede'])
             ->orderBy('nivel')->orderBy('grado')->orderBy('grupo')
             ->get()
             ->map(function (Curso $c) {
@@ -44,6 +44,8 @@ class CursoController extends Controller
                     'profesor_guia'    => $c->directorGrupo?->name ?? 'Sin asignar',
                     'estudiantes'      => $estudiantesCount,
                     'activo'           => $c->activo,
+                    'sede_id'          => $c->sede_id,
+                    'sede_nombre'      => $c->sede?->nombre ?? null,
                 ];
             });
 
@@ -66,7 +68,10 @@ class CursoController extends Controller
         // Mapa materia_id → [{ id, name }] para filtrar el selector de profesor en el modal de curso
         $materiasProfesores = $materias->mapWithKeys(fn($m) => [$m['id'] => $m['profesores']]);
 
-        $profesores = User::role('profesor')->activo()->select('id', 'name')->orderBy('name')->get();
+        $profesores = User::role('profesor')->activo()->select('id', 'name', 'sede_id')->orderBy('name')->get();
+
+        $sedes = Sede::activa()->orderBy('nombre')->get()
+            ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
 
         // Total de estudiantes DISTINTOS matriculados activamente en cursos de este año
         $totalEstudiantes = Matricula::whereHas('curso', fn($q) => $q->where('anio', $anio))
@@ -81,6 +86,7 @@ class CursoController extends Controller
             'materiasProfesores' => $materiasProfesores,
             'totalEstudiantes'   => $totalEstudiantes,
             'anio'               => $anio,
+            'sedes'              => $sedes,
         ]);
     }
 
@@ -94,6 +100,7 @@ class CursoController extends Controller
             'jornada'           => 'required|string|max:20',
             'cupo_maximo'       => 'nullable|integer|min:1|max:60',
             'director_grupo_id' => 'nullable|exists:users,id',
+            'sede_id'           => 'nullable|exists:sedes,id',
             'materias_asignadas'              => 'nullable|array',
             'materias_asignadas.*.materia_id' => 'required|exists:materias,id',
             'materias_asignadas.*.profesor_id'=> 'required|exists:users,id',
@@ -121,6 +128,7 @@ class CursoController extends Controller
             'jornada'           => 'required|string|max:20',
             'cupo_maximo'       => 'nullable|integer|min:1|max:60',
             'director_grupo_id' => 'nullable|exists:users,id',
+            'sede_id'           => 'nullable|exists:sedes,id',
             'materias_asignadas'              => 'nullable|array',
             'materias_asignadas.*.materia_id' => 'required|exists:materias,id',
             'materias_asignadas.*.profesor_id'=> 'required|exists:users,id',

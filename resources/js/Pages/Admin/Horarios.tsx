@@ -81,13 +81,21 @@ interface HorarioSlotMulti {
     clases: Partial<Record<DiaKey, Clase[]>>;
 }
 
+interface Sede {
+    id: number;
+    nombre: string;
+    ciudad: string;
+}
+
 interface Props {
     profesores: ProfesorBackend[];
     horarios: HorarioBackend[];
-    cursos: { id: number; nombre: string }[];
+    cursos: { id: number; nombre: string; sede_id?: number; nivel?: string }[];
     materias: { id: number; nombre: string }[];
     cursoMaterias: CursoMateriaBackend[];
     anioVigente: number;
+    sedes: Sede[];
+    jornadas: Record<NivelKey, TimeSlot[]>;
 }
 
 /* ═══════════════════════════ CONSTANTES ═══════════════════════════ */
@@ -106,7 +114,10 @@ const profesorColors = [
     { color: 'cyan', colorBg: 'bg-cyan-50', colorBorder: 'border-cyan-200', colorText: 'text-cyan-700' },
 ];
 
-const DEFAULT_TIME_SLOTS = [
+type TimeSlot = { hora: string; horaFin: string; esDescanso?: boolean };
+type NivelKey = 'general' | 'preescolar' | 'primaria' | 'bachillerato';
+
+const DEFAULT_TIME_SLOTS: TimeSlot[] = [
     { hora: '7:00', horaFin: '7:50' },
     { hora: '7:50', horaFin: '8:40' },
     { hora: '8:40', horaFin: '9:30' },
@@ -117,6 +128,30 @@ const DEFAULT_TIME_SLOTS = [
     { hora: '12:00', horaFin: '12:50' },
     { hora: '12:50', horaFin: '13:40' },
 ];
+
+const DEFAULT_JORNADA_PREESCOLAR: TimeSlot[] = [
+    { hora: '7:00', horaFin: '7:50' },
+    { hora: '7:50', horaFin: '8:40' },
+    { hora: '8:40', horaFin: '9:10', esDescanso: true },
+    { hora: '9:10', horaFin: '10:00' },
+    { hora: '10:00', horaFin: '10:50' },
+    { hora: '10:50', horaFin: '11:15', esDescanso: true },
+    { hora: '11:15', horaFin: '12:05' },
+];
+
+const NIVEL_LABELS: Record<NivelKey, string> = {
+    general: 'General',
+    preescolar: 'Preescolar / Transición',
+    primaria: 'Primaria',
+    bachillerato: 'Bachillerato',
+};
+
+const NIVEL_DEFAULTS: Record<NivelKey, TimeSlot[]> = {
+    general: DEFAULT_TIME_SLOTS,
+    preescolar: DEFAULT_JORNADA_PREESCOLAR,
+    primaria: DEFAULT_TIME_SLOTS,
+    bachillerato: DEFAULT_TIME_SLOTS,
+};
 
 const dias: { key: DiaKey; label: string }[] = [
     { key: 'lunes', label: 'Lunes' },
@@ -135,17 +170,25 @@ const SearchIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
 );
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
-export default function Horarios({ profesores: profesoresRaw, horarios, cursos, materias, cursoMaterias, anioVigente }: Props) {
+export default function Horarios({ profesores: profesoresRaw, horarios, cursos, materias, cursoMaterias, anioVigente, sedes, jornadas: jornadasIniciales }: Props) {
     /* ── Vista ── */
     const [vistaActiva, setVistaActiva] = useState<'general' | 'profesor' | 'curso'>('general');
     const [profesorSeleccionado, setProfesorSeleccionado] = useState('');
     const [cursoSeleccionado, setCursoSeleccionado] = useState('');
     const [searchProfesor, setSearchProfesor] = useState('');
+    const [sedeSel, setSedeSel] = useState('todas');
 
-    /* ── Jornada configurable ── */
-    const [customSlots, setCustomSlots] = useState(DEFAULT_TIME_SLOTS);
+    /* ── Jornada configurable por nivel (inicializada desde BD) ── */
+    const [jornadasByNivel, setJornadasByNivel] = useState<Record<NivelKey, TimeSlot[]>>({
+        general:      (jornadasIniciales?.general      ?? NIVEL_DEFAULTS.general).map(s => ({ ...s })),
+        preescolar:   (jornadasIniciales?.preescolar   ?? NIVEL_DEFAULTS.preescolar).map(s => ({ ...s })),
+        primaria:     (jornadasIniciales?.primaria     ?? NIVEL_DEFAULTS.primaria).map(s => ({ ...s })),
+        bachillerato: (jornadasIniciales?.bachillerato ?? NIVEL_DEFAULTS.bachillerato).map(s => ({ ...s })),
+    });
     const [showConfigModal, setShowConfigModal] = useState(false);
-    const [configSlots, setConfigSlots] = useState(DEFAULT_TIME_SLOTS);
+    const [configNivel, setConfigNivel] = useState<NivelKey>('general');
+    const [configSlots, setConfigSlots] = useState<TimeSlot[]>(DEFAULT_TIME_SLOTS);
+    const [savingJornada, setSavingJornada] = useState(false);
 
     /* ── CRUD Modal ── */
     const [showModal, setShowModal] = useState(false);
@@ -187,6 +230,24 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
     /* Normaliza '07:00' → '7:00' como safety net ante datos legacy */
     const normalizeHora = (h: string) => h.replace(/^0(\d):/, '$1:');
 
+    /** Mapea nivel de DB al NivelKey para jornada */
+    const normalizeNivel = (nivel?: string | null): NivelKey => {
+        const n = (nivel ?? '').toLowerCase();
+        if (n === 'preescolar' || n === 'transicion') return 'preescolar';
+        if (n === 'primaria') return 'primaria';
+        if (n === 'bachillerato' || n === 'secundaria' || n === 'media') return 'bachillerato';
+        return 'general';
+    };
+
+    /** Jornada activa: en "Por Curso" usa el nivel del curso seleccionado, en el resto usa 'general' */
+    const customSlots = useMemo<TimeSlot[]>(() => {
+        if (vistaActiva === 'curso' && cursoSeleccionado) {
+            const c = cursos.find(cur => cur.nombre === cursoSeleccionado);
+            return jornadasByNivel[normalizeNivel(c?.nivel)] ?? jornadasByNivel.general;
+        }
+        return jornadasByNivel.general;
+    }, [vistaActiva, cursoSeleccionado, cursos, jornadasByNivel]);
+
     const horarioData: HorarioSlotMulti[] = useMemo(() => {
         const descansoHoras = new Set(customSlots.filter(s => s.esDescanso).map(s => s.hora));
         return customSlots.map(slot => {
@@ -211,9 +272,39 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         });
     }, [horarios, customSlots]);
 
-    /* allClases: directamente del prop, excluyendo cualquier entrada en horario de descanso */
-    const allClases = useMemo<Clase[]>(() => {
+    /** horarioData filtrado por sede para la vista General */
+    const horarioDataGeneral: HorarioSlotMulti[] = useMemo(() => {
+        if (sedeSel === 'todas') return horarioData;
         const descansoHoras = new Set(customSlots.filter(s => s.esDescanso).map(s => s.hora));
+        const horariosFiltrados = horarios.filter(h => {
+            const curso = cursos.find(c => c.id === h.curso_id);
+            return curso && String(curso.sede_id ?? '') === sedeSel;
+        });
+        return customSlots.map(slot => {
+            if (slot.esDescanso) return { hora: slot.hora, horaFin: slot.horaFin, esDescanso: true as const, clases: {} };
+            const clases: Partial<Record<DiaKey, Clase[]>> = {};
+            horariosFiltrados.forEach(h => {
+                const hn = normalizeHora(h.hora);
+                if (!descansoHoras.has(hn) && hn === slot.hora && dias.some(d => d.key === h.dia)) {
+                    const dia = h.dia as DiaKey;
+                    if (!clases[dia]) clases[dia] = [];
+                    clases[dia]!.push({
+                        id: h.id, curso_materia_id: h.curso_materia_id,
+                        materia: h.materia, materia_id: h.materia_id,
+                        curso: h.curso, curso_id: h.curso_id,
+                        profesor: h.profesor ?? '', profesor_id: h.profesor_id,
+                        aula: h.salon ?? '', dia: h.dia,
+                        hora: hn, horaFin: h.horaFin,
+                    });
+                }
+            });
+            return { hora: slot.hora, horaFin: slot.horaFin, clases };
+        });
+    }, [horarioData, horarios, cursos, customSlots, sedeSel]);
+
+    /* allClases: directamente del prop, excluyendo cualquier entrada en horario de descanso (usa jornada general) */
+    const allClases = useMemo<Clase[]>(() => {
+        const descansoHoras = new Set(jornadasByNivel.general.filter(s => s.esDescanso).map(s => s.hora));
         return horarios
             .filter(h => !descansoHoras.has(normalizeHora(h.hora)))
             .map(h => ({
@@ -224,10 +315,10 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 aula: h.salon ?? '', dia: h.dia,
                 hora: h.hora, horaFin: h.horaFin,
             }));
-    }, [horarios, customSlots]);
+    }, [horarios, jornadasByNivel]);
 
     const stats = useMemo(() => {
-        const bloquesPosibles = customSlots.filter(s => !s.esDescanso).length * 5;
+        const bloquesPosibles = jornadasByNivel.general.filter(s => !s.esDescanso).length * 5;
         return {
             totalClases: allClases.length,
             totalProfesores: profesores.length,
@@ -236,7 +327,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             totalCursos: cursos.length,
             cursosConClases: new Set(allClases.map(c => c.curso_id)).size,
         };
-    }, [allClases, profesores, customSlots, cursos]);
+    }, [allClases, profesores, jornadasByNivel, cursos]);
 
     const filteredProfesores = useMemo(() => {
         if (!searchProfesor) return profesores;
@@ -457,12 +548,34 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
 
     /* ── Configuración de jornada ── */
     const openConfig = () => {
-        setConfigSlots(customSlots.map(s => ({ ...s })));
+        // Pre-seleccionar el nivel activo según contexto
+        let nivel: NivelKey = 'general';
+        if (vistaActiva === 'curso' && cursoSeleccionado) {
+            const c = cursos.find(cur => cur.nombre === cursoSeleccionado);
+            nivel = normalizeNivel(c?.nivel);
+        }
+        setConfigNivel(nivel);
+        setConfigSlots(jornadasByNivel[nivel].map(s => ({ ...s })));
         setShowConfigModal(true);
     };
     const saveConfig = () => {
-        setCustomSlots(configSlots);
+        const nuevosSlots = configSlots.map(s => ({ ...s }));
+        setJornadasByNivel(prev => ({ ...prev, [configNivel]: nuevosSlots }));
+        setSavingJornada(true);
+        router.post(
+            route('admin.jornadas.store'),
+            { nivel: configNivel, bloques: nuevosSlots },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => setSavingJornada(false),
+            },
+        );
         setShowConfigModal(false);
+    };
+    const switchConfigNivel = (nivel: NivelKey) => {
+        setConfigNivel(nivel);
+        setConfigSlots(jornadasByNivel[nivel].map(s => ({ ...s })));
     };
     const addConfigSlot = (esDescanso = false) => {
         const last = configSlots[configSlots.length - 1];
@@ -821,16 +934,16 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                                                 >
                                                                     {/* Barra lateral con color del profesor */}
                                                                     <div className={`w-1.5 flex-shrink-0 ${colores?.bg ?? 'bg-gray-300'}`} />
-                                                                    <div className="flex-1 px-1.5 py-1 min-w-0">
-                                                                        <p className="text-[10px] font-bold text-gray-800 leading-tight truncate">{clase.materia}</p>
+                                                                    <div className="flex-1 px-1.5 py-1.5 min-w-0">
+                                                                        <p className="text-xs font-bold text-gray-800 leading-tight truncate">{clase.materia}</p>
                                                                         {/* Badge curso */}
-                                                                        <span className="inline-block mt-0.5 px-1 py-px rounded text-[8px] font-bold bg-indigo-50 text-indigo-700 leading-none truncate max-w-full">{clase.curso}</span>
+                                                                        <span className="inline-block mt-0.5 px-1 py-px rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 leading-none truncate max-w-full">{clase.curso}</span>
                                                                         {/* Profesor con avatar */}
-                                                                        <div className="flex items-center gap-1 mt-0.5">
-                                                                            <span className={`flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold text-white ${colores?.bg ?? 'bg-gray-400'}`}>
+                                                                        <div className="flex items-center gap-1 mt-1">
+                                                                            <span className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ${colores?.bg ?? 'bg-gray-400'}`}>
                                                                                 {iniciales}
                                                                             </span>
-                                                                            <p className={`text-[9px] font-medium truncate ${colores?.text ?? 'text-gray-500'}`}>{clase.profesor}</p>
+                                                                            <p className={`text-[10px] font-medium truncate ${colores?.text ?? 'text-gray-500'}`}>{clase.profesor}</p>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -968,9 +1081,9 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                                         onClick={() => setClaseDetalle(clase)}
                                                         className={`p-2 rounded-lg ${getClaseColor(clase.profesor)} cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5 group relative`}
                                                     >
-                                                        <p className="text-[11px] font-bold text-gray-800 leading-tight">{clase.materia}</p>
-                                                        <p className="text-[10px] text-gray-600 font-medium">{clase.curso}</p>
-                                                        <p className="text-[10px] text-gray-500 truncate">{clase.profesor}</p>
+                                                        <p className="text-xs font-bold text-gray-800 leading-tight">{clase.materia}</p>
+                                                        <p className="text-[11px] text-gray-600 font-medium">{clase.curso}</p>
+                                                        <p className="text-[11px] text-gray-500 truncate">{clase.profesor}</p>
                                                         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <span className="text-[9px] bg-white/80 rounded px-1 py-0.5 text-gray-500">{clase.aula}</span>
                                                         </div>
@@ -1080,10 +1193,17 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                         <button
                             onClick={openConfig}
                             className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-sm border border-gray-100 text-sm text-gray-500 hover:bg-gray-50 hover:text-[#293577] transition-colors"
-                            title="Configurar jornada horaria"
+                            title="Configurar jornada horaria por nivel"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
-                            <span className="hidden sm:inline">Jornada</span>
+                            <span className="hidden sm:inline">Jornadas</span>
+                            {vistaActiva === 'curso' && cursoSeleccionado && (() => {
+                                const c = cursos.find(cur => cur.nombre === cursoSeleccionado);
+                                const nk = normalizeNivel(c?.nivel);
+                                return nk !== 'general' ? (
+                                    <span className="hidden sm:inline text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-md leading-none">{NIVEL_LABELS[nk].split(' /')[0]}</span>
+                                ) : null;
+                            })()}
                         </button>
                         <button
                             onClick={handlePrintPDF}
@@ -1105,11 +1225,21 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 {/* ===== Horario General ===== */}
                 {vistaActiva === 'general' && (
                     <>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                             <h2 className="text-sm font-bold text-gray-700">{getDisplayTitle()}</h2>
+                            {sedes.length > 0 && (
+                                <select
+                                    value={sedeSel}
+                                    onChange={e => setSedeSel(e.target.value)}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                >
+                                    <option value="todas">Todas las sedes</option>
+                                    {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                </select>
+                            )}
                             <div className="flex-1 h-px bg-gray-200" />
                         </div>
-                        {renderHorarioGridGeneral(horarioData)}
+                        {renderHorarioGridGeneral(horarioDataGeneral)}
 
                    
                     </>
@@ -1283,10 +1413,22 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                         <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
                             <div className="flex items-center justify-between mb-3">
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Seleccionar curso — {anioVigente}</p>
-                                <span className="text-[10px] text-gray-400">{stats.cursosConClases} de {stats.totalCursos} con horario</span>
+                                <div className="flex items-center gap-3">
+                                    {sedes.length > 0 && (
+                                        <select
+                                            value={sedeSel}
+                                            onChange={e => { setSedeSel(e.target.value); setCursoSeleccionado(''); }}
+                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                        >
+                                            <option value="todas">Todas las sedes</option>
+                                            {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                        </select>
+                                    )}
+                                    <span className="text-[10px] text-gray-400">{stats.cursosConClases} de {stats.totalCursos} con horario</span>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                                {cursos.map(c => {
+                                {cursos.filter(c => sedeSel === 'todas' || String(c.sede_id ?? '') === sedeSel).map(c => {
                                     const clasesDelCurso = allClases.filter(cl => cl.curso_id === c.id).length;
                                     const isSelected = cursoSeleccionado === c.nombre;
                                     return (
@@ -1791,17 +1933,52 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             {/* ═══════ MODAL CONFIGURAR JORNADA ═══════ */}
             {showConfigModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowConfigModal(false)}>
-                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
                         <div className="bg-gradient-to-r from-[#181b49] to-[#293577] rounded-t-2xl px-6 py-4 flex-shrink-0">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                                Configurar Jornada Horaria
+                                Jornadas por Nivel Educativo
                             </h2>
-                            <p className="text-blue-200 text-xs">Define los bloques de clase y descansos del día escolar</p>
+                            <p className="text-blue-200 text-xs mt-0.5">Cada nivel puede tener su propio horario de clases y descansos</p>
                         </div>
-                        <div className="p-6 space-y-2 overflow-y-auto flex-1">
+
+                        {/* Pestañas de nivel */}
+                        <div className="flex border-b border-gray-100 bg-gray-50/60 flex-shrink-0 px-2 pt-2 gap-1 overflow-x-auto">
+                            {(Object.keys(NIVEL_LABELS) as NivelKey[]).map(nk => {
+                                const slots = jornadasByNivel[nk];
+                                const clases = slots.filter(s => !s.esDescanso).length;
+                                const isActive = configNivel === nk;
+                                const isModified = JSON.stringify(jornadasByNivel[nk]) !== JSON.stringify(NIVEL_DEFAULTS[nk]);
+                                return (
+                                    <button
+                                        key={nk}
+                                        type="button"
+                                        onClick={() => switchConfigNivel(nk)}
+                                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium transition-all border-b-2 ${
+                                            isActive
+                                                ? 'border-[#293577] text-[#293577] bg-white shadow-sm'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-white/70'
+                                        }`}
+                                    >
+                                        {NIVEL_LABELS[nk]}
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            {clases}h
+                                        </span>
+                                        {isModified && (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Modificada" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Cuerpo */}
+                        <div className="p-5 space-y-2 overflow-y-auto flex-1">
                             <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bloques ({configSlots.length})</p>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    {NIVEL_LABELS[configNivel]} — {configSlots.length} bloques
+                                </p>
                                 <p className="text-[10px] text-gray-400">{configSlots.filter(s => !s.esDescanso).length} clases · {configSlots.filter(s => s.esDescanso).length} descansos</p>
                             </div>
                             {configSlots.map((slot, idx) => (
@@ -1852,15 +2029,23 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                 </button>
                             </div>
                         </div>
+
+                        {/* Footer */}
                         <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
                             <button type="button" onClick={() => setShowConfigModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
                                 Cancelar
                             </button>
-                            <button type="button" onClick={() => setConfigSlots(DEFAULT_TIME_SLOTS.map(s => ({ ...s })))} className="px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-xs font-medium text-gray-500">
+                            <button
+                                type="button"
+                                onClick={() => setConfigSlots(NIVEL_DEFAULTS[configNivel].map(s => ({ ...s })))}
+                                className="px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-xs font-medium text-gray-500"
+                                title={`Restaurar jornada por defecto de ${NIVEL_LABELS[configNivel]}`}
+                            >
                                 Restablecer
                             </button>
-                            <button type="button" onClick={saveConfig} className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-[#293577]/25 text-sm font-medium">
-                                Guardar Jornada
+                            <button type="button" onClick={saveConfig} disabled={savingJornada} className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-[#293577]/25 text-sm font-medium disabled:opacity-60 flex items-center justify-center gap-2">
+                                {savingJornada && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>}
+                                Guardar — {NIVEL_LABELS[configNivel]}
                             </button>
                         </div>
                     </div>

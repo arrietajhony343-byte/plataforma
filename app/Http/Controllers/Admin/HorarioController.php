@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{HorarioBloque, CursoMateria, Curso, User, Materia};
+use App\Models\{HorarioBloque, CursoMateria, Curso, User, Materia, Sede, Jornada};
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -24,7 +24,7 @@ class HorarioController extends Controller
 
         $cursosQuery = Curso::activo()
             ->where('anio', $anio)
-            ->with(['cursoMaterias.horarioBloques', 'cursoMaterias.materia', 'cursoMaterias.profesor'])
+            ->with(['cursoMaterias.horarioBloques', 'cursoMaterias.materia', 'cursoMaterias.profesor', 'sede'])
             ->orderBy('grado')
             ->orderBy('grupo')
             ->get()
@@ -49,6 +49,8 @@ class HorarioController extends Controller
                         'hora'            => $bloque->hora_inicio,
                         'horaFin'         => $bloque->hora_fin,
                         'salon'           => $bloque->salon ?? '',
+                        'sede_id'         => $curso->sede_id,
+                        'sede_nombre'     => $curso->sede?->nombre ?? null,
                     ];
                 }
             }
@@ -99,13 +101,43 @@ class HorarioController extends Controller
 
         $materias = Materia::activa()->select('id', 'nombre')->orderBy('nombre')->get();
 
+        $sedes = Sede::activa()->orderBy('nombre')->get()
+            ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
+
+        // Jornadas configuradas por nivel (defaults si aún no existen)
+        $jornadasDefaults = [
+            'general'      => [
+                ['hora'=>'7:00','horaFin'=>'7:50'],['hora'=>'7:50','horaFin'=>'8:40'],
+                ['hora'=>'8:40','horaFin'=>'9:30'],['hora'=>'9:30','horaFin'=>'10:00','esDescanso'=>true],
+                ['hora'=>'10:00','horaFin'=>'10:50'],['hora'=>'10:50','horaFin'=>'11:40'],
+                ['hora'=>'11:40','horaFin'=>'12:00','esDescanso'=>true],
+                ['hora'=>'12:00','horaFin'=>'12:50'],['hora'=>'12:50','horaFin'=>'13:40'],
+            ],
+            'preescolar'   => [
+                ['hora'=>'7:00','horaFin'=>'7:50'],['hora'=>'7:50','horaFin'=>'8:40'],
+                ['hora'=>'8:40','horaFin'=>'9:10','esDescanso'=>true],
+                ['hora'=>'9:10','horaFin'=>'10:00'],['hora'=>'10:00','horaFin'=>'10:50'],
+                ['hora'=>'10:50','horaFin'=>'11:15','esDescanso'=>true],['hora'=>'11:15','horaFin'=>'12:05'],
+            ],
+            'primaria'     => null, // fallback a general
+            'bachillerato' => null,
+        ];
+
+        $jornadas = [];
+        foreach (array_keys($jornadasDefaults) as $nivel) {
+            $row = Jornada::where('nivel', $nivel)->first();
+            $jornadas[$nivel] = $row ? $row->bloques : ($jornadasDefaults[$nivel] ?? $jornadasDefaults['general']);
+        }
+
         return Inertia::render('Admin/Horarios', [
             'profesores'    => $profesores,
             'horarios'      => $horarios,
-            'cursos'        => $cursosQuery->map(fn($c) => ['id' => $c->id, 'nombre' => $c->nombre]),
+            'cursos'        => $cursosQuery->map(fn($c) => ['id' => $c->id, 'nombre' => $c->nombre, 'sede_id' => $c->sede_id, 'nivel' => $c->nivel]),
             'materias'      => $materias,
             'cursoMaterias' => $cursoMaterias,
             'anioVigente'   => $anio,
+            'sedes'         => $sedes,
+            'jornadas'      => $jornadas,
         ]);
     }
 

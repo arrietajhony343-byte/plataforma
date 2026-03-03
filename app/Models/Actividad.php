@@ -11,17 +11,20 @@ class Actividad extends Model
     protected $table = 'actividades';
 
     protected $fillable = [
-        'curso_materia_id', 'titulo', 'descripcion', 'tipo',
-        'fecha_asignacion', 'fecha_entrega', 'porcentaje', 'activa',
+        'curso_materia_id', 'periodo_id', 'titulo', 'descripcion', 'archivo_instrucciones',
+        'instrucciones_extra', 'tipo', 'fecha_asignacion', 'fecha_entrega',
+        'porcentaje', 'activa', 'tiene_preguntas',
     ];
 
     protected function casts(): array
     {
         return [
-            'fecha_asignacion' => 'date',
-            'fecha_entrega'    => 'date',
-            'porcentaje'       => 'decimal:2',
-            'activa'           => 'boolean',
+            'fecha_asignacion'   => 'date',
+            'fecha_entrega'      => 'datetime',
+            'porcentaje'         => 'decimal:2',
+            'activa'             => 'boolean',
+            'tiene_preguntas'    => 'boolean',
+            'instrucciones_extra'=> 'array',
         ];
     }
 
@@ -32,9 +35,19 @@ class Actividad extends Model
         return $this->belongsTo(CursoMateria::class);
     }
 
+    public function periodo(): BelongsTo
+    {
+        return $this->belongsTo(Periodo::class);
+    }
+
     public function entregas(): HasMany
     {
         return $this->hasMany(Entrega::class);
+    }
+
+    public function preguntas(): HasMany
+    {
+        return $this->hasMany(Pregunta::class)->orderBy('orden');
     }
 
     /* ── Scopes ── */

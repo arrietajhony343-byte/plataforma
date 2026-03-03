@@ -3,6 +3,8 @@ import { Head, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
+interface Sede { id: number; nombre: string; ciudad: string; }
+
 interface User {
     id: number;
     name: string;
@@ -24,6 +26,8 @@ interface User {
     nivel_educativo?: string;
     acudiente_id?: number;
     acudiente_name?: string;
+    sede_id?: number;
+    sede_nombre?: string;
 }
 
 interface Curso {
@@ -55,18 +59,20 @@ interface Props {
     actionLogs: ActionLog[];
     cursos: Curso[];
     padres: Padre[];
+    sedes: Sede[];
 }
 
 const EMPTY_FORM = {
     name: '', email: '', phone: '', role: 'estudiante', password: '', status: 'activo',
     documento: '', tipo_documento: 'CC', direccion: '', fecha_nacimiento: '', genero: '',
-    nivel_educativo: '', curso_id: '', acudiente_id: '',
+    nivel_educativo: '', curso_id: '', acudiente_id: '', sede_id: '',
 };
 
-export default function Usuarios({ users: initialUsers, actionLogs, cursos, padres }: Props) {
+export default function Usuarios({ users: initialUsers, actionLogs, cursos, padres, sedes }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('todos');
     const [filterStatus, setFilterStatus] = useState('todos');
+    const [filterSede, setFilterSede] = useState('todas');
     const [showModal, setShowModal] = useState(false);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -87,8 +93,9 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                               (user.documento ?? '').includes(searchTerm);
         const matchesRole = filterRole === 'todos' || user.role === filterRole;
         const matchesStatus = filterStatus === 'todos' || user.status === filterStatus;
-        return matchesSearch && matchesRole && matchesStatus;
-    }), [users, searchTerm, filterRole, filterStatus]);
+        const matchesSede = filterSede === 'todas' || String(user.sede_id ?? '') === filterSede;
+        return matchesSearch && matchesRole && matchesStatus && matchesSede;
+    }), [users, searchTerm, filterRole, filterStatus, filterSede]);
 
     /* ─── Helpers visuales ─── */
     const getRoleBadge = (role: string) => {
@@ -177,6 +184,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
             nivel_educativo: user.nivel_educativo || '',
             curso_id: user.curso_id?.toString() || '',
             acudiente_id: user.acudiente_id?.toString() || '',
+            sede_id: user.sede_id?.toString() || '',
         });
         setFormErrors({});
         setShowModal(true);
@@ -371,6 +379,16 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                 <option value="bloqueado">Bloqueados</option>
                                 <option value="pendiente">Pendientes</option>
                             </select>
+                            {sedes.length > 0 && (
+                                <select
+                                    value={filterSede}
+                                    onChange={(e) => setFilterSede(e.target.value)}
+                                    className="px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white min-w-[150px]"
+                                >
+                                    <option value="todas">Todas las sedes</option>
+                                    {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                </select>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
@@ -417,6 +435,9 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                                         <p className="text-xs text-gray-400 truncate">{user.email}</p>
                                                         {user.documento && (
                                                             <p className="text-[11px] text-gray-400">{tipoDocLabel[user.tipo_documento] || user.tipo_documento} {user.documento}</p>
+                                                        )}
+                                                        {user.sede_nombre && (
+                                                            <span className="mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">{user.sede_nombre}</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -544,6 +565,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                         <div className="flex-1 min-w-0">
                                             <p className="font-semibold text-gray-900 text-sm truncate">{user.name}</p>
                                             <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                                            {user.sede_nombre && <span className="mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">{user.sede_nombre}</span>}
                                         </div>
                                         {user.status !== 'pendiente' && (
                                             <button
@@ -799,8 +821,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                                 className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
                                             >
                                                 <option value="">— Sin asignar —</option>
-                                                <option value="preescolar">Preescolar</option>
-                                                <option value="transicion">Transición</option>
+                                                <option value="transicion">Transición / Pre-escolar</option>
                                                 <option value="primaria">Primaria</option>
                                                 <option value="bachillerato">Bachillerato</option>
                                             </select>
@@ -816,7 +837,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                             >
                                                 <option value="">— Sin asignar —</option>
                                                 {(formData.nivel_educativo
-                                                    ? cursos.filter(c => c.nivel === formData.nivel_educativo)
+                                                    ? cursos.filter(c => c.nivel === formData.nivel_educativo || (formData.nivel_educativo === 'transicion' && c.nivel === 'preescolar'))
                                                     : cursos
                                                 ).map(c => (
                                                     <option key={c.id} value={c.id}>{c.nombre}</option>
@@ -852,6 +873,21 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                                 </p>
                                             )}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* Sede — visible para cualquier rol si hay sedes */}
+                                {sedes.length > 0 && (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sede</label>
+                                        <select
+                                            value={formData.sede_id}
+                                            onChange={(e) => setFormData(f => ({ ...f, sede_id: e.target.value }))}
+                                            className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                        >
+                                            <option value="">— Sin asignar —</option>
+                                            {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}{s.ciudad ? ` — ${s.ciudad}` : ''}</option>)}
+                                        </select>
                                     </div>
                                 )}
 

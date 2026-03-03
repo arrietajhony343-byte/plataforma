@@ -35,6 +35,7 @@ class User extends Authenticatable
         'login_attempts',
         'last_login_at',
         'must_change_password',
+        'sede_id',
     ];
 
     /**
@@ -150,6 +151,12 @@ class User extends Authenticatable
     public function cursosDirector(): HasMany
     {
         return $this->hasMany(Curso::class, 'director_grupo_id');
+    }
+
+    /** Sede a la que pertenece el usuario */
+    public function sede(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Sede::class);
     }
 
     /* ══════════════════════════════════════════════

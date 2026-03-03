@@ -5,17 +5,22 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Nota extends Model
+class Asistencia extends Model
 {
     protected $fillable = [
-        'estudiante_id', 'curso_materia_id', 'periodo_id', 'concepto_nota_id',
-        'valor', 'tipo', 'descripcion',
+        'estudiante_id',
+        'curso_materia_id',
+        'horario_bloque_id',
+        'fecha',
+        'estado',
+        'observacion',
+        'registrado_por',
     ];
 
     protected function casts(): array
     {
         return [
-            'valor' => 'decimal:1',
+            'fecha' => 'date',
         ];
     }
 
@@ -31,20 +36,20 @@ class Nota extends Model
         return $this->belongsTo(CursoMateria::class);
     }
 
-    public function periodo(): BelongsTo
+    public function horarioBloque(): BelongsTo
     {
-        return $this->belongsTo(Periodo::class);
+        return $this->belongsTo(HorarioBloque::class);
     }
 
-    public function conceptoNota(): BelongsTo
+    public function registrador(): BelongsTo
     {
-        return $this->belongsTo(ConceptoNota::class);
+        return $this->belongsTo(User::class, 'registrado_por');
     }
 
     /* ── Scopes ── */
 
-    public function scopeTipo($query, string $tipo)
+    public function scopeFecha($query, string $fecha)
     {
-        return $query->where('tipo', $tipo);
+        return $query->where('fecha', $fecha);
     }
 }

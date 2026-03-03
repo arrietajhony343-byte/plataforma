@@ -1,5 +1,5 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 import * as XLSX from 'xlsx';
@@ -18,6 +18,7 @@ interface CursoItem {
     nombre: string;
     nivel: string;
     grado: string;
+    sede_id: number | null;
 }
 
 interface RendimientoRow {
@@ -48,23 +49,29 @@ interface EstudianteDetalle {
 }
 
 interface AsistenciaData {
-    porCurso: { curso: string; nivel: string; totalEstudiantes: number; promedioAsist: number; inasistencias: number; tardanzas: number }[];
-    promedioGeneral: number;
+    porCurso: { curso: string; nivel: string; totalEstudiantes: number; promedioAsist: number | null; inasistencias: number; tardanzas: number; totalRegistros?: number }[];
+    promedioGeneral: number | null;
     totalInasistencias: number;
     totalTardanzas: number;
-    mensaje: string;
+    mensaje: string | null;
 }
 
 interface Props {
     periodos: Periodo[];
     periodoActualId: number | null;
     cursos: CursoItem[];
+    sedes: Sede[];
     anioVigente: number;
+}
+
+interface Sede {
+    id: number;
+    nombre: string;
 }
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 const nivelesConfig: Record<string, { label: string; color: string; colorChip: string }> = {
-    preescolar:  { label: 'Pre-escolar',  color: 'bg-pink-100 text-pink-700',    colorChip: 'bg-pink-500' },
+    preescolar:  { label: 'Transición',   color: 'bg-purple-100 text-purple-700', colorChip: 'bg-purple-500' }, // alias → transicion
     transicion:  { label: 'Transición',   color: 'bg-purple-100 text-purple-700', colorChip: 'bg-purple-500' },
     primaria:    { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',    colorChip: 'bg-blue-500' },
     secundaria:  { label: 'Secundaria',   color: 'bg-cyan-100 text-cyan-700',    colorChip: 'bg-cyan-500' },
@@ -77,12 +84,13 @@ const getNivelLabel = (nivel: string) => nivelesConfig[nivel]?.label ?? nivel;
 const getNivelChipColor = (nivel: string) => nivelesConfig[nivel]?.colorChip ?? 'bg-gray-500';
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
-export default function Reportes({ periodos, periodoActualId, cursos, anioVigente }: Props) {
+export default function Reportes({ periodos, periodoActualId, cursos, sedes, anioVigente }: Props) {
     // ── State ──
     const [selectedReport, setSelectedReport] = useState<'rendimiento' | 'asistencia' | 'comentarios'>('rendimiento');
     const [selectedPeriodo, setSelectedPeriodo] = useState<string>(periodoActualId?.toString() ?? '');
     const [nivelSeleccionado, setNivelSeleccionado] = useState('todos');
     const [selectedCurso, setSelectedCurso] = useState<string>('todos');
+    const [sedeSel, setSedeSel] = useState<string>('todas');
 
     // Data states
     const [loading, setLoading] = useState(false);
@@ -119,17 +127,24 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
         ),
     };
 
-    // Cursos filtrados por nivel
+    // Cursos filtrados por sede y nivel
     const cursosDisponibles = useMemo(() => {
-        if (nivelSeleccionado === 'todos') return cursos;
-        return cursos.filter(c => c.nivel === nivelSeleccionado);
-    }, [cursos, nivelSeleccionado]);
+        let filtered = sedeSel !== 'todas'
+            ? cursos.filter(c => c.sede_id === Number(sedeSel))
+            : cursos;
+        if (nivelSeleccionado === 'todos') return filtered;
+        if (nivelSeleccionado === 'transicion') {
+            return filtered.filter(c => c.nivel === 'transicion' || c.nivel === 'preescolar');
+        }
+        return filtered.filter(c => c.nivel === nivelSeleccionado);
+    }, [cursos, nivelSeleccionado, sedeSel]);
 
-    // Niveles únicos de los cursos
+    // Niveles únicos de los cursos (preescolar se normaliza como transicion)
     const nivelesDisponibles = useMemo(() => {
-        const unique = [...new Set(cursos.map(c => c.nivel))];
+        const normalizado = cursos.map(c => c.nivel === 'preescolar' ? 'transicion' : c.nivel);
+        const unique = [...new Set(normalizado)];
         return unique.sort((a, b) => {
-            const order = ['preescolar', 'transicion', 'primaria', 'secundaria', 'media', 'bachillerato'];
+            const order = ['transicion', 'primaria', 'secundaria', 'media', 'bachillerato'];
             return order.indexOf(a) - order.indexOf(b);
         });
     }, [cursos]);
@@ -147,6 +162,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
             if (selectedPeriodo) params.append('periodo_id', selectedPeriodo);
             if (nivelSeleccionado !== 'todos') params.append('nivel', nivelSeleccionado);
             if (selectedCurso !== 'todos') params.append('curso_id', selectedCurso);
+            if (sedeSel !== 'todas') params.append('sede_id', sedeSel);
 
             const response = await fetch(`/admin/reportes/rendimiento?${params.toString()}`);
             const data = await response.json();
@@ -166,6 +182,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
             if (selectedPeriodo) params.append('periodo_id', selectedPeriodo);
             if (nivelSeleccionado !== 'todos') params.append('nivel', nivelSeleccionado);
             if (selectedCurso !== 'todos') params.append('curso_id', selectedCurso);
+            if (sedeSel !== 'todas') params.append('sede_id', sedeSel);
 
             const response = await fetch(`/admin/reportes/comentarios?${params.toString()}`);
             const data = await response.json();
@@ -183,6 +200,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
             if (selectedPeriodo) params.append('periodo_id', selectedPeriodo);
             if (nivelSeleccionado !== 'todos') params.append('nivel', nivelSeleccionado);
             if (selectedCurso !== 'todos') params.append('curso_id', selectedCurso);
+            if (sedeSel !== 'todas') params.append('sede_id', sedeSel);
 
             const response = await fetch(`/admin/reportes/asistencia?${params.toString()}`);
             const data = await response.json();
@@ -214,7 +232,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
         if (selectedReport === 'rendimiento') fetchRendimiento();
         else if (selectedReport === 'comentarios') fetchComentarios();
         else if (selectedReport === 'asistencia') fetchAsistencia();
-    }, [selectedPeriodo, nivelSeleccionado, selectedCurso, selectedReport]);
+    }, [selectedPeriodo, nivelSeleccionado, selectedCurso, sedeSel, selectedReport]);
 
     const handleGenerarReporte = () => {
         setHasLoaded(true);
@@ -363,8 +381,23 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                         </div>
                     </div>
 
-                    {/* Periodo, Curso y botón */}
+                    {/* Sede, Periodo, Curso y botón */}
                     <div className="flex flex-col sm:flex-row gap-3">
+                        {sedes.length > 0 && (
+                            <div className="flex-1">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
+                                <select
+                                    value={sedeSel}
+                                    onChange={(e) => { setSedeSel(e.target.value); setSelectedCurso('todos'); }}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                >
+                                    <option value="todas">Todas las sedes</option>
+                                    {sedes.map(s => (
+                                        <option key={s.id} value={s.id}>{s.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="flex-1">
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Periodo</label>
                             <select
@@ -410,9 +443,15 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                     </div>
 
                     {/* Filtros activos */}
-                    {(nivelSeleccionado !== 'todos' || selectedCurso !== 'todos' || selectedPeriodo) && (
+                    {(nivelSeleccionado !== 'todos' || selectedCurso !== 'todos' || selectedPeriodo || sedeSel !== 'todas') && (
                         <div className="flex items-center gap-2 flex-wrap pt-1">
                             <span className="text-xs text-gray-500">Filtros activos:</span>
+                            {sedeSel !== 'todas' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">
+                                    {sedes.find(s => s.id.toString() === sedeSel)?.nombre}
+                                    <button onClick={() => { setSedeSel('todas'); setSelectedCurso('todos'); }} className="ml-0.5 hover:opacity-70">×</button>
+                                </span>
+                            )}
                             {selectedPeriodo && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
                                     {periodoInfo?.nombre}
@@ -432,7 +471,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                                 </span>
                             )}
                             <button
-                                onClick={() => { handleNivelChange('todos'); setSelectedPeriodo(''); }}
+                                onClick={() => { handleNivelChange('todos'); setSelectedPeriodo(''); setSedeSel('todas'); }}
                                 className="text-xs text-red-500 hover:text-red-700 font-medium ml-1"
                             >
                                 Limpiar todo
@@ -597,11 +636,29 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                                         <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>
                                         <div>
-                                            <p className="text-amber-800 font-medium">Módulo en desarrollo</p>
+                                            <p className="text-amber-800 font-medium">Aviso</p>
                                             <p className="text-amber-700 text-sm mt-1">{asistencia.mensaje}</p>
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Stats rápidos */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="bg-white rounded-xl shadow-sm p-4 text-center border border-gray-100">
+                                        <p className={`text-3xl font-bold ${asistencia.promedioGeneral !== null ? (asistencia.promedioGeneral >= 90 ? 'text-green-600' : asistencia.promedioGeneral >= 75 ? 'text-yellow-600' : 'text-red-600') : 'text-gray-400'}`}>
+                                            {asistencia.promedioGeneral !== null ? `${asistencia.promedioGeneral}%` : '—'}
+                                        </p>
+                                        <p className="text-gray-500 text-sm">% Asistencia Promedio</p>
+                                    </div>
+                                    <div className="bg-white rounded-xl shadow-sm p-4 text-center border border-gray-100">
+                                        <p className="text-3xl font-bold text-red-600">{asistencia.totalInasistencias}</p>
+                                        <p className="text-gray-500 text-sm">Total Inasistencias</p>
+                                    </div>
+                                    <div className="bg-white rounded-xl shadow-sm p-4 text-center border border-gray-100">
+                                        <p className="text-3xl font-bold text-amber-600">{asistencia.totalTardanzas}</p>
+                                        <p className="text-gray-500 text-sm">Total Tardanzas</p>
+                                    </div>
+                                </div>
 
                                 <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
                                     <div className="p-4 border-b border-gray-100">
@@ -630,13 +687,27 @@ export default function Reportes({ periodos, periodoActualId, cursos, anioVigent
                                                         </td>
                                                         <td className="px-4 py-3 text-center text-gray-700">{row.totalEstudiantes}</td>
                                                         <td className="px-4 py-3 text-center">
-                                                            <span className="text-gray-400">—</span>
+                                                            {row.promedioAsist !== null ? (
+                                                                <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-1 rounded-full text-sm font-bold ${
+                                                                    row.promedioAsist >= 90 ? 'bg-green-100 text-green-700' :
+                                                                    row.promedioAsist >= 75 ? 'bg-yellow-100 text-yellow-700' :
+                                                                    'bg-red-100 text-red-700'
+                                                                }`}>
+                                                                    {row.promedioAsist}%
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-400 text-xs">Sin datos</span>
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-center">
-                                                            <span className="text-gray-400">—</span>
+                                                            {row.inasistencias > 0
+                                                                ? <span className="font-semibold text-red-600">{row.inasistencias}</span>
+                                                                : <span className="text-gray-300">—</span>}
                                                         </td>
                                                         <td className="px-4 py-3 text-center">
-                                                            <span className="text-gray-400">—</span>
+                                                            {row.tardanzas > 0
+                                                                ? <span className="font-semibold text-amber-600">{row.tardanzas}</span>
+                                                                : <span className="text-gray-300">—</span>}
                                                         </td>
                                                     </tr>
                                                 ))}
