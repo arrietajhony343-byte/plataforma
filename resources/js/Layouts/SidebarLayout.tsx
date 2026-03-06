@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, ReactNode, useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 
 interface MenuItem {
@@ -43,8 +44,13 @@ export default function SidebarLayout({
     const [noLeidas, setNoLeidas]             = useState(0);
     const [loadingNotifs, setLoadingNotifs]   = useState(false);
 
-    const userMenuRef  = useRef<HTMLDivElement>(null);
-    const notifsRef    = useRef<HTMLDivElement>(null);
+    const userMenuRef      = useRef<HTMLDivElement>(null);
+    const notifsRef        = useRef<HTMLDivElement>(null);
+    const notifsPanelRef   = useRef<HTMLDivElement>(null);
+    const userMenuPanelRef = useRef<HTMLDivElement>(null);
+
+    const [notifsPos,   setNotifsPos]   = useState<{ top: number; right: number } | null>(null);
+    const [userMenuPos, setUserMenuPos] = useState<{ top: number; right: number } | null>(null);
 
     const page = usePage();
     const { url } = page;
@@ -53,12 +59,11 @@ export default function SidebarLayout({
     // ── Cerrar ambos dropdowns al hacer clic fuera ──
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-                setShowUserMenu(false);
-            }
-            if (notifsRef.current && !notifsRef.current.contains(e.target as Node)) {
-                setShowNotifs(false);
-            }
+            const t = e.target as Node;
+            const inNotifs   = notifsRef.current?.contains(t) || notifsPanelRef.current?.contains(t);
+            const inUserMenu = userMenuRef.current?.contains(t) || userMenuPanelRef.current?.contains(t);
+            if (!inNotifs)   setShowNotifs(false);
+            if (!inUserMenu) setShowUserMenu(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
@@ -80,12 +85,22 @@ export default function SidebarLayout({
 
     const toggleNotifs = () => {
         setShowUserMenu(false);
-        if (!showNotifs) fetchNotifs();
+        if (!showNotifs) {
+            fetchNotifs();
+            if (notifsRef.current) {
+                const r = notifsRef.current.getBoundingClientRect();
+                setNotifsPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+            }
+        }
         setShowNotifs(v => !v);
     };
 
     const toggleUserMenu = () => {
         setShowNotifs(false);
+        if (!showUserMenu && userMenuRef.current) {
+            const r = userMenuRef.current.getBoundingClientRect();
+            setUserMenuPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+        }
         setShowUserMenu(v => !v);
     };
 
@@ -129,11 +144,11 @@ export default function SidebarLayout({
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 flex overflow-x-hidden">
+        <div className="flex h-screen overflow-hidden bg-gray-100">
             {/* Sidebar */}
             <aside className={`
-                fixed inset-y-0 left-0 z-50 w-64 text-white transform transition-transform duration-300 ease-in-out
-                lg:translate-x-0 lg:static lg:inset-0
+                fixed inset-y-0 left-0 z-50 w-64 flex-shrink-0 text-white transform transition-transform duration-300 ease-in-out
+                lg:static lg:translate-x-0
                 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
                 style={{ background: 'linear-gradient(90deg, #181b49 0%, #293577 50%, #181b49 100%)' }}
@@ -200,10 +215,10 @@ export default function SidebarLayout({
             )}
 
             {/* Main content */}
-            <div className="flex-1 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
-                {/* Top bar - STICKY */}
+            <div className="flex-1 flex flex-col overflow-y-auto min-w-0">
+                {/* Top bar */}
                 <header
-                    className="shadow-md sticky top-0 z-30"
+                    className="sticky top-0 z-40 shadow-md"
                     style={{ background: 'linear-gradient(90deg, #181b49 0%, #293577 50%, #181b49 100%)' }}
                 >
                     <div className="flex items-center justify-between px-4 py-3">
@@ -245,8 +260,8 @@ export default function SidebarLayout({
                                     )}
                                 </button>
 
-                                {showNotifs && (
-                                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-2xl z-50 border border-gray-200 overflow-hidden">
+                                {showNotifs && notifsPos && createPortal(
+                                    <div ref={notifsPanelRef} className="fixed w-80 sm:w-96 bg-white rounded-xl shadow-2xl z-[9999] border border-gray-200 overflow-hidden" style={{ top: notifsPos.top, right: notifsPos.right }}>
                                         {/* Header */}
                                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
                                             <span className="font-bold text-gray-800 text-sm">Notificaciones</span>
@@ -316,7 +331,8 @@ export default function SidebarLayout({
                                                 </button>
                                             </div>
                                         )}
-                                    </div>
+                                    </div>,
+                                    document.body
                                 )}
                             </div>
 
@@ -333,8 +349,8 @@ export default function SidebarLayout({
                                     </div>
                                 </button>
 
-                                {showUserMenu && (
-                                    <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-2xl py-1 z-50 border border-gray-200 overflow-hidden">
+                                {showUserMenu && userMenuPos && createPortal(
+                                    <div ref={userMenuPanelRef} className="fixed w-52 bg-white rounded-xl shadow-2xl py-1 z-[9999] border border-gray-200 overflow-hidden" style={{ top: userMenuPos.top, right: userMenuPos.right }}>
                                         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
                                             <p className="text-sm font-bold text-gray-800 truncate">{user.name}</p>
                                             <p className="text-xs text-gray-400 truncate">{user.email}</p>
@@ -359,7 +375,8 @@ export default function SidebarLayout({
                                             </svg>
                                             Cerrar Sesión
                                         </button>
-                                    </div>
+                                    </div>,
+                                    document.body
                                 )}
                             </div>
 
@@ -368,7 +385,7 @@ export default function SidebarLayout({
                 </header>
 
                 {/* Page content */}
-                <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
+                <main className="flex-1 p-4 sm:p-6">
                     {header && (
                         <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">{header}</h1>
                     )}

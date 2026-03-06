@@ -1,6 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 /* ─── SVG Icons ─── */
@@ -20,6 +21,12 @@ interface Sede {
     id: number;
     nombre: string;
     ciudad: string;
+}
+
+interface Profesor {
+    id: number;
+    name: string;
+    sede_id?: number | null;
 }
 
 /* ─── Interfaces ─── */
@@ -54,7 +61,7 @@ interface Materia {
     area: string;
     codigo: string;
     cursos: number;
-    profesores: { id: number; name: string }[];
+    profesores: Profesor[];
     horasSemanales: number;
     activa: boolean;
 }
@@ -67,7 +74,7 @@ interface MateriaAsignada {
 interface Props {
     cursos: Curso[];
     materias: Materia[];
-    profesores: { id: number; name: string }[];
+    profesores: Profesor[];
     materiasProfesores: Record<number, { id: number; name: string }[]>;
     totalEstudiantes: number;
     anio: number;
@@ -76,22 +83,20 @@ interface Props {
 
 /* ─── Configuración visual ─── */
 const nivelesEducativos: Record<string, { label: string; color: string; bg: string; border: string }> = {
-    transicion:   { label: 'Transición / Pre-escolar', color: 'text-purple-700',  bg: 'bg-purple-50',  border: 'border-purple-200' },
+    prejardin:    { label: 'Pre-Jardín',   color: 'text-pink-700',    bg: 'bg-pink-50',    border: 'border-pink-200' },
     primaria:     { label: 'Primaria',     color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-200' },
     bachillerato: { label: 'Bachillerato', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
 };
 const nivelesKeys = Object.keys(nivelesEducativos);
 
 const nivelBadgeColors: Record<string, string> = {
-    preescolar: 'bg-purple-100 text-purple-700 border-purple-200',
-    transicion: 'bg-purple-100 text-purple-700 border-purple-200',
-    primaria: 'bg-blue-100 text-blue-700 border-blue-200',
+    prejardin:    'bg-pink-100 text-pink-700 border-pink-200',
+    primaria:     'bg-blue-100 text-blue-700 border-blue-200',
     bachillerato: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
 
 const nivelCardAccent: Record<string, string> = {
-    preescolar: 'from-purple-500 to-purple-600',
-    transicion: 'from-purple-500 to-purple-600',
+    prejardin:    'from-pink-500 to-pink-600',
     primaria: 'from-blue-500 to-blue-600',
     bachillerato: 'from-emerald-500 to-emerald-600',
 };
@@ -119,12 +124,15 @@ function ProfSearchSelect({ options, value, onChange }: {
 }) {
     const [search, setSearch] = useState('');
     const [open, setOpen] = useState(false);
+    const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
     const ref = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const selected = options.find(o => o.id === value);
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+            const t = e.target as Node;
+            if (!ref.current?.contains(t) && !panelRef.current?.contains(t)) { setOpen(false); setSearch(''); }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
@@ -132,11 +140,20 @@ function ProfSearchSelect({ options, value, onChange }: {
 
     const filtered = search ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase())) : options;
 
+    const handleOpen = () => {
+        if (!open && ref.current) {
+            const r = ref.current.getBoundingClientRect();
+            setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+        }
+        setOpen(o => !o);
+        setSearch('');
+    };
+
     return (
         <div ref={ref} className="relative">
             <button
                 type="button"
-                onClick={() => { setOpen(o => !o); setSearch(''); }}
+                onClick={handleOpen}
                 className="w-full flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-left"
             >
                 <span className={`flex-1 truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>
@@ -146,8 +163,8 @@ function ProfSearchSelect({ options, value, onChange }: {
                     <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                 </svg>
             </button>
-            {open && (
-                <div className="absolute z-[70] top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+            {open && dropPos && createPortal(
+                <div ref={panelRef} className="fixed z-[9999] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden" style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}>
                     <div className="p-2 border-b border-gray-100">
                         <input
                             autoFocus
@@ -180,7 +197,8 @@ function ProfSearchSelect({ options, value, onChange }: {
                             </button>
                         ))}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -225,7 +243,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
 
     const filteredCursos = useMemo(() => {
         return cursos.filter(c => {
-            const nivelNorm = c.nivel === 'preescolar' ? 'transicion' : c.nivel;
+            const nivelNorm = (c.nivel === 'preescolar' || c.nivel === 'transicion') ? 'prejardin' : c.nivel;
             if (nivelActivo && nivelNorm !== nivelActivo) return false;
             if (sedeSel !== 'todas' && String(c.sede_id ?? '') !== sedeSel) return false;
             if (searchTerm) {
@@ -270,7 +288,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
     const cursosAgrupados = useMemo(() => {
         const agrupados: Record<string, Curso[]> = {};
         filteredCursos.forEach(c => {
-            const grupo = c.nivel === 'preescolar' ? 'transicion' : c.nivel;
+            const grupo = (c.nivel === 'preescolar' || c.nivel === 'transicion') ? 'prejardin' : c.nivel;
             if (!agrupados[grupo]) agrupados[grupo] = [];
             agrupados[grupo].push(c);
         });
@@ -567,10 +585,13 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                             />
                         </div>
                         {activeTab === 'materias' && (
-                            <select value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] min-w-[180px]">
-                                <option value="">Todas las áreas</option>
-                                {areas.map(a => <option key={a} value={a}>{a}</option>)}
-                            </select>
+                            <div className="relative min-w-[180px]">
+                                <select value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)} className="appearance-none w-full pl-4 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]">
+                                    <option value="">Todas las áreas</option>
+                                    {areas.map(a => <option key={a} value={a}>{a}</option>)}
+                                </select>
+                                <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
+                            </div>
                         )}
                     </div>
                     {activeTab === 'cursos' && (
@@ -580,7 +601,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                             </button>
                             {nivelesKeys.map(k => (
                                 <button key={k} onClick={() => setNivelActivo(nivelActivo === k ? '' : k)} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all border ${nivelActivo === k ? `${nivelesEducativos[k].bg} ${nivelesEducativos[k].color} ${nivelesEducativos[k].border}` : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                                    {nivelesEducativos[k].label} ({cursos.filter(c => c.nivel === k || (k === 'transicion' && c.nivel === 'preescolar')).length})
+                                    {nivelesEducativos[k].label} ({cursos.filter(c => (c.nivel === k) || (k === 'prejardin' && (c.nivel === 'transicion' || c.nivel === 'preescolar'))).length})
                                 </button>
                             ))}
                             {sedes.length > 0 && (

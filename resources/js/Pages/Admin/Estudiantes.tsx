@@ -26,7 +26,7 @@ interface Estudiante {
     genero: string;
     estado: 'activo' | 'inactivo';
     promedio: number;
-    pagos: 'al_dia' | 'pendiente' | 'moroso';
+    pagos: 'al_dia' | 'pendiente' | 'deudor';
     observaciones: number;
     sede_id?: number;
     sede_nombre?: string;
@@ -46,11 +46,12 @@ interface Props {
 }
 
 const NIVELES: Record<string, { label: string; color: string; activeBg: string; chipBg: string; chipText: string }> = {
-    preescolar:   { label: 'Pre-escolar', color: 'bg-pink-500',    activeBg: 'bg-pink-500 text-white shadow-md',     chipBg: 'bg-pink-100',    chipText: 'text-pink-700' },
-    transicion:   { label: 'Transición',  color: 'bg-purple-500',  activeBg: 'bg-purple-500 text-white shadow-md',   chipBg: 'bg-purple-100',  chipText: 'text-purple-700' },
+    prejardin:    { label: 'Pre-Jardín',  color: 'bg-pink-500',    activeBg: 'bg-pink-500 text-white shadow-md',     chipBg: 'bg-pink-100',    chipText: 'text-pink-700' },
     primaria:     { label: 'Primaria',    color: 'bg-blue-500',    activeBg: 'bg-blue-500 text-white shadow-md',     chipBg: 'bg-blue-100',    chipText: 'text-blue-700' },
     bachillerato: { label: 'Bachillerato',color: 'bg-emerald-500', activeBg: 'bg-emerald-500 text-white shadow-md',  chipBg: 'bg-emerald-100', chipText: 'text-emerald-700' },
 };
+
+const normalizeNivel = (n: string) => (n === 'preescolar' || n === 'transicion') ? 'prejardin' : n;
 
 const NIVEL_KEYS = Object.keys(NIVELES);
 const onlyNumbers = (v: string) => v.replace(/[^0-9]/g, '');
@@ -98,12 +99,12 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
     /* ─── Cursos disponibles filtrados por nivel ─── */
     const cursosDisponibles = useMemo(() => {
         if (nivelSel === 'todos') return cursos;
-        return cursos.filter(c => c.nivel === nivelSel);
+        return cursos.filter(c => normalizeNivel(c.nivel) === nivelSel);
     }, [cursos, nivelSel]);
 
     /* ─── Cursos únicos para filtro dropdown ─── */
     const cursosParaFiltro = useMemo(() => {
-        const base = nivelSel === 'todos' ? cursos : cursos.filter(c => c.nivel === nivelSel);
+        const base = nivelSel === 'todos' ? cursos : cursos.filter(c => normalizeNivel(c.nivel) === nivelSel);
         return base;
     }, [cursos, nivelSel]);
 
@@ -111,7 +112,7 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
     const filtered = useMemo(() => estudiantes.filter(e => {
         const sb = busqueda.toLowerCase();
         const matchSearch = !busqueda || e.nombre.toLowerCase().includes(sb) || e.identificacion.includes(busqueda);
-        const matchNivel = nivelSel === 'todos' || e.nivel === nivelSel;
+        const matchNivel = nivelSel === 'todos' || normalizeNivel(e.nivel) === nivelSel;
         const matchCurso = cursoSel === 'todos' || e.curso_nombre === cursoSel;
         const matchEstado = estadoSel === 'todos' || e.estado === estadoSel;
         const matchPagos = pagosSel === 'todos' || e.pagos === pagosSel;
@@ -120,11 +121,11 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
     }), [estudiantes, busqueda, nivelSel, cursoSel, estadoSel, pagosSel, sedeSel]);
 
     /* ─── Helpers ─── */
-    const nivelBadge = (n: string) => `${NIVELES[n]?.chipBg ?? 'bg-gray-100'} ${NIVELES[n]?.chipText ?? 'text-gray-700'}`;
-    const nivelLabel = (n: string) => NIVELES[n]?.label ?? (n || 'Sin nivel');
+    const nivelBadge = (n: string) => { const k = normalizeNivel(n); return `${NIVELES[k]?.chipBg ?? 'bg-gray-100'} ${NIVELES[k]?.chipText ?? 'text-gray-700'}`; };
+    const nivelLabel = (n: string) => { const k = normalizeNivel(n); return NIVELES[k]?.label ?? (n || 'Sin nivel'); };
     const estadoBadge = (s: string) => s === 'activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
     const pagoBadge = (p: string) => p === 'al_dia' ? 'bg-green-100 text-green-800' : p === 'pendiente' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
-    const pagoLabel = (p: string) => p === 'al_dia' ? 'Al día' : p === 'pendiente' ? 'Pendiente' : 'Moroso';
+    const pagoLabel = (p: string) => p === 'al_dia' ? 'Al día' : p === 'pendiente' ? 'Pendiente' : 'Deudor';
     const promedioColor = (v: number) => v >= 4 ? 'text-green-600' : v >= 3 ? 'text-yellow-600' : 'text-red-600';
 
     const hayFiltros = nivelSel !== 'todos' || cursoSel !== 'todos' || estadoSel !== 'todos' || pagosSel !== 'todos' || busqueda !== '' || sedeSel !== 'todas';
@@ -211,8 +212,8 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
     /* ─── Export Excel (SheetJS) ─── */
     const handleExport = () => {
         const wb = XLSX.utils.book_new();
-        const nivelLabels: Record<string, string> = { preescolar: 'Pre-escolar', transicion: 'Transición', primaria: 'Primaria', bachillerato: 'Bachillerato' };
-        const nivelOrder = ['preescolar', 'transicion', 'primaria', 'bachillerato'];
+        const nivelLabels: Record<string, string> = { prejardin: 'Pre-Jardín', primaria: 'Primaria', bachillerato: 'Bachillerato' };
+        const nivelOrder = ['prejardin', 'primaria', 'bachillerato'];
 
         // Group filtered students by nivel
         const byNivel: Record<string, Estudiante[]> = {};
@@ -267,7 +268,7 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                             est.genero === 'M' ? 'Masculino' : est.genero === 'F' ? 'Femenino' : est.genero || 'N/A',
                             est.estado === 'activo' ? 'Activo' : 'Inactivo',
                             est.promedio,
-                            est.pagos === 'al_dia' ? 'Al día' : est.pagos === 'pendiente' ? 'Pendiente' : 'Moroso',
+                            est.pagos === 'al_dia' ? 'Al día' : est.pagos === 'pendiente' ? 'Pendiente' : 'Deudor',
                             est.observaciones,
                         ]);
                     });
@@ -367,7 +368,7 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                                 <option value="todos">Todos</option>
                                 <option value="al_dia">Al día</option>
                                 <option value="pendiente">Pendiente</option>
-                                <option value="moroso">Moroso</option>
+                                <option value="deudor">Deudor</option>
                             </select>
                         </div>
                     </div>
@@ -795,8 +796,7 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nivel Educativo</label>
                                     <select value={editForm.nivel_educativo} onChange={e => setEditForm(f => ({ ...f, nivel_educativo: e.target.value, curso_id: '' }))} className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg text-sm bg-white appearance-none">
                                         <option value="">— Sin asignar —</option>
-                                        <option value="preescolar">Preescolar</option>
-                                        <option value="transicion">Transición</option>
+                                        <option value="prejardin">Pre-Jardín</option>
                                         <option value="primaria">Primaria</option>
                                         <option value="bachillerato">Bachillerato</option>
                                     </select>

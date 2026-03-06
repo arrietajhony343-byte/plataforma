@@ -39,7 +39,7 @@ class ReporteController extends Controller
             ->map(fn($c) => [
                 'id'      => $c->id,
                 'nombre'  => $c->nombre,
-                'nivel'   => $c->nivel,
+                'nivel'   => in_array($c->nivel, ['preescolar', 'transicion']) ? 'prejardin' : $c->nivel,
                 'grado'   => $c->grado,
                 'sede_id' => $c->sede_id,
             ]);
@@ -75,9 +75,9 @@ class ReporteController extends Controller
             ->orderBy('grupo');
 
         if ($nivelFiltro && $nivelFiltro !== 'todos') {
-            // transicion incluye también preescolar (nivel legado)
-            if ($nivelFiltro === 'transicion') {
-                $query->whereIn('nivel', ['transicion', 'preescolar']);
+            // prejardin incluye también preescolar y transicion (valores legacy)
+            if ($nivelFiltro === 'prejardin') {
+                $query->whereIn('nivel', ['prejardin', 'transicion', 'preescolar']);
             } else {
                 $query->where('nivel', $nivelFiltro);
             }
@@ -167,7 +167,7 @@ class ReporteController extends Controller
 
             $rendimiento[] = [
                 'id'           => $curso->id,
-                'nivel'        => $curso->nivel,
+                'nivel'        => in_array($curso->nivel, ['preescolar', 'transicion']) ? 'prejardin' : $curso->nivel,
                 'curso'        => $curso->nombre,
                 'promedio'     => round($promedio, 1),
                 'aprobados'    => $aprobados,

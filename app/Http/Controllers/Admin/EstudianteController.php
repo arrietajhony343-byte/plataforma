@@ -271,7 +271,7 @@ class EstudianteController extends Controller
                     $est['genero'] === 'M' ? 'Masculino' : ($est['genero'] === 'F' ? 'Femenino' : ($est['genero'] ?: 'N/A')),
                     ucfirst($est['estado']),
                     $est['promedio'],
-                    $est['pagos'] === 'al_dia' ? 'Al día' : ($est['pagos'] === 'pendiente' ? 'Pendiente' : 'Moroso'),
+                    $est['pagos'] === 'al_dia' ? 'Al día' : ($est['pagos'] === 'pendiente' ? 'Pendiente' : 'Deudor'),
                     $est['observaciones'],
                 ], ';');
             }
@@ -306,7 +306,7 @@ class EstudianteController extends Controller
                 $pagosVencidos = Pago::where('estudiante_id', $est->id)
                     ->where('estado', 'vencido')
                     ->count();
-                $estadoPagos = $pagosVencidos > 0 ? 'moroso' : ($pagosPendientes > 0 ? 'pendiente' : 'al_dia');
+                $estadoPagos = $pagosVencidos > 0 ? 'deudor' : ($pagosPendientes > 0 ? 'pendiente' : 'al_dia');
 
                 $obsCount = Observacion::where('estudiante_id', $est->id)->count();
                 $padre = $est->padres->first();

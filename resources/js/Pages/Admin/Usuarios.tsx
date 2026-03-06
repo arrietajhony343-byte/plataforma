@@ -84,6 +84,8 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
     const [formData, setFormData] = useState({ ...EMPTY_FORM });
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+    const [cursoBusq, setCursoBusq] = useState('');
+    const [acudienteBusq, setAcudienteBusq] = useState('');
 
     const users = initialUsers;
 
@@ -171,6 +173,8 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
         setEditingUser(null);
         setFormData({ ...EMPTY_FORM });
         setFormErrors({});
+        setCursoBusq('');
+        setAcudienteBusq('');
         setShowModal(true);
     };
 
@@ -187,6 +191,10 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
             sede_id: user.sede_id?.toString() || '',
         });
         setFormErrors({});
+        const cursoNombre = user.curso_id ? (cursos.find(c => c.id === user.curso_id)?.nombre ?? '') : '';
+        const padreNombre = user.acudiente_id ? (padres.find(p => p.id === user.acudiente_id)?.name ?? '') : '';
+        setCursoBusq(cursoNombre);
+        setAcudienteBusq(padreNombre);
         setShowModal(true);
     };
 
@@ -821,7 +829,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                                 className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
                                             >
                                                 <option value="">— Sin asignar —</option>
-                                                <option value="transicion">Transición / Pre-escolar</option>
+                                                <option value="prejardin">Pre-Jardín</option>
                                                 <option value="primaria">Primaria</option>
                                                 <option value="bachillerato">Bachillerato</option>
                                             </select>
@@ -830,16 +838,28 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                         {/* Curso (filtrado por nivel) */}
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Grado y Sección</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar curso..."
+                                                value={cursoBusq}
+                                                onChange={e => { setCursoBusq(e.target.value); setFormData(f => ({ ...f, curso_id: '' })); }}
+                                                className="w-full pl-4 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all mb-1"
+                                            />
                                             <select
                                                 value={formData.curso_id}
-                                                onChange={(e) => setFormData(f => ({ ...f, curso_id: e.target.value }))}
+                                                onChange={(e) => { setFormData(f => ({ ...f, curso_id: e.target.value })); const opt = e.target.options[e.target.selectedIndex]; setCursoBusq(opt.text === '— Sin asignar —' ? '' : opt.text); }}
                                                 className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                                size={4}
                                             >
                                                 <option value="">— Sin asignar —</option>
                                                 {(formData.nivel_educativo
-                                                    ? cursos.filter(c => c.nivel === formData.nivel_educativo || (formData.nivel_educativo === 'transicion' && c.nivel === 'preescolar'))
+                                                    ? cursos.filter(c => {
+                                                        const nv = (c.nivel === 'preescolar' || c.nivel === 'transicion') ? 'prejardin' : c.nivel;
+                                                        return nv === formData.nivel_educativo;
+                                                    })
                                                     : cursos
-                                                ).map(c => (
+                                                ).filter(c => !cursoBusq || c.nombre.toLowerCase().includes(cursoBusq.toLowerCase()))
+                                                .map(c => (
                                                     <option key={c.id} value={c.id}>{c.nombre}</option>
                                                 ))}
                                             </select>
@@ -854,17 +874,30 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                         {/* Acudiente */}
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Acudiente</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar acudiente por nombre o documento..."
+                                                value={acudienteBusq}
+                                                onChange={e => { setAcudienteBusq(e.target.value); setFormData(f => ({ ...f, acudiente_id: '' })); }}
+                                                className="w-full pl-4 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all mb-1"
+                                            />
                                             <select
                                                 value={formData.acudiente_id}
-                                                onChange={(e) => setFormData(f => ({ ...f, acudiente_id: e.target.value }))}
+                                                onChange={(e) => { setFormData(f => ({ ...f, acudiente_id: e.target.value })); const opt = e.target.options[e.target.selectedIndex]; setAcudienteBusq(opt.value ? opt.text : ''); }}
                                                 className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
+                                                size={4}
                                             >
                                                 <option value="">— Sin asignar —</option>
-                                                {padres.map(p => (
-                                                    <option key={p.id} value={p.id}>
-                                                        {p.name}{p.documento ? ` — ${p.documento}` : ''}
-                                                    </option>
-                                                ))}
+                                                {padres
+                                                    .filter(p => !acudienteBusq ||
+                                                        p.name.toLowerCase().includes(acudienteBusq.toLowerCase()) ||
+                                                        (p.documento ?? '').includes(acudienteBusq)
+                                                    )
+                                                    .map(p => (
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.name}{p.documento ? ` — ${p.documento}` : ''}
+                                                        </option>
+                                                    ))}
                                             </select>
                                             {padres.length === 0 && (
                                                 <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">

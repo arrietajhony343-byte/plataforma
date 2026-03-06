@@ -66,18 +66,7 @@ export default function Dashboard({ stats, actividadReciente }: Props) {
                             <p className="text-blue-200 text-sm mt-1">Resumen general del periodo académico</p>
                         </div>
                         <div className="flex gap-2">
-                            <button className="flex items-center gap-2 bg-white bg-opacity-15 hover:bg-opacity-25 text-white border border-white border-opacity-30 px-4 py-2 rounded-lg transition-all text-sm font-medium backdrop-blur-sm">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                </svg>
-                                Usuario
-                            </button>
-                            <button className="flex items-center gap-2 bg-white bg-opacity-15 hover:bg-opacity-25 text-white border border-white border-opacity-30 px-4 py-2 rounded-lg transition-all text-sm font-medium backdrop-blur-sm">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                </svg>
-                                Curso
-                            </button>
+                            
                         </div>
                     </div>
                 </div>

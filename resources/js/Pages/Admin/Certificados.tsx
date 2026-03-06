@@ -1,6 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { adminMenuItems } from '@/Config/adminMenu';
 import jsPDF from 'jspdf';
 
@@ -27,6 +28,12 @@ interface Curso {
     nombre: string;
     nivel: string;
     grado: string;
+    sede_id: number | null;
+}
+
+interface Sede {
+    id: number;
+    nombre: string;
 }
 
 interface Certificado {
@@ -53,12 +60,12 @@ interface Props {
     estudiantes: Estudiante[];
     cursos: Curso[];
     niveles: string[];
+    sedes: Sede[];
 }
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 const nivelesConfig: Record<string, { label: string; color: string; chipActive: string }> = {
-    preescolar:   { label: 'Pre-escolar',  color: 'bg-pink-100 text-pink-700',     chipActive: 'bg-pink-500' },
-    transicion:   { label: 'Transición',   color: 'bg-purple-100 text-purple-700', chipActive: 'bg-purple-500' },
+    prejardin:    { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',     chipActive: 'bg-pink-500' },
     primaria:     { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',     chipActive: 'bg-blue-500' },
     secundaria:   { label: 'Secundaria',   color: 'bg-cyan-100 text-cyan-700',     chipActive: 'bg-cyan-500' },
     media:        { label: 'Media',        color: 'bg-amber-100 text-amber-700',   chipActive: 'bg-amber-500' },
@@ -81,13 +88,14 @@ const getEstadoLabel = (estado: string) => estadosConfig[estado]?.label ?? estad
 const formatPrecio = (precio: number) => '$' + precio.toLocaleString('es-CO');
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
-export default function Certificados({ certificados, tiposCertificado, estudiantes, cursos, niveles }: Props) {
+export default function Certificados({ certificados, tiposCertificado, estudiantes, cursos, niveles, sedes }: Props) {
     // ── Filter State ──
     const [nivelSeleccionado, setNivelSeleccionado] = useState('todos');
     const [cursoSeleccionado, setCursoSeleccionado] = useState('todos');
     const [tipoSeleccionado, setTipoSeleccionado] = useState('todos');
     const [estadoSeleccionado, setEstadoSeleccionado] = useState('todos');
     const [busqueda, setBusqueda] = useState('');
+    const [sedeSel, setSedeSel] = useState<string>('todas');
 
     // ── Modal State ──
     const [showModalSolicitud, setShowModalSolicitud] = useState(false);
@@ -121,7 +129,9 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     // ── Buscador de estudiante en modal solicitud ──
     const [busquedaEst, setBusquedaEst] = useState('');
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const dropdownPanelRef = useRef<HTMLDivElement>(null);
     const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
     const estudianteSeleccionado = useMemo(
@@ -141,7 +151,9 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     // Cerrar dropdown al hacer clic fuera
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+            const t = e.target as Node;
+            if (dropdownRef.current && !dropdownRef.current.contains(t) &&
+                dropdownPanelRef.current && !dropdownPanelRef.current.contains(t)) {
                 setDropdownOpen(false);
             }
         };
@@ -289,24 +301,41 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     );
 
     const cursosDisponibles = useMemo(() => {
-        if (nivelSeleccionado === 'todos') return cursos;
-        return cursos.filter(c => c.nivel === nivelSeleccionado);
-    }, [cursos, nivelSeleccionado]);
+        let lista = sedeSel !== 'todas'
+            ? cursos.filter(c => c.sede_id === Number(sedeSel))
+            : cursos;
+        if (nivelSeleccionado === 'todos') return lista;
+        if (nivelSeleccionado === 'prejardin') {
+            return lista.filter(c => c.nivel === 'prejardin' || c.nivel === 'transicion' || c.nivel === 'preescolar');
+        }
+        return lista.filter(c => c.nivel === nivelSeleccionado);
+    }, [cursos, nivelSeleccionado, sedeSel]);
 
     const estudiantesFiltrados = useMemo(() => {
         let lista = estudiantes;
+        if (sedeSel !== 'todas') {
+            const cursosSede = new Set(cursos.filter(c => c.sede_id === Number(sedeSel)).map(c => c.id));
+            lista = lista.filter(e => e.curso_id !== null && cursosSede.has(e.curso_id));
+        }
         if (nivelSeleccionado !== 'todos') {
-            lista = lista.filter(e => e.nivel === nivelSeleccionado);
+            const niveles = nivelSeleccionado === 'prejardin' ? ['prejardin', 'transicion', 'preescolar'] : [nivelSeleccionado];
+            lista = lista.filter(e => niveles.includes(e.nivel));
         }
         if (cursoSeleccionado !== 'todos') {
             lista = lista.filter(e => e.curso_id?.toString() === cursoSeleccionado);
         }
         return lista;
-    }, [estudiantes, nivelSeleccionado, cursoSeleccionado]);
+    }, [estudiantes, cursos, nivelSeleccionado, cursoSeleccionado, sedeSel]);
 
     const certificadosFiltrados = useMemo(() => {
         return certificados.filter(cert => {
-            const matchNivel = nivelSeleccionado === 'todos' || cert.nivel === nivelSeleccionado;
+            const matchSede = sedeSel === 'todas' || (() => {
+                const curso = cursos.find(c => c.id === cert.curso_id);
+                return curso?.sede_id === Number(sedeSel);
+            })();
+            const nivelMatch = nivelSeleccionado === 'prejardin'
+                ? cert.nivel === 'prejardin' || cert.nivel === 'transicion' || cert.nivel === 'preescolar'
+                : nivelSeleccionado === 'todos' || cert.nivel === nivelSeleccionado;
             const matchCurso = cursoSeleccionado === 'todos' || cert.curso_id?.toString() === cursoSeleccionado;
             const tipoMatch = tiposCertificado.find(t => t.id.toString() === tipoSeleccionado);
             const matchTipo = tipoSeleccionado === 'todos' ||
@@ -316,9 +345,9 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             const matchBusqueda = busqueda === '' ||
                 cert.estudiante.toLowerCase().includes(busqueda.toLowerCase()) ||
                 cert.tipo_nombre.toLowerCase().includes(busqueda.toLowerCase());
-            return matchNivel && matchCurso && matchTipo && matchEstado && matchBusqueda;
+            return matchSede && nivelMatch && matchCurso && matchTipo && matchEstado && matchBusqueda;
         });
-    }, [certificados, nivelSeleccionado, cursoSeleccionado, tipoSeleccionado, estadoSeleccionado, busqueda]);
+    }, [certificados, cursos, nivelSeleccionado, cursoSeleccionado, tipoSeleccionado, estadoSeleccionado, busqueda, sedeSel]);
 
     const stats = useMemo(() => ({
         solicitado: certificadosFiltrados.filter(c => c.estado === 'solicitado').length,
@@ -327,7 +356,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         entregado: certificadosFiltrados.filter(c => c.estado === 'entregado').length,
     }), [certificadosFiltrados]);
 
-    const hayFiltrosActivos = nivelSeleccionado !== 'todos' || cursoSeleccionado !== 'todos' || tipoSeleccionado !== 'todos' || estadoSeleccionado !== 'todos' || busqueda !== '';
+    const hayFiltrosActivos = sedeSel !== 'todas' || nivelSeleccionado !== 'todos' || cursoSeleccionado !== 'todos' || tipoSeleccionado !== 'todos' || estadoSeleccionado !== 'todos' || busqueda !== '';
 
     // ── Handlers ──
     const handleNivelChange = (nivel: string) => {
@@ -341,6 +370,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         setTipoSeleccionado('todos');
         setEstadoSeleccionado('todos');
         setBusqueda('');
+        setSedeSel('todas');
     };
 
     const openModalTipo = (tipo?: TipoCertificado) => {
@@ -543,8 +573,23 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                         </div>
                     </div>
 
-                    {/* Curso, Tipo, Estado, Búsqueda */}
+                    {/* Sede (si hay más de una), Curso, Tipo, Estado, Búsqueda */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {sedes.length > 0 && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
+                                <select
+                                    value={sedeSel}
+                                    onChange={(e) => { setSedeSel(e.target.value); setCursoSeleccionado('todos'); }}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                >
+                                    <option value="todas">Todas las sedes</option>
+                                    {sedes.map(s => (
+                                        <option key={s.id} value={s.id}>{s.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Curso</label>
                             <select
@@ -605,6 +650,12 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                     {hayFiltrosActivos && (
                         <div className="flex items-center gap-2 flex-wrap pt-1">
                             <span className="text-xs text-gray-500">Filtros activos:</span>
+                            {sedeSel !== 'todas' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">
+                                    {sedes.find(s => s.id.toString() === sedeSel)?.nombre}
+                                    <button onClick={() => { setSedeSel('todas'); setCursoSeleccionado('todos'); }} className="ml-0.5 hover:opacity-70">×</button>
+                                </span>
+                            )}
                             {nivelSeleccionado !== 'todos' && (
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getNivelBadge(nivelSeleccionado)}`}>
                                     {getNivelLabel(nivelSeleccionado)}
@@ -841,6 +892,10 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                                     : 'border-gray-300 hover:border-gray-400'
                                             }`}
                                             onClick={() => {
+                                                if (dropdownRef.current) {
+                                                    const r = dropdownRef.current.getBoundingClientRect();
+                                                    setDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
+                                                }
                                                 setDropdownOpen(true);
                                                 setTimeout(() => inputBusquedaRef.current?.focus(), 50);
                                             }}
@@ -889,9 +944,9 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                             )}
                                         </div>
 
-                                        {/* Dropdown lista */}
-                                        {dropdownOpen && (
-                                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
+                                        {/* Dropdown lista - portal para evitar recorte por overflow */}
+                                        {dropdownOpen && dropdownPos && createPortal(
+                                            <div ref={dropdownPanelRef} className="fixed z-[9999] bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto" style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}>
                                                 {estudiantesSugeridos.length === 0 ? (
                                                     <div className="px-4 py-6 text-center">
                                                         <svg className="w-8 h-8 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -941,7 +996,8 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                                         );
                                                     })
                                                 )}
-                                            </div>
+                                            </div>,
+                                            document.body
                                         )}
                                     </div>
                                     {/* Hidden input para validación nativa */}

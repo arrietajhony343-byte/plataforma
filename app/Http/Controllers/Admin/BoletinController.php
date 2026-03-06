@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula};
+use App\Models\{Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Sede};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,8 +23,14 @@ class BoletinController extends Controller
             ->orderBy('grupo')
             ->get();
 
-        // Niveles únicos
-        $niveles = $cursos->pluck('nivel')->unique()->values();
+        // Niveles únicos (normalizar preescolar → transicion)
+        $niveles = $cursos->pluck('nivel')
+            ->map(fn($n) => $n === 'preescolar' ? 'transicion' : $n)
+            ->unique()->values();
+
+        // Sedes activas
+        $sedes = Sede::where('activa', true)->orderBy('nombre')
+            ->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
         // Boletines con relaciones completas
         $boletines = Boletin::with(['estudiante.padres', 'periodo', 'curso'])
@@ -149,8 +155,9 @@ class BoletinController extends Controller
             'boletines'     => $boletines,
             'resumenNotas'  => $resumenNotas,
             'periodos'      => $periodos->map(fn($p) => ['id' => $p->id, 'nombre' => $p->nombre, 'anio' => $p->anio, 'activo' => $p->activo]),
-            'cursos'        => $cursos->map(fn($c) => ['id' => $c->id, 'nombre' => $c->nombre, 'nivel' => $c->nivel]),
+            'cursos'        => $cursos->map(fn($c) => ['id' => $c->id, 'nombre' => $c->nombre, 'nivel' => $c->nivel, 'sede_id' => $c->sede_id]),
             'niveles'       => $niveles,
+            'sedes'         => $sedes,
             'periodoActivo' => $periodoActivo ? ['id' => $periodoActivo->id, 'nombre' => $periodoActivo->nombre] : null,
         ]);
     }

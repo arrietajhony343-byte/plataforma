@@ -72,4 +72,46 @@ class SedeController extends Controller
 
         return redirect()->back()->with('success', 'Sede eliminada.');
     }
+
+    public function detalle(Sede $sede)
+    {
+        $estudiantes = $sede->usuarios()
+            ->whereHas('roles', fn($q) => $q->where('name', 'estudiante'))
+            ->select('id', 'name', 'email', 'documento')
+            ->orderBy('name')
+            ->get();
+
+        $profesores = $sede->usuarios()
+            ->whereHas('roles', fn($q) => $q->where('name', 'profesor'))
+            ->select('id', 'name', 'email', 'documento')
+            ->orderBy('name')
+            ->get();
+
+        $padres = $sede->usuarios()
+            ->whereHas('roles', fn($q) => $q->where('name', 'padre'))
+            ->select('id', 'name', 'email', 'documento')
+            ->orderBy('name')
+            ->get();
+
+        $cursos = $sede->cursos()
+            ->select('id', 'nombre', 'nivel', 'activo')
+            ->withCount('matriculas as total_estudiantes')
+            ->orderBy('nombre')
+            ->get();
+
+        return response()->json([
+            'sede'        => [
+                'id'        => $sede->id,
+                'nombre'    => $sede->nombre,
+                'ciudad'    => $sede->ciudad,
+                'direccion' => $sede->direccion,
+                'telefono'  => $sede->telefono,
+                'activa'    => $sede->activa,
+            ],
+            'estudiantes' => $estudiantes,
+            'profesores'  => $profesores,
+            'padres'      => $padres,
+            'cursos'      => $cursos,
+        ]);
+    }
 }

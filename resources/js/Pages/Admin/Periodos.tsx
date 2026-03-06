@@ -1,9 +1,18 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 /* ─── Interfaces ─── */
+interface Excepcion {
+    id: number;
+    tipo: 'profesor' | 'curso';
+    referencia_id: number;
+    nombre_referencia: string;
+    motivo: string | null;
+    activa: boolean;
+}
+
 interface Periodo {
     id: number;
     nombre: string;
@@ -16,13 +25,22 @@ interface Periodo {
     notas_count: number;
     boletines_count: number;
     tiene_datos: boolean;
+    notas_abiertas: boolean;
+    ventana_inicio: string | null;
+    ventana_fin: string | null;
+    excepciones: Excepcion[];
 }
+
+interface ProfesorItem { id: number; name: string; email: string; }
+interface CursoItem { id: number; nombre: string; nivel: string; grado: string; grupo: string; }
 
 interface Props {
     periodos: Periodo[];
     anio: number;
     aniosDisponibles: number[];
     sumaPorcentajes: number;
+    profesores: ProfesorItem[];
+    cursos: CursoItem[];
 }
 
 /* ─── Helpers ─── */
@@ -39,10 +57,16 @@ const formatDate = (d: string) => {
     return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const formatDateTime = (dt: string) => {
+    const date = new Date(dt);
+    return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) + ' ' +
+           date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
 const diffDays = (from: string, to: string) => Math.max(0, Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86400000));
 
 /* ═══════════════════════════════════════════════════════ */
-export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcentajes }: Props) {
+export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcentajes, profesores, cursos }: Props) {
     /* ── State ── */
     const [showModal, setShowModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -55,6 +79,37 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+    // ── Estado ventana de calificación ──
+    const [showVentanaModal, setShowVentanaModal] = useState(false);
+    const [ventanaPeriodo, setVentanaPeriodo] = useState<Periodo | null>(null);
+    const [vtab, setVtab] = useState<'config' | 'excepciones' | 'notificar'>('config');
+    // Tab config
+    const [ventanaForm, setVentanaForm] = useState({ ventana_inicio: '', ventana_fin: '' });
+    const [confirmToggle, setConfirmToggle] = useState<false | 'abrir' | 'cerrar'>(false);
+    const [toggleNotify, setToggleNotify] = useState(true);
+    const [toggleMsg, setToggleMsg] = useState('');
+    const [ventanaProc, setVentanaProc] = useState(false);
+    // Tab excepciones
+    const [exTipo, setExTipo] = useState<'profesor' | 'curso'>('profesor');
+    const [exRefId, setExRefId] = useState('');
+    const [exBusq, setExBusq] = useState('');
+    const [exMotivo, setExMotivo] = useState('');
+    const [exProc, setExProc] = useState(false);
+    // Tab notificaciones
+    const [ntitulo, setNtitulo] = useState('');
+    const [nmensaje, setNmensaje] = useState('');
+    const [nSolo, setNSolo] = useState(false);
+    const [nProc, setNProc] = useState(false);
+    const [nSuccess, setNSuccess] = useState('');
+
+    // Sincronizar ventanaPeriodo con datos frescos de Inertia
+    useEffect(() => {
+        if (ventanaPeriodo) {
+            const updated = periodos.find(p => p.id === ventanaPeriodo.id);
+            if (updated) setVentanaPeriodo(updated);
+        }
+    }, [periodos]);
+
     /* ── Derived ── */
     const periodosCompletados = useMemo(() => periodos.filter(p => p.estado === 'finalizado').length, [periodos]);
     const periodoActivo = useMemo(() => periodos.find(p => p.estado === 'activo'), [periodos]);
@@ -64,6 +119,21 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     }, [periodoActivo]);
     const progresoAnio = useMemo(() => periodos.filter(p => p.estado === 'finalizado').reduce((s, p) => s + p.porcentaje, 0), [periodos]);
     const porcentajeDisponible = useMemo(() => Math.max(0, 100 - sumaPorcentajes), [sumaPorcentajes]);
+
+    const ventanaEsProgramada = (p: Periodo) =>
+        !p.notas_abiertas && !!p.ventana_inicio && new Date(p.ventana_inicio) > new Date();
+
+    const exLista = useMemo(() => {
+        const q = exBusq.toLowerCase();
+        if (exTipo === 'profesor') {
+            return profesores.filter(p =>
+                p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)
+            );
+        }
+        return cursos.filter(c =>
+            c.nombre.toLowerCase().includes(q) || c.nivel.toLowerCase().includes(q)
+        );
+    }, [exTipo, exBusq, profesores, cursos]);
 
     /* ── Input helper ── */
     const inputClass = (field: string) =>
@@ -167,6 +237,97 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
         });
     };
 
+    /* ── Ventana handlers ── */
+    const openVentanaModal = (p: Periodo) => {
+        setVentanaPeriodo(p);
+        setVtab('config');
+        setVentanaForm({ ventana_inicio: p.ventana_inicio?.slice(0, 16) ?? '', ventana_fin: p.ventana_fin?.slice(0, 16) ?? '' });
+        setConfirmToggle(false);
+        setExTipo('profesor');
+        setExRefId('');
+        setExBusq('');
+        setExMotivo('');
+        setNtitulo('');
+        setNmensaje('');
+        setNSolo(false);
+        setNSuccess('');
+        setVentanaProc(false);
+        setShowVentanaModal(true);
+    };
+
+    const handleVentanaConfig = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!ventanaPeriodo) return;
+        setVentanaProc(true);
+        router.patch(`/admin/periodos/${ventanaPeriodo.id}/ventana`, ventanaForm, {
+            preserveScroll: true,
+            onSuccess: () => setVentanaProc(false),
+            onError: () => setVentanaProc(false),
+        });
+    };
+
+    const handleToggleVentana = (abrir: boolean) => {
+        if (!ventanaPeriodo) return;
+        setVentanaProc(true);
+        const mensajeDefecto = abrir
+            ? `La ventana de registro de notas para el ${ventanaPeriodo.nombre} ya está disponible. Por favor ingresa las calificaciones dentro del tiempo establecido.`
+            : `El período de registro de notas para el ${ventanaPeriodo.nombre} ha finalizado.`;
+        router.patch(`/admin/periodos/${ventanaPeriodo.id}/toggle-ventana`, {
+            notas_abiertas: abrir,
+            notificar: toggleNotify,
+            mensaje: toggleMsg || mensajeDefecto,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => { setVentanaProc(false); setConfirmToggle(false); setToggleMsg(''); },
+            onError: () => setVentanaProc(false),
+        });
+    };
+
+    const handleAddExcepcion = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!ventanaPeriodo || !exRefId) return;
+        const lista: Array<ProfesorItem | CursoItem> = exTipo === 'profesor' ? profesores : cursos;
+        const found = lista.find(x => String(x.id) === exRefId);
+        if (!found) return;
+        const nombre = 'name' in found ? found.name : found.nombre;
+        setExProc(true);
+        router.post(`/admin/periodos/${ventanaPeriodo.id}/excepciones`, {
+            tipo: exTipo,
+            referencia_id: parseInt(exRefId),
+            nombre_referencia: nombre,
+            motivo: exMotivo,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => { setExProc(false); setExRefId(''); setExBusq(''); setExMotivo(''); },
+            onError: () => setExProc(false),
+        });
+    };
+
+    const handleDeleteExcepcion = (exId: number) => {
+        if (!ventanaPeriodo) return;
+        router.delete(`/admin/periodos/${ventanaPeriodo.id}/excepciones/${exId}`, { preserveScroll: true });
+    };
+
+    const handleToggleExcepcion = (exId: number) => {
+        if (!ventanaPeriodo) return;
+        router.patch(`/admin/periodos/${ventanaPeriodo.id}/excepciones/${exId}/toggle`, {}, { preserveScroll: true });
+    };
+
+    const handleNotificar = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!ventanaPeriodo || !ntitulo || !nmensaje) return;
+        setNProc(true);
+        router.post(`/admin/periodos/${ventanaPeriodo.id}/notificar`, {
+            titulo: ntitulo,
+            mensaje: nmensaje,
+            solo_con_asignacion: nSolo,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => { setNProc(false); setNSuccess('Notificación enviada exitosamente.'); setTimeout(() => setNSuccess(''), 5000); },
+            onError: () => setNProc(false),
+        });
+    };
+
     /* ═══════════════════════════ RENDER ═══════════════════════════ */
     return (
         <SidebarLayout menuItems={adminMenuItems} title="Configuración de Periodos">
@@ -183,17 +344,17 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                     </div>
                     <div className="flex gap-3">
                         <div className="relative z-10">
-                        <select
-                            value={anio}
-                            onChange={(e) => changeYear(parseInt(e.target.value))}
-                            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] bg-white"
-                        >
-                            {aniosDisponibles.map(a => (
-                                <option key={a} value={a}>Año {a}</option>
-                            ))}
-                            {!aniosDisponibles.includes(anio) && <option value={anio}>Año {anio}</option>}
-                        </select>
-                        </div>
+                            <select
+                                value={anio}
+                                onChange={(e) => changeYear(parseInt(e.target.value))}
+                                className="appearance-none pl-4 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] bg-white"
+                            >
+                                {aniosDisponibles.map(a => (
+                                    <option key={a} value={a}>Año {a}</option>
+                                ))}
+                                {!aniosDisponibles.includes(anio) && <option value={anio}>Año {anio}</option>}
+                            </select>
+                            </div>
                         <button
                             onClick={openCreate}
                             className="flex items-center gap-2 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-5 py-2.5 rounded-xl hover:shadow-lg hover:shadow-[#293577]/25 transition-all text-sm font-medium"
@@ -375,6 +536,47 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                                         </div>
                                                     </div>
                                                 </div>
+                                                {/* ── Ventana de Calificación ── */}
+                                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            {periodo.notas_abiertas ? (
+                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                                                                    Notas abiertas
+                                                                </span>
+                                                            ) : ventanaEsProgramada(periodo) ? (
+                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200">
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                                                    Programada
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-500 border border-red-100">
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                                                    Notas cerradas
+                                                                </span>
+                                                            )}
+                                                            {periodo.excepciones.length > 0 && (
+                                                                <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                                                    {periodo.excepciones.length} excepción{periodo.excepciones.length !== 1 ? 'es' : ''}
+                                                                </span>
+                                                            )}
+                                                            {periodo.ventana_inicio && !periodo.notas_abiertas && (
+                                                                <span className="text-xs text-gray-400 flex items-center gap-1">
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                                                                    {formatDateTime(periodo.ventana_inicio)}{periodo.ventana_fin ? ` → ${formatDateTime(periodo.ventana_fin)}` : ''}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => openVentanaModal(periodo)}
+                                                            className="inline-flex items-center gap-1 text-xs font-medium text-[#293577] hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors border border-[#293577]/20"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                                                            Configurar ventana
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     );
@@ -447,6 +649,68 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                         </div>
                     </div>
                 </div>
+
+                {/* ── Panel de Control de Ventanas de Calificación ── */}
+                {periodos.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm p-5 sm:p-6">
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h2 className="font-bold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Panel de Ventanas de Calificación</h2>
+                                <p className="text-xs text-gray-500 mt-0.5">Controla el acceso de profesores al registro de notas por periodo</p>
+                            </div>
+                            <span className={`text-xs font-medium px-3 py-1 rounded-full ${periodos.some(p => p.notas_abiertas) ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-gray-500 bg-gray-100'}`}>
+                                {periodos.filter(p => p.notas_abiertas).length} abierta{periodos.filter(p => p.notas_abiertas).length !== 1 ? 's' : ''}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            {periodos.map(p => {
+                                const esProg = ventanaEsProgramada(p);
+                                return (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => openVentanaModal(p)}
+                                        className={`rounded-xl p-4 border-2 text-left transition-all hover:shadow-md ${
+                                            p.notas_abiertas
+                                                ? 'border-emerald-400 bg-emerald-50'
+                                                : esProg
+                                                    ? 'border-blue-300 bg-blue-50'
+                                                    : 'border-gray-100 bg-gray-50 hover:border-gray-200'
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between mb-2">
+                                            <span className="text-sm font-bold text-gray-800 leading-tight">{p.nombre}</span>
+                                            {p.notas_abiertas ? (
+                                                <span className="bg-emerald-500 text-white p-1 rounded-lg flex-shrink-0 ml-2">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                                </span>
+                                            ) : esProg ? (
+                                                <span className="bg-blue-400 text-white p-1 rounded-lg flex-shrink-0 ml-2">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                                </span>
+                                            ) : (
+                                                <span className="bg-gray-300 text-white p-1 rounded-lg flex-shrink-0 ml-2">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className={`text-xs font-semibold ${p.notas_abiertas ? 'text-emerald-600' : esProg ? 'text-blue-500' : 'text-gray-400'}`}>
+                                            {p.notas_abiertas ? 'Notas abiertas' : esProg ? 'Programada' : 'Cerrada'}
+                                        </p>
+                                        {p.excepciones.filter(e => e.activa).length > 0 && (
+                                            <p className="text-[10px] text-amber-500 mt-1">
+                                                {p.excepciones.filter(e => e.activa).length} excepción{p.excepciones.filter(e => e.activa).length !== 1 ? 'es' : ''} activa{p.excepciones.filter(e => e.activa).length !== 1 ? 's' : ''}
+                                            </p>
+                                        )}
+                                        <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-0.5">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                                            Configurar
+                                        </p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ═══════ MODAL CREAR/EDITAR ═══════ */}
@@ -590,6 +854,393 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                     </div>
                                 </>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ═══════ MODAL VENTANA DE CALIFICACIÓN ═══════ */}
+            {showVentanaModal && ventanaPeriodo && (
+                <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto" onClick={() => setShowVentanaModal(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl my-8" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-[#181b49] to-[#293577] rounded-t-2xl px-6 py-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white">Ventana de Calificación</h2>
+                                    <p className="text-blue-200 text-sm mt-0.5">{ventanaPeriodo.nombre} · {ventanaPeriodo.anio}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {ventanaPeriodo.notas_abiertas ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-400/30 text-emerald-200 border border-emerald-400/40">
+                                            <span className="w-1.5 h-1.5 bg-emerald-300 rounded-full animate-pulse" />
+                                            Notas abiertas
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-white/70 border border-white/20">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                            Cerrada
+                                        </span>
+                                    )}
+                                    <button onClick={() => setShowVentanaModal(false)} className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Tabs */}
+                            <div className="flex gap-1 mt-4">
+                                {([
+                                    { key: 'config' as const, label: 'Configuración' },
+                                    { key: 'excepciones' as const, label: `Excepciones${ventanaPeriodo.excepciones.length > 0 ? ` (${ventanaPeriodo.excepciones.length})` : ''}` },
+                                    { key: 'notificar' as const, label: 'Notificaciones' },
+                                ]).map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setVtab(tab.key)}
+                                        className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${vtab === tab.key ? 'bg-white text-[#293577]' : 'text-white/70 hover:bg-white/10'}`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6">
+
+                            {/* ── TAB: Configuración ── */}
+                            {vtab === 'config' && (
+                                <div className="space-y-6">
+                                    {/* Control manual */}
+                                    <div>
+                                        <h3 className="text-sm font-bold text-gray-800 mb-3">Control manual de acceso</h3>
+                                        {!confirmToggle ? (
+                                            <div className="flex gap-3">
+                                                {!ventanaPeriodo.notas_abiertas ? (
+                                                    <button
+                                                        onClick={() => { setConfirmToggle('abrir'); setToggleNotify(true); setToggleMsg(''); }}
+                                                        className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                                        Abrir notas ahora
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => { setConfirmToggle('cerrar'); setToggleNotify(true); setToggleMsg(''); }}
+                                                        className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                                        Cerrar notas
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className={`rounded-xl p-4 border ${confirmToggle === 'abrir' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                                                <p className="text-sm font-semibold text-gray-800 mb-3">
+                                                    {confirmToggle === 'abrir'
+                                                        ? `¿Abrir ventana de notas para ${ventanaPeriodo.nombre}?`
+                                                        : `¿Cerrar ventana de notas para ${ventanaPeriodo.nombre}?`}
+                                                </p>
+                                                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                                    <input type="checkbox" checked={toggleNotify} onChange={e => setToggleNotify(e.target.checked)} className="w-4 h-4 rounded accent-[#293577]" />
+                                                    <span className="text-sm text-gray-700">Notificar a profesores</span>
+                                                </label>
+                                                {toggleNotify && (
+                                                    <textarea
+                                                        value={toggleMsg}
+                                                        onChange={e => setToggleMsg(e.target.value)}
+                                                        placeholder={confirmToggle === 'abrir'
+                                                            ? `La ventana de registro de notas para ${ventanaPeriodo.nombre} ya está disponible...`
+                                                            : `El período de registro de notas para ${ventanaPeriodo.nombre} ha finalizado...`}
+                                                        rows={3}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] mb-3"
+                                                    />
+                                                )}
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => setConfirmToggle(false)} className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+                                                    <button
+                                                        onClick={() => handleToggleVentana(confirmToggle === 'abrir')}
+                                                        disabled={ventanaProc}
+                                                        className={`flex-1 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 ${confirmToggle === 'abrir' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-red-500 hover:bg-red-600'}`}
+                                                    >
+                                                        {ventanaProc ? 'Procesando...' : confirmToggle === 'abrir' ? 'Confirmar apertura' : 'Confirmar cierre'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Ventana automática */}
+                                    <div className="border-t pt-5">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Programar ventana automática</h3>
+                                        <p className="text-xs text-gray-500 mb-4">Define fechas de referencia para recordar cuándo abrir/cerrar las notas. Cuando la ventana esté programada se mostrará a los profesores.</p>
+                                        <form onSubmit={handleVentanaConfig} className="space-y-3">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Apertura programada</label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={ventanaForm.ventana_inicio}
+                                                        onChange={e => setVentanaForm({ ...ventanaForm, ventana_inicio: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Cierre programado</label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={ventanaForm.ventana_fin}
+                                                        onChange={e => setVentanaForm({ ...ventanaForm, ventana_fin: e.target.value })}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                {(ventanaForm.ventana_inicio || ventanaForm.ventana_fin) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setVentanaForm({ ventana_inicio: '', ventana_fin: '' })}
+                                                        className="px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50"
+                                                    >
+                                                        Limpiar fechas
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="submit"
+                                                    disabled={ventanaProc}
+                                                    className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2 rounded-xl text-sm font-medium hover:shadow-lg disabled:opacity-50"
+                                                >
+                                                    {ventanaProc ? 'Guardando...' : 'Guardar programación'}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── TAB: Excepciones ── */}
+                            {vtab === 'excepciones' && (
+                                <div className="space-y-5">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
+                                        <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                                        <div>
+                                            <p className="text-sm font-semibold text-amber-800">¿Qué son las excepciones?</p>
+                                            <p className="text-xs text-amber-700 mt-0.5">Permiten a un profesor o curso específico registrar notas aunque la ventana global esté cerrada. Ideal para incapacidades, permisos o entregas tardías justificadas.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Tabla de excepciones */}
+                                    {ventanaPeriodo.excepciones.length > 0 ? (
+                                        <div className="overflow-hidden rounded-xl border border-gray-100">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600">Nombre</th>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600">Tipo</th>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 hidden sm:table-cell">Motivo</th>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600">Estado</th>
+                                                        <th className="px-4 py-2.5 text-xs font-semibold text-gray-600"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {ventanaPeriodo.excepciones.map(ex => (
+                                                        <tr key={ex.id} className="hover:bg-gray-50/80">
+                                                            <td className="px-4 py-3 font-medium text-gray-800 text-sm">{ex.nombre_referencia}</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ex.tipo === 'profesor' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                                    {ex.tipo === 'profesor' ? 'Profesor' : 'Curso'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-gray-400 text-xs hidden sm:table-cell">{ex.motivo ?? '—'}</td>
+                                                            <td className="px-4 py-3">
+                                                                <button
+                                                                    onClick={() => handleToggleExcepcion(ex.id)}
+                                                                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${ex.activa ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                                                >
+                                                                    {ex.activa ? 'Activa' : 'Inactiva'}
+                                                                </button>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <button onClick={() => handleDeleteExcepcion(ex.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-gray-400">
+                                            <svg className="w-10 h-10 mx-auto mb-2 text-gray-200" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                                            <p className="text-sm">Sin excepciones configuradas para este periodo</p>
+                                        </div>
+                                    )}
+
+                                    {/* Formulario agregar excepción */}
+                                    <form onSubmit={handleAddExcepcion} className="border-t pt-5 space-y-3">
+                                        <h3 className="text-sm font-bold text-gray-800">Agregar excepción</h3>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Tipo</label>
+                                                <select
+                                                    value={exTipo}
+                                                    onChange={e => { setExTipo(e.target.value as 'profesor' | 'curso'); setExRefId(''); setExBusq(''); }}
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                                >
+                                                    <option value="profesor">Profesor</option>
+                                                    <option value="curso">Curso</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Buscar {exTipo}</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder={exTipo === 'profesor' ? 'Nombre o correo...' : 'Nombre del curso...'}
+                                                    value={exBusq}
+                                                    onChange={e => { setExBusq(e.target.value); setExRefId(''); }}
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                                />
+                                            </div>
+                                        </div>
+                                        {exBusq.trim().length >= 1 && (
+                                            <select
+                                                size={Math.min(exLista.length + 1, 5)}
+                                                value={exRefId}
+                                                onChange={e => setExRefId(e.target.value)}
+                                                className="w-full border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                            >
+                                                {exLista.map(item => (
+                                                    <option key={item.id} value={String(item.id)}>
+                                                        {'name' in item ? `${item.name} — ${item.email}` : `${item.nombre} · ${item.nivel} ${item.grado}${item.grupo ? `-${item.grupo}` : ''}`}
+                                                    </option>
+                                                ))}
+                                                {exLista.length === 0 && <option disabled>Sin resultados</option>}
+                                            </select>
+                                        )}
+                                        {exRefId && (
+                                            <div className="bg-[#293577]/5 border border-[#293577]/20 rounded-xl px-3 py-2 text-xs text-[#293577] font-medium">
+                                                Seleccionado: {(() => {
+                                                    const lista: Array<ProfesorItem | CursoItem> = exTipo === 'profesor' ? profesores : cursos;
+                                                    const f = lista.find(x => String(x.id) === exRefId);
+                                                    return f ? ('name' in f ? f.name : f.nombre) : exRefId;
+                                                })()}
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Motivo (opcional)</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ej: Incapacidad médica, permiso especial, entrega tardía justificada..."
+                                                value={exMotivo}
+                                                onChange={e => setExMotivo(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                            />
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!exRefId || exProc}
+                                            className="w-full bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:shadow-lg disabled:opacity-40 transition-all"
+                                        >
+                                            {exProc ? 'Agregando...' : 'Agregar excepción'}
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+
+                            {/* ── TAB: Notificaciones ── */}
+                            {vtab === 'notificar' && (
+                                <div className="space-y-5">
+                                    {nSuccess && (
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+                                            <svg className="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                            <span className="text-sm font-medium text-emerald-700">{nSuccess}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Plantillas rápidas */}
+                                    <div>
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Plantillas rápidas</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            {[
+                                                {
+                                                    label: '📝 Apertura de notas',
+                                                    titulo: `Apertura de notas: ${ventanaPeriodo.nombre}`,
+                                                    mensaje: `Estimado(a) profesor(a), te informamos que la ventana de registro de notas para el ${ventanaPeriodo.nombre} (${ventanaPeriodo.anio}) ya se encuentra disponible. Por favor ingresa las calificaciones dentro del tiempo establecido.`,
+                                                },
+                                                {
+                                                    label: '⏰ Recordatorio',
+                                                    titulo: `Recordatorio: Notas del ${ventanaPeriodo.nombre}`,
+                                                    mensaje: `Recordatorio: La ventana de registro de notas del ${ventanaPeriodo.nombre} está próxima a cerrarse. Por favor asegúrate de haber ingresado todas las calificaciones a tiempo.`,
+                                                },
+                                                {
+                                                    label: '🔒 Cierre de ventana',
+                                                    titulo: `Cierre de ventana: ${ventanaPeriodo.nombre}`,
+                                                    mensaje: `Se informa que la ventana de registro de notas para el ${ventanaPeriodo.nombre} ha sido cerrada. Si tienes alguna novedad pendiente, comunícate con la coordinación académica.`,
+                                                },
+                                            ].map((t, i) => (
+                                                <button
+                                                    key={i}
+                                                    type="button"
+                                                    onClick={() => { setNtitulo(t.titulo); setNmensaje(t.mensaje); }}
+                                                    className="text-left p-3 border border-gray-100 rounded-xl hover:border-[#293577]/30 hover:bg-blue-50/30 transition-all text-xs font-medium text-gray-700"
+                                                >
+                                                    {t.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Formulario */}
+                                    <form onSubmit={handleNotificar} className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Título *</label>
+                                            <input
+                                                type="text"
+                                                value={ntitulo}
+                                                onChange={e => setNtitulo(e.target.value)}
+                                                placeholder="Ej: Apertura de notas - Primer Periodo"
+                                                maxLength={150}
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Mensaje *</label>
+                                            <textarea
+                                                value={nmensaje}
+                                                onChange={e => setNmensaje(e.target.value)}
+                                                placeholder="Escribe el mensaje completo que recibirán los profesores..."
+                                                rows={4}
+                                                maxLength={1000}
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                            />
+                                            <p className="text-xs text-gray-400 text-right mt-0.5">{nmensaje.length}/1000</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-medium text-gray-700 mb-2">Destinatarios</p>
+                                            <div className="space-y-2">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="radio" checked={!nSolo} onChange={() => setNSolo(false)} className="accent-[#293577]" />
+                                                    <span className="text-sm text-gray-700">Todos los profesores ({profesores.length})</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="radio" checked={nSolo} onChange={() => setNSolo(true)} className="accent-[#293577]" />
+                                                    <span className="text-sm text-gray-700">Solo profesores con asignación en {ventanaPeriodo.anio}</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!ntitulo || !nmensaje || nProc}
+                                            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-3 rounded-xl text-sm font-medium hover:shadow-lg disabled:opacity-40 transition-all"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
+                                            {nProc ? 'Enviando...' : 'Enviar notificación'}
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 </div>

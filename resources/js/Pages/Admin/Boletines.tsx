@@ -7,7 +7,8 @@ import autoTable from 'jspdf-autotable';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface Periodo { id: number; nombre: string; anio: number; activo: boolean; }
-interface Curso   { id: number; nombre: string; nivel: string; }
+interface Curso   { id: number; nombre: string; nivel: string; sede_id: number | null; }
+interface Sede    { id: number; nombre: string; }
 interface NotaBoletin { materia: string; definitiva: number | null; }
 
 interface Boletin {
@@ -59,13 +60,13 @@ interface Props {
     periodos: Periodo[];
     cursos: Curso[];
     niveles: string[];
+    sedes: Sede[];
     periodoActivo: { id: number; nombre: string } | null;
 }
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 const nivelesConfig: Record<string, { label: string; color: string; chipActive: string }> = {
-    preescolar:   { label: 'Pre-escolar',  color: 'bg-pink-100 text-pink-700',       chipActive: 'bg-pink-500' },
-    transicion:   { label: 'Transición',   color: 'bg-purple-100 text-purple-700',   chipActive: 'bg-purple-500' },
+    prejardin:    { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',   chipActive: 'bg-pink-500' },
     primaria:     { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',       chipActive: 'bg-blue-500' },
     bachillerato: { label: 'Bachillerato', color: 'bg-emerald-100 text-emerald-700', chipActive: 'bg-emerald-500' },
 };
@@ -231,9 +232,10 @@ function dibujarBoletinPagina(doc: jsPDF, b: Boletin) {
 }
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
-export default function Boletines({ boletines, resumenNotas, periodos, cursos, niveles, periodoActivo }: Props) {
+export default function Boletines({ boletines, resumenNotas, periodos, cursos, niveles, sedes, periodoActivo }: Props) {
     const [activeTab, setActiveTab]           = useState<'boletines' | 'resumen'>('boletines');
     const [nivelSeleccionado, setNivelSel]    = useState('todos');
+    const [sedeSel, setSedeSel]              = useState('todas');
     const [cursoSeleccionado, setCursoSel]    = useState('todos');
     const [periodoSeleccionado, setPeriodoSel]= useState(periodoActivo?.id.toString() ?? 'todos');
     const [busqueda, setBusqueda]             = useState('');
@@ -245,28 +247,49 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     const [detalleResumen, setDetalleResumen] = useState<ResumenNotas | null>(null);
     const [detalleTab, setDetalleTab]         = useState<'materias' | 'estudiantes'>('materias');
 
-    const cursosDisponibles = useMemo(() =>
-        nivelSeleccionado === 'todos' ? cursos : cursos.filter(c => c.nivel === nivelSeleccionado),
-    [cursos, nivelSeleccionado]);
+    const cursosDisponibles = useMemo(() => {
+        let lista = sedeSel !== 'todas'
+            ? cursos.filter(c => c.sede_id === Number(sedeSel))
+            : cursos;
+        if (nivelSeleccionado === 'todos') return lista;
+        if (nivelSeleccionado === 'prejardin')
+            return lista.filter(c => c.nivel === 'prejardin' || c.nivel === 'transicion' || c.nivel === 'preescolar');
+        return lista.filter(c => c.nivel === nivelSeleccionado);
+    }, [cursos, nivelSeleccionado, sedeSel]);
 
-    const hayFiltros = nivelSeleccionado !== 'todos' || cursoSeleccionado !== 'todos' ||
-                       periodoSeleccionado !== 'todos' || busqueda !== '' || estadoFiltro !== 'todos';
+    const hayFiltros = nivelSeleccionado !== 'todos' || sedeSel !== 'todas' ||
+                       cursoSeleccionado !== 'todos' || periodoSeleccionado !== 'todos' ||
+                       busqueda !== '' || estadoFiltro !== 'todos';
 
     const boletinesFiltrados = useMemo(() => {
         if (!hasLoaded && !hayFiltros) return [];
         return boletines.filter(b => {
-            const matchNivel   = nivelSeleccionado === 'todos' || b.nivel === nivelSeleccionado;
+            const matchNivel   = nivelSeleccionado === 'todos'
+                || (nivelSeleccionado === 'prejardin' ? (b.nivel === 'prejardin' || b.nivel === 'transicion' || b.nivel === 'preescolar') : b.nivel === nivelSeleccionado);
+            const matchSede    = sedeSel === 'todas' || (() => {
+                const curso = cursos.find(c => c.id === b.curso_id);
+                return curso?.sede_id === Number(sedeSel);
+            })();
             const matchCurso   = cursoSeleccionado === 'todos' || b.curso_id.toString() === cursoSeleccionado;
             const matchPeriodo = periodoSeleccionado === 'todos' || b.periodo_id.toString() === periodoSeleccionado;
             const matchEstado  = estadoFiltro === 'todos' || b.estado === estadoFiltro;
             const matchSearch  = busqueda === '' || b.estudiante.toLowerCase().includes(busqueda.toLowerCase());
-            return matchNivel && matchCurso && matchPeriodo && matchEstado && matchSearch;
+            return matchNivel && matchSede && matchCurso && matchPeriodo && matchEstado && matchSearch;
         });
-    }, [boletines, nivelSeleccionado, cursoSeleccionado, periodoSeleccionado, estadoFiltro, busqueda, hasLoaded, hayFiltros]);
+    }, [boletines, nivelSeleccionado, sedeSel, cursoSeleccionado, periodoSeleccionado, estadoFiltro, busqueda, hasLoaded, hayFiltros, cursos]);
 
-    const resumenFiltrado = useMemo(() =>
-        nivelSeleccionado === 'todos' ? resumenNotas : resumenNotas.filter(r => r.nivel === nivelSeleccionado),
-    [resumenNotas, nivelSeleccionado]);
+    const resumenFiltrado = useMemo(() => {
+        let lista = sedeSel !== 'todas'
+            ? resumenNotas.filter(r => {
+                const curso = cursos.find(c => c.id === r.curso_id);
+                return curso?.sede_id === Number(sedeSel);
+            })
+            : resumenNotas;
+        if (nivelSeleccionado === 'todos') return lista;
+        if (nivelSeleccionado === 'prejardin')
+            return lista.filter(r => r.nivel === 'prejardin' || r.nivel === 'transicion' || r.nivel === 'preescolar');
+        return lista.filter(r => r.nivel === nivelSeleccionado);
+    }, [resumenNotas, nivelSeleccionado, sedeSel, cursos]);
 
     const stats = useMemo(() => {
         const src = (hasLoaded || hayFiltros) ? boletinesFiltrados : boletines;
@@ -281,7 +304,7 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     const handleNivelChange = (nivel: string) => { setNivelSel(nivel); setCursoSel('todos'); };
 
     const limpiarFiltros = () => {
-        setNivelSel('todos'); setCursoSel('todos');
+        setNivelSel('todos'); setSedeSel('todas'); setCursoSel('todos');
         setPeriodoSel('todos'); setEstadoFiltro('todos'); setBusqueda('');
     };
 
@@ -395,6 +418,16 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {sedes.length > 0 && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
+                                <select value={sedeSel} onChange={e => { setSedeSel(e.target.value); setCursoSel('todos'); }}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]">
+                                    <option value="todas">Todas las sedes</option>
+                                    {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                                </select>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Curso</label>
                             <select value={cursoSeleccionado} onChange={e => setCursoSel(e.target.value)}
@@ -437,6 +470,12 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                     {hayFiltros && (
                         <div className="flex items-center gap-2 flex-wrap pt-1">
                             <span className="text-xs text-gray-500">Filtros activos:</span>
+                            {sedeSel !== 'todas' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">
+                                    {sedes.find(s => s.id.toString() === sedeSel)?.nombre}
+                                    <button onClick={() => setSedeSel('todas')} className="hover:opacity-70">×</button>
+                                </span>
+                            )}
                             {nivelSeleccionado !== 'todos' && (
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getNivelBadge(nivelSeleccionado)}`}>
                                     {getNivelLabel(nivelSeleccionado)}

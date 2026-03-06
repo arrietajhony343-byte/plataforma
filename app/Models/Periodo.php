@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Periodo extends Model
 {
     protected $fillable = [
-        'anio', 'nombre', 'numero', 'fecha_inicio', 'fecha_fin', 'porcentaje', 'estado', 'notas_abiertas',
+        'anio', 'nombre', 'numero', 'fecha_inicio', 'fecha_fin', 'porcentaje', 'estado',
+        'notas_abiertas', 'ventana_inicio', 'ventana_fin',
     ];
 
     protected function casts(): array
@@ -18,6 +19,8 @@ class Periodo extends Model
             'fecha_fin'       => 'date',
             'porcentaje'      => 'decimal:2',
             'notas_abiertas'  => 'boolean',
+            'ventana_inicio'  => 'datetime',
+            'ventana_fin'     => 'datetime',
         ];
     }
 
@@ -41,6 +44,11 @@ class Periodo extends Model
     public function boletines(): HasMany
     {
         return $this->hasMany(Boletin::class);
+    }
+
+    public function excepciones(): HasMany
+    {
+        return $this->hasMany(VentanaExcepcion::class);
     }
 
     /* ── Scopes ── */

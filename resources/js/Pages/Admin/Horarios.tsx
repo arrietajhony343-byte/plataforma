@@ -115,7 +115,7 @@ const profesorColors = [
 ];
 
 type TimeSlot = { hora: string; horaFin: string; esDescanso?: boolean };
-type NivelKey = 'general' | 'preescolar' | 'primaria' | 'bachillerato';
+type NivelKey = 'general' | 'prejardin' | 'primaria' | 'bachillerato';
 
 const DEFAULT_TIME_SLOTS: TimeSlot[] = [
     { hora: '7:00', horaFin: '7:50' },
@@ -141,14 +141,14 @@ const DEFAULT_JORNADA_PREESCOLAR: TimeSlot[] = [
 
 const NIVEL_LABELS: Record<NivelKey, string> = {
     general: 'General',
-    preescolar: 'Preescolar / Transición',
+    prejardin: 'Pre-Jardín',
     primaria: 'Primaria',
     bachillerato: 'Bachillerato',
 };
 
 const NIVEL_DEFAULTS: Record<NivelKey, TimeSlot[]> = {
     general: DEFAULT_TIME_SLOTS,
-    preescolar: DEFAULT_JORNADA_PREESCOLAR,
+    prejardin: DEFAULT_JORNADA_PREESCOLAR,
     primaria: DEFAULT_TIME_SLOTS,
     bachillerato: DEFAULT_TIME_SLOTS,
 };
@@ -181,9 +181,9 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
     /* ── Jornada configurable por nivel (inicializada desde BD) ── */
     const [jornadasByNivel, setJornadasByNivel] = useState<Record<NivelKey, TimeSlot[]>>({
         general:      (jornadasIniciales?.general      ?? NIVEL_DEFAULTS.general).map(s => ({ ...s })),
-        preescolar:   (jornadasIniciales?.preescolar   ?? NIVEL_DEFAULTS.preescolar).map(s => ({ ...s })),
-        primaria:     (jornadasIniciales?.primaria     ?? NIVEL_DEFAULTS.primaria).map(s => ({ ...s })),
-        bachillerato: (jornadasIniciales?.bachillerato ?? NIVEL_DEFAULTS.bachillerato).map(s => ({ ...s })),
+        prejardin:    (jornadasIniciales?.prejardin     ?? NIVEL_DEFAULTS.prejardin).map(s => ({ ...s })),
+        primaria:     (jornadasIniciales?.primaria      ?? NIVEL_DEFAULTS.primaria).map(s => ({ ...s })),
+        bachillerato: (jornadasIniciales?.bachillerato  ?? NIVEL_DEFAULTS.bachillerato).map(s => ({ ...s })),
     });
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [configNivel, setConfigNivel] = useState<NivelKey>('general');
@@ -233,7 +233,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
     /** Mapea nivel de DB al NivelKey para jornada */
     const normalizeNivel = (nivel?: string | null): NivelKey => {
         const n = (nivel ?? '').toLowerCase();
-        if (n === 'preescolar' || n === 'transicion') return 'preescolar';
+        if (n === 'preescolar' || n === 'transicion') return 'prejardin';
         if (n === 'primaria') return 'primaria';
         if (n === 'bachillerato' || n === 'secundaria' || n === 'media') return 'bachillerato';
         return 'general';
@@ -1228,14 +1228,16 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                         <div className="flex flex-wrap items-center gap-3">
                             <h2 className="text-sm font-bold text-gray-700">{getDisplayTitle()}</h2>
                             {sedes.length > 0 && (
-                                <select
-                                    value={sedeSel}
-                                    onChange={e => setSedeSel(e.target.value)}
-                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
-                                >
-                                    <option value="todas">Todas las sedes</option>
-                                    {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
-                                </select>
+                                <div className="relative">
+                                    <select
+                                        value={sedeSel}
+                                        onChange={e => setSedeSel(e.target.value)}
+                                        className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                    >
+                                        <option value="todas">Todas las sedes</option>
+                                        {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                    </select>
+                                    </div>
                             )}
                             <div className="flex-1 h-px bg-gray-200" />
                         </div>
@@ -1415,14 +1417,17 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Seleccionar curso — {anioVigente}</p>
                                 <div className="flex items-center gap-3">
                                     {sedes.length > 0 && (
-                                        <select
-                                            value={sedeSel}
-                                            onChange={e => { setSedeSel(e.target.value); setCursoSeleccionado(''); }}
-                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
-                                        >
-                                            <option value="todas">Todas las sedes</option>
-                                            {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
-                                        </select>
+                                        <div className="relative">
+                                            <select
+                                                value={sedeSel}
+                                                onChange={e => { setSedeSel(e.target.value); setCursoSeleccionado(''); }}
+                                                className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                            >
+                                                <option value="todas">Todas las sedes</option>
+                                                {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                            </select>
+                                            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
+                                        </div>
                                     )}
                                     <span className="text-[10px] text-gray-400">{stats.cursosConClases} de {stats.totalCursos} con horario</span>
                                 </div>

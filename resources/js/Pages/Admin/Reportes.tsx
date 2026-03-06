@@ -71,8 +71,7 @@ interface Sede {
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 const nivelesConfig: Record<string, { label: string; color: string; colorChip: string }> = {
-    preescolar:  { label: 'Transición',   color: 'bg-purple-100 text-purple-700', colorChip: 'bg-purple-500' }, // alias → transicion
-    transicion:  { label: 'Transición',   color: 'bg-purple-100 text-purple-700', colorChip: 'bg-purple-500' },
+    prejardin:   { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',     colorChip: 'bg-pink-500' },
     primaria:    { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',    colorChip: 'bg-blue-500' },
     secundaria:  { label: 'Secundaria',   color: 'bg-cyan-100 text-cyan-700',    colorChip: 'bg-cyan-500' },
     media:       { label: 'Media',        color: 'bg-amber-100 text-amber-700',  colorChip: 'bg-amber-500' },
@@ -133,18 +132,18 @@ export default function Reportes({ periodos, periodoActualId, cursos, sedes, ani
             ? cursos.filter(c => c.sede_id === Number(sedeSel))
             : cursos;
         if (nivelSeleccionado === 'todos') return filtered;
-        if (nivelSeleccionado === 'transicion') {
-            return filtered.filter(c => c.nivel === 'transicion' || c.nivel === 'preescolar');
+        if (nivelSeleccionado === 'prejardin') {
+            return filtered.filter(c => c.nivel === 'prejardin' || c.nivel === 'transicion' || c.nivel === 'preescolar');
         }
         return filtered.filter(c => c.nivel === nivelSeleccionado);
     }, [cursos, nivelSeleccionado, sedeSel]);
 
-    // Niveles únicos de los cursos (preescolar se normaliza como transicion)
+    // Niveles únicos de los cursos (preescolar/transicion se normalizan como prejardin)
     const nivelesDisponibles = useMemo(() => {
-        const normalizado = cursos.map(c => c.nivel === 'preescolar' ? 'transicion' : c.nivel);
+        const normalizado = cursos.map(c => (c.nivel === 'preescolar' || c.nivel === 'transicion') ? 'prejardin' : c.nivel);
         const unique = [...new Set(normalizado)];
         return unique.sort((a, b) => {
-            const order = ['transicion', 'primaria', 'secundaria', 'media', 'bachillerato'];
+            const order = ['prejardin', 'primaria', 'secundaria', 'media', 'bachillerato'];
             return order.indexOf(a) - order.indexOf(b);
         });
     }, [cursos]);

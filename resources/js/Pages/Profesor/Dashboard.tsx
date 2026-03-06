@@ -61,9 +61,10 @@ interface Props {
 }
 
 // ── Nivel colors ──
+const normalizeNivel = (n: string) => (n === 'preescolar' || n === 'transicion') ? 'prejardin' : n;
+const nivelLabels: Record<string, string> = { prejardin: 'Pre-Jardín', primaria: 'Primaria', bachillerato: 'Bachillerato' };
 const nivelColors: Record<string, { bg: string; text: string; dot: string; badge: string }> = {
-    preescolar:   { bg: 'bg-pink-50',   text: 'text-pink-700',   dot: 'bg-pink-500',   badge: 'bg-pink-100 text-pink-700'   },
-    transicion:   { bg: 'bg-amber-50',  text: 'text-amber-700',  dot: 'bg-amber-500',  badge: 'bg-amber-100 text-amber-700'  },
+    prejardin:    { bg: 'bg-pink-50',    text: 'text-pink-700',    dot: 'bg-pink-500',    badge: 'bg-pink-100 text-pink-700'    },
     primaria:     { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700' },
     bachillerato: { bg: 'bg-blue-50',   text: 'text-blue-700',   dot: 'bg-blue-500',   badge: 'bg-blue-100 text-blue-700'   },
 };
@@ -82,14 +83,14 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
 
     // Niveles disponibles
     const nivelesDisponibles = useMemo(() => {
-        const set = new Set(cursos.map(c => c.nivel));
+        const set = new Set(cursos.map(c => normalizeNivel(c.nivel)));
         return Array.from(set);
     }, [cursos]);
 
     // Cursos filtrados
     const cursosFiltrados = useMemo(() => {
         if (filtroNivel === 'todos') return cursos;
-        return cursos.filter(c => c.nivel === filtroNivel);
+        return cursos.filter(c => normalizeNivel(c.nivel) === filtroNivel);
     }, [cursos, filtroNivel]);
 
     const getPromedioColor = (p: number | null) => {
@@ -196,7 +197,7 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
                                 </button>
                                 {nivelesDisponibles.map(n => {
                                     const nc = nivelColors[n] || nivelColors.primaria;
-                                    const count = cursos.filter(c => c.nivel === n).length;
+                                    const count = cursos.filter(c => normalizeNivel(c.nivel) === n).length;
                                     return (
                                         <button
                                             key={n}
@@ -207,7 +208,7 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
                                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                             }`}
                                         >
-                                            {n.charAt(0).toUpperCase() + n.slice(1)} ({count})
+                                            {nivelLabels[n] ?? (n.charAt(0).toUpperCase() + n.slice(1))} ({count})
                                         </button>
                                     );
                                 })}
@@ -217,7 +218,7 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
                         {/* Curso cards */}
                         <div className="space-y-3">
                             {cursosFiltrados.map(curso => {
-                                const nc = nivelColors[curso.nivel] || nivelColors.primaria;
+                                const nc = nivelColors[normalizeNivel(curso.nivel)] || nivelColors.primaria;
                                 const isExpanded = cursoExpandido === curso.id;
                                 const totalActividades = curso.materias.reduce((s, m) => s + m.actividades, 0);
                                 const promedios = curso.materias.filter(m => m.promedio !== null).map(m => m.promedio!);

@@ -2,6 +2,7 @@ import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
+import axios from 'axios';
 
 interface Sede {
     id: number;
@@ -13,6 +14,16 @@ interface Sede {
     total_usuarios: number;
     total_cursos: number;
     created_at: string;
+}
+
+interface DetalleUsuario { id: number; name: string; email: string; documento: string | null; }
+interface DetalleCurso   { id: number; nombre: string; nivel: string; activo: boolean; total_estudiantes: number; }
+interface SedeDetalle {
+    sede: Sede;
+    estudiantes: DetalleUsuario[];
+    profesores:  DetalleUsuario[];
+    padres:      DetalleUsuario[];
+    cursos:      DetalleCurso[];
 }
 
 interface Props {
@@ -38,6 +49,24 @@ export default function Sedes({ sedes: initialSedes }: Props) {
     const [formData, setFormData] = useState({ ...EMPTY_FORM });
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+    // Modal de detalle
+    const [showDetalle, setShowDetalle]     = useState(false);
+    const [detalle, setDetalle]             = useState<SedeDetalle | null>(null);
+    const [loadingDetalle, setLoadingDetalle] = useState(false);
+    const [detalleTab, setDetalleTab]       = useState<'cursos'|'estudiantes'|'profesores'|'padres'>('cursos');
+
+    const openDetalle = async (sede: Sede) => {
+        setDetalle(null);
+        setDetalleTab('cursos');
+        setShowDetalle(true);
+        setLoadingDetalle(true);
+        try {
+            const res = await axios.get(`/admin/sedes/${sede.id}/detalle`);
+            setDetalle(res.data);
+        } catch { /* silencioso */ }
+        setLoadingDetalle(false);
+    };
 
     const filtered = useMemo(() => {
         return sedes.filter(s => {
@@ -227,6 +256,16 @@ export default function Sedes({ sedes: initialSedes }: Props) {
                                         <td className="px-5 py-3">
                                             <div className="flex justify-center gap-2">
                                                 <button
+                                                    onClick={() => openDetalle(sede)}
+                                                    title="Ver detalle"
+                                                    className="p-1.5 rounded-lg text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 transition"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    </svg>
+                                                </button>
+                                                <button
                                                     onClick={() => openEdit(sede)}
                                                     title="Editar"
                                                     className="p-1.5 rounded-lg text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition"
@@ -253,6 +292,132 @@ export default function Sedes({ sedes: initialSedes }: Props) {
                     )}
                 </div>
             </div>
+
+            {/* ====== Modal Detalle de Sede ====== */}
+            {showDetalle && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+
+                        {/* Header del modal */}
+                        <div
+                            className="flex items-center justify-between px-6 py-4 rounded-t-2xl text-white flex-shrink-0"
+                            style={{ background: 'linear-gradient(90deg, #181b49 0%, #293577 100%)' }}
+                        >
+                            <div>
+                                <h2 className="text-lg font-bold">{detalle?.sede.nombre ?? 'Cargando...'}</h2>
+                                {detalle && (
+                                    <p className="text-sm text-white/70 mt-0.5">
+                                        {detalle.sede.ciudad && <span>{detalle.sede.ciudad} · </span>}
+                                        {detalle.sede.direccion && <span>{detalle.sede.direccion} · </span>}
+                                        {detalle.sede.telefono && <span>{detalle.sede.telefono}</span>}
+                                    </p>
+                                )}
+                            </div>
+                            <button onClick={() => setShowDetalle(false)} className="text-white/70 hover:text-white transition">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {loadingDetalle ? (
+                            <div className="flex-1 flex items-center justify-center py-16">
+                                <svg className="w-8 h-8 animate-spin text-[#293577]" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                </svg>
+                            </div>
+                        ) : detalle ? (
+                            <>
+                                {/* Resumen */}
+                                <div className="grid grid-cols-4 gap-0 border-b border-gray-100 flex-shrink-0">
+                                    {[
+                                        { label: 'Cursos',      value: detalle.cursos.length,      color: '#ca8a04', tab: 'cursos' as const },
+                                        { label: 'Estudiantes', value: detalle.estudiantes.length,  color: '#293577', tab: 'estudiantes' as const },
+                                        { label: 'Profesores',  value: detalle.profesores.length,   color: '#16a34a', tab: 'profesores' as const },
+                                        { label: 'Padres/Acud.',value: detalle.padres.length,       color: '#dc2626', tab: 'padres' as const },
+                                    ].map(m => (
+                                        <button
+                                            key={m.tab}
+                                            onClick={() => setDetalleTab(m.tab)}
+                                            className={`py-4 text-center transition border-b-2 ${detalleTab === m.tab ? 'border-[#293577] bg-indigo-50/50' : 'border-transparent hover:bg-gray-50'}`}
+                                        >
+                                            <p className="text-2xl font-bold" style={{ color: m.color }}>{m.value}</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">{m.label}</p>
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Contenido de la tab */}
+                                <div className="flex-1 overflow-y-auto p-4">
+                                    {detalleTab === 'cursos' && (
+                                        detalle.cursos.length === 0 ? (
+                                            <p className="text-center text-gray-400 py-8 text-sm">Sin cursos registrados</p>
+                                        ) : (
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left font-semibold text-gray-600">Nombre</th>
+                                                        <th className="px-4 py-2 text-left font-semibold text-gray-600">Nivel</th>
+                                                        <th className="px-4 py-2 text-center font-semibold text-gray-600">Estudiantes</th>
+                                                        <th className="px-4 py-2 text-center font-semibold text-gray-600">Estado</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {detalle.cursos.map(c => (
+                                                        <tr key={c.id} className="hover:bg-gray-50">
+                                                            <td className="px-4 py-2.5 font-medium text-gray-800">{c.nombre}</td>
+                                                            <td className="px-4 py-2.5 capitalize text-gray-600">{(c.nivel === 'preescolar' || c.nivel === 'transicion') ? 'Pre-Jardín' : c.nivel}</td>
+                                                            <td className="px-4 py-2.5 text-center">
+                                                                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{c.total_estudiantes}</span>
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-center">
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                                    {c.activo ? 'Activo' : 'Inactivo'}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        )
+                                    )}
+
+                                    {detalleTab !== 'cursos' && (() => {
+                                        const tab = detalleTab as 'estudiantes' | 'profesores' | 'padres';
+                                        const lista = tab === 'estudiantes' ? detalle.estudiantes
+                                                    : tab === 'profesores'  ? detalle.profesores
+                                                    : detalle.padres;
+                                        const labels: Record<string, string> = { estudiantes: 'estudiantes', profesores: 'profesores', padres: 'padres/acudientes' };
+                                        return lista.length === 0 ? (
+                                            <p className="text-center text-gray-400 py-8 text-sm">Sin {labels[tab]} registrados</p>
+                                        ) : (
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left font-semibold text-gray-600">Nombre</th>
+                                                        <th className="px-4 py-2 text-left font-semibold text-gray-600">Documento</th>
+                                                        <th className="px-4 py-2 text-left font-semibold text-gray-600">Correo</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {lista.map(u => (
+                                                        <tr key={u.id} className="hover:bg-gray-50">
+                                                            <td className="px-4 py-2.5 font-medium text-gray-800">{u.name}</td>
+                                                            <td className="px-4 py-2.5 text-gray-500">{u.documento || '—'}</td>
+                                                            <td className="px-4 py-2.5 text-gray-500 truncate max-w-[200px]">{u.email}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()}
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
+                </div>
+            )}
 
             {/* ====== Modal Crear / Editar ====== */}
             {showModal && (

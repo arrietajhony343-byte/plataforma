@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Certificado, TipoCertificado, User, Curso, Mensaje, Notificacion};
+use App\Models\{Certificado, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -102,14 +102,23 @@ class CertificadoController extends Controller
             ->orderBy('grupo')
             ->get()
             ->map(fn($c) => [
-                'id'     => $c->id,
-                'nombre' => $c->nombre,
-                'nivel'  => $c->nivel,
-                'grado'  => $c->grado,
+                'id'      => $c->id,
+                'nombre'  => $c->nombre,
+                'nivel'   => $c->nivel,
+                'grado'   => $c->grado,
+                'sede_id' => $c->sede_id,
             ]);
 
-        // Get unique niveles from cursos
-        $niveles = $cursos->pluck('nivel')->unique()->values();
+        // Niveles únicos normalizados (preescolar → transicion)
+        $niveles = $cursos->pluck('nivel')
+            ->map(fn($n) => $n === 'preescolar' ? 'transicion' : $n)
+            ->unique()
+            ->values();
+
+        $sedes = Sede::where('activa', true)
+            ->orderBy('nombre')
+            ->get()
+            ->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
         return Inertia::render('Admin/Certificados', [
             'certificados'     => $certificados,
@@ -117,6 +126,7 @@ class CertificadoController extends Controller
             'estudiantes'      => $estudiantes,
             'cursos'           => $cursos,
             'niveles'          => $niveles,
+            'sedes'            => $sedes,
         ]);
     }
 

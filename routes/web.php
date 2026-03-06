@@ -68,6 +68,7 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::post('/sedes', [SedeController::class, 'store'])->name('sedes.store');
     Route::put('/sedes/{sede}', [SedeController::class, 'update'])->name('sedes.update');
     Route::delete('/sedes/{sede}', [SedeController::class, 'destroy'])->name('sedes.destroy');
+    Route::get('/sedes/{sede}/detalle', [SedeController::class, 'detalle'])->name('sedes.detalle');
 
     Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios');
     Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
@@ -91,6 +92,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::post('/periodos', [PeriodoController::class, 'store'])->name('periodos.store');
     Route::put('/periodos/{periodo}', [PeriodoController::class, 'update'])->name('periodos.update');
     Route::patch('/periodos/{periodo}/estado', [PeriodoController::class, 'cambiarEstado'])->name('periodos.cambiar-estado');
+    Route::patch('/periodos/{periodo}/ventana', [PeriodoController::class, 'ventanaConfig'])->name('periodos.ventana-config');
+    Route::patch('/periodos/{periodo}/toggle-ventana', [PeriodoController::class, 'toggleVentana'])->name('periodos.toggle-ventana');
+    Route::post('/periodos/{periodo}/excepciones', [PeriodoController::class, 'storeExcepcion'])->name('periodos.excepciones.store');
+    Route::delete('/periodos/{periodo}/excepciones/{excepcion}', [PeriodoController::class, 'destroyExcepcion'])->name('periodos.excepciones.destroy');
+    Route::patch('/periodos/{periodo}/excepciones/{excepcion}/toggle', [PeriodoController::class, 'toggleExcepcion'])->name('periodos.excepciones.toggle');
+    Route::post('/periodos/{periodo}/notificar', [PeriodoController::class, 'notificarProfesores'])->name('periodos.notificar');
     Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy'])->name('periodos.destroy');
 
     // Estudiantes
@@ -107,6 +114,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('/pagos', [PagoController::class, 'index'])->name('pagos');
     Route::post('/pagos', [PagoController::class, 'store'])->name('pagos.store');
     Route::put('/pagos/{pago}', [PagoController::class, 'update'])->name('pagos.update');
+    Route::put('/pagos/{pago}/confirmar', [PagoController::class, 'confirmar'])->name('pagos.confirmar');
+    Route::put('/pagos/{pago}/anular', [PagoController::class, 'anular'])->name('pagos.anular');
+    Route::delete('/pagos/{pago}', [PagoController::class, 'destroy'])->name('pagos.destroy');
+    Route::post('/pagos/conceptos', [PagoController::class, 'storeConcepto'])->name('pagos.conceptos.store');
+    Route::put('/pagos/conceptos/{concepto}', [PagoController::class, 'updateConcepto'])->name('pagos.conceptos.update');
+    Route::put('/pagos/conceptos/{concepto}/toggle', [PagoController::class, 'toggleConcepto'])->name('pagos.conceptos.toggle');
 
     // Boletines
     Route::get('/boletines', [BoletinController::class, 'index'])->name('boletines');
