@@ -94,7 +94,7 @@ class CursoController extends Controller
     {
         $data = $request->validate([
             'nombre'            => 'required|string|max:50',
-            'nivel'             => 'required|in:preescolar,transicion,primaria,bachillerato',
+            'nivel'             => 'required|in:prejardin,preescolar,transicion,primaria,bachillerato',
             'grado'             => 'required|string|max:10',
             'grupo'             => 'required|string|max:5',
             'jornada'           => 'required|string|max:20',
@@ -122,7 +122,7 @@ class CursoController extends Controller
     {
         $data = $request->validate([
             'nombre'            => 'required|string|max:50',
-            'nivel'             => 'required|in:preescolar,transicion,primaria,bachillerato',
+            'nivel'             => 'required|in:prejardin,preescolar,transicion,primaria,bachillerato',
             'grado'             => 'required|string|max:10',
             'grupo'             => 'required|string|max:5',
             'jornada'           => 'required|string|max:20',

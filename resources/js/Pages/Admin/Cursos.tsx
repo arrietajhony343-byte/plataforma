@@ -307,9 +307,10 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
 
     const openEditCurso = (curso: Curso) => {
         setEditingCurso(curso);
+        const nivelNorm = (curso.nivel === 'preescolar' || curso.nivel === 'transicion') ? 'prejardin' : curso.nivel;
         setCursoForm({
             nombre: curso.nombre,
-            nivel: curso.nivel,
+            nivel: nivelNorm,
             grado: curso.grado,
             grupo: curso.seccion,
             jornada: curso.jornada,
@@ -388,13 +389,23 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             router.put(`/admin/cursos/${editingCurso.id}`, payload, {
                 preserveScroll: true,
                 onSuccess: () => { setShowCursoModal(false); setProcessing(false); },
-                onError: (errs) => { setFormErrors(errs as Record<string, string>); setProcessing(false); },
+                onError: (errs) => {
+                    setFormErrors(errs as Record<string, string>);
+                    setProcessing(false);
+                    const step1Fields = ['nombre', 'nivel', 'grado', 'grupo', 'jornada', 'cupo_maximo', 'director_grupo_id', 'sede_id'];
+                    if (step1Fields.some(f => (errs as Record<string, string>)[f])) setCursoModalStep(1);
+                },
             });
         } else {
             router.post('/admin/cursos', payload, {
                 preserveScroll: true,
                 onSuccess: () => { setShowCursoModal(false); setProcessing(false); },
-                onError: (errs) => { setFormErrors(errs as Record<string, string>); setProcessing(false); },
+                onError: (errs) => {
+                    setFormErrors(errs as Record<string, string>);
+                    setProcessing(false);
+                    const step1Fields = ['nombre', 'nivel', 'grado', 'grupo', 'jornada', 'cupo_maximo', 'director_grupo_id', 'sede_id'];
+                    if (step1Fields.some(f => (errs as Record<string, string>)[f])) setCursoModalStep(1);
+                },
             });
         }
     };
@@ -646,34 +657,26 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                             {cursosList.map(curso => (
-                                                <div key={curso.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all group overflow-hidden">
+                                                <div key={curso.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all group overflow-hidden flex flex-col">
                                                     <div className={`h-1.5 bg-gradient-to-r ${nivelCardAccent[curso.nivel] || 'from-gray-400 to-gray-500'}`} />
-                                                    <div className="p-5">
-                                                        <div className="flex items-start justify-between mb-4">
-                                                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCursoDetalle(curso)}>
-                                                                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${nivelCardAccent[curso.nivel] || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
-                                                                    {curso.grado.replace('Transición', 'T').replace('Pre-Jardín', 'PJ').replace('Jardín', 'J').substring(0, 3)}{curso.seccion}
-                                                                </div>
-                                                                <div>
-                                                                    <h3 className="font-bold text-gray-800 text-sm group-hover:text-[#293577] transition-colors">{curso.nombre || `${curso.grado} - ${curso.seccion}`}</h3>
+                                                    <div className="p-5 flex-1">
+                                                        <div className="flex items-start gap-3 mb-4 cursor-pointer" onClick={() => setCursoDetalle(curso)}>
+                                                            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${nivelCardAccent[curso.nivel] || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0`}>
+                                                                {curso.grado.replace('Transición', 'T').replace('Pre-Jardín', 'PJ').replace('Jardín', 'J').substring(0, 3)}{curso.seccion}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <h3 className="font-bold text-gray-800 text-sm group-hover:text-[#293577] transition-colors truncate">{curso.nombre || `${curso.grado} - ${curso.seccion}`}</h3>
+                                                                <div className="flex flex-wrap gap-1 mt-0.5">
                                                                     <span className={`inline-block text-xs px-2 py-0.5 rounded-full border ${nivelBadgeColors[curso.nivel] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                                                                         {nivelesEducativos[curso.nivel]?.label || curso.nivel}
                                                                     </span>
-                                                                    {curso.sede_nombre && <span className="ml-1 inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">{curso.sede_nombre}</span>}
+                                                                    {curso.sede_nombre && <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">{curso.sede_nombre}</span>}
                                                                 </div>
-                                                            </div>
-                                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <button onClick={(e) => { e.stopPropagation(); openEditCurso(curso); }} className="p-1.5 text-gray-400 hover:text-[#293577] hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
-                                                                    <EditIcon className="w-3.5 h-3.5" />
-                                                                </button>
-                                                                <button onClick={(e) => { e.stopPropagation(); openDeleteConfirm('curso', curso.id, curso.nombre); }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
-                                                                    <TrashIcon className="w-3.5 h-3.5" />
-                                                                </button>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2 mb-3 text-sm text-gray-600">
-                                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-                                                            <span>Guía: <strong>{curso.profesor_guia}</strong></span>
+                                                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                                                            <span className="truncate">Guía: <strong>{curso.profesor_guia}</strong></span>
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-2 mb-4">
                                                             <div className="bg-gray-50 rounded-lg p-2 text-center">
@@ -696,6 +699,28 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                                 <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded text-[11px]">Sin materias asignadas</span>
                                                             )}
                                                         </div>
+                                                    </div>
+                                                    {/* ── Barra de acciones siempre visible ── */}
+                                                    <div className="px-4 pb-4 flex gap-2">
+                                                        <button
+                                                            onClick={() => setCursoDetalle(curso)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-[#293577] bg-[#293577]/5 hover:bg-[#293577]/10 rounded-lg transition-colors"
+                                                        >
+                                                            <EyeIcon /> Ver detalle
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openEditCurso(curso); }}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                                                        >
+                                                            <EditIcon /> Editar
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openDeleteConfirm('curso', curso.id, curso.nombre); }}
+                                                            className="flex items-center justify-center gap-1 px-2.5 py-2 text-xs font-medium text-red-400 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                                            title="Eliminar"
+                                                        >
+                                                            <TrashIcon />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -784,33 +809,20 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                 {filteredMaterias.map(materia => {
                                     const style = getMateriaStyle(materia.nombre);
                                     return (
-                                        <div key={materia.id} className={`bg-white rounded-xl shadow-sm border ${style.colorBorder} hover:shadow-lg transition-all group overflow-hidden`}>
+                                        <div key={materia.id} className={`bg-white rounded-xl shadow-sm border ${style.colorBorder} hover:shadow-lg transition-all overflow-hidden flex flex-col`}>
                                             <div className={`${style.colorBg} p-4 border-b ${style.colorBorder}`}>
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className={`${style.colorText} w-9 h-9 flex items-center justify-center rounded-xl bg-white/70 shadow-sm`}>{style.icono}</span>
-                                                        <div>
-                                                            <h3 className={`font-bold text-base ${style.colorText}`}>{materia.nombre}</h3>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-xs text-gray-500">{materia.area}</span>
-                                                                {materia.codigo && <span className="text-[10px] bg-white/60 px-1.5 py-0.5 rounded font-mono text-gray-500">{materia.codigo}</span>}
-                                                            </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`${style.colorText} w-9 h-9 flex items-center justify-center rounded-xl bg-white/70 shadow-sm flex-shrink-0`}>{style.icono}</span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className={`font-bold text-base ${style.colorText} truncate`}>{materia.nombre}</h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-500">{materia.area}</span>
+                                                            {materia.codigo && <span className="text-[10px] bg-white/60 px-1.5 py-0.5 rounded font-mono text-gray-500">{materia.codigo}</span>}
                                                         </div>
-                                                    </div>
-                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => openProfesoresModal(materia)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-white/80 rounded-lg transition-colors" title="Gestionar profesores">
-                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-                                                        </button>
-                                                        <button onClick={() => openEditMateria(materia)} className="p-1.5 text-gray-400 hover:text-[#293577] hover:bg-white/80 rounded-lg transition-colors" title="Editar">
-                                                            <EditIcon className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <button onClick={() => openDeleteConfirm('materia', materia.id, materia.nombre)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-white/80 rounded-lg transition-colors" title="Eliminar">
-                                                            <TrashIcon className="w-3.5 h-3.5" />
-                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="p-4 space-y-3">
+                                            <div className="p-4 space-y-3 flex-1">
                                                 <div className="grid grid-cols-3 gap-2">
                                                     <div className="text-center p-2 bg-gray-50 rounded-lg">
                                                         <p className="text-lg font-extrabold text-[#293577]" style={{ fontFamily: "'Inter', sans-serif" }}>{materia.cursos}</p>
@@ -825,27 +837,49 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                         <p className="text-[10px] text-gray-500 uppercase">Hrs/Sem</p>
                                                     </div>
                                                 </div>
-                                                {materia.profesores.length > 0 && (
+                                                {/* Profesores autorizados */}
+                                                {materia.profesores.length > 0 ? (
                                                     <div>
-                                                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Profesores autorizados</p>
+                                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Profesores autorizados</p>
                                                         <div className="flex flex-wrap gap-1.5">
                                                             {materia.profesores.map((p) => (
-                                                                <div key={p.id} className="flex items-center gap-1.5 bg-gray-50 rounded-full pl-1 pr-2.5 py-0.5">
-                                                                    <div className="w-5 h-5 rounded-full bg-[#293577] text-white flex items-center justify-center text-[9px] font-bold">{p.name.charAt(0)}</div>
+                                                                <div key={p.id} className="flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-full pl-1 pr-2.5 py-0.5">
+                                                                    <div className={`w-5 h-5 rounded-full ${style.colorBg} ${style.colorText} flex items-center justify-center text-[9px] font-bold`}>{p.name.charAt(0)}</div>
                                                                     <span className="text-xs text-gray-700">{p.name}</span>
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     </div>
+                                                ) : (
+                                                    <div className={`${style.colorBg} border border-dashed ${style.colorBorder} rounded-lg px-3 py-2`}>
+                                                        <p className="text-xs text-amber-600 font-medium">⚠ Sin profesores autorizados</p>
+                                                        <p className="text-[11px] text-gray-500 mt-0.5">Nadie puede dictar esta materia hasta que asignes profesores</p>
+                                                    </div>
                                                 )}
-                                                {materia.profesores.length === 0 && (
-                                                    <button
-                                                        onClick={() => openProfesoresModal(materia)}
-                                                        className="w-full text-xs text-amber-600 italic py-1 px-2 rounded-lg hover:bg-amber-50 transition-colors text-left"
-                                                    >
-                                                        ⚠ Sin profesores asignados · clic para agregar
-                                                    </button>
-                                                )}
+                                            </div>
+                                            {/* ── Barra de acciones siempre visible ── */}
+                                            <div className="px-4 pb-4 flex gap-2">
+                                                <button
+                                                    onClick={() => openProfesoresModal(materia)}
+                                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium ${style.colorText} ${style.colorBg} hover:brightness-95 border ${style.colorBorder} rounded-lg transition-colors`}
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                                                    Asignar profesores
+                                                </button>
+                                                <button
+                                                    onClick={() => openEditMateria(materia)}
+                                                    className="flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                                                    title="Editar materia"
+                                                >
+                                                    <EditIcon className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => openDeleteConfirm('materia', materia.id, materia.nombre)}
+                                                    className="flex items-center justify-center gap-1 px-2.5 py-2 text-xs font-medium text-red-400 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                                    title="Eliminar materia"
+                                                >
+                                                    <TrashIcon className="w-3.5 h-3.5" />
+                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -1221,28 +1255,42 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowProfesoresModal(false)}>
                     <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
                         <div className="bg-gradient-to-r from-[#181b49] to-[#293577] rounded-t-2xl px-6 py-4 flex-shrink-0">
-                            <h2 className="text-lg font-bold text-white">Profesores de {managingProfesoresMateria.nombre}</h2>
-                            <p className="text-blue-200 text-xs">Selecciona los profesores autorizados para dictar esta materia</p>
+                            <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                                    {getMateriaStyle(managingProfesoresMateria.nombre).icono}
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold text-white">Asignar profesores</h2>
+                                    <p className="text-blue-200 text-xs mt-0.5">{managingProfesoresMateria.nombre} · {managingProfesoresMateria.area}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 bg-white/10 rounded-xl px-3 py-2">
+                                <p className="text-white/80 text-xs">
+                                    Los profesores seleccionados aquí podrán ser asignados a esta materia cuando configures un curso.
+                                </p>
+                            </div>
                         </div>
                         <form onSubmit={handleProfesoresSubmit} className="flex flex-col flex-1 overflow-hidden">
                             <div className="p-4 overflow-y-auto flex-1">
                                 <div className="mb-3 flex items-center justify-between">
-                                    <p className="text-sm font-medium text-gray-700">
-                                        {profesoresSeleccionados.length} de {listaProfesores.length} seleccionados
+                                    <p className="text-sm font-semibold text-gray-700">
+                                        <span className="text-[#293577]">{profesoresSeleccionados.length}</span>
+                                        <span className="text-gray-400"> / {listaProfesores.length} profesores seleccionados</span>
                                     </p>
                                     <div className="flex gap-2">
-                                        <button type="button" onClick={() => setProfesoresSeleccionados(listaProfesores.map(p => p.id))} className="text-xs text-[#293577] hover:underline">
-                                            Todos
+                                        <button type="button" onClick={() => setProfesoresSeleccionados(listaProfesores.map(p => p.id))} className="text-xs text-[#293577] font-medium hover:underline">
+                                            Seleccionar todos
                                         </button>
                                         <span className="text-gray-300">|</span>
                                         <button type="button" onClick={() => setProfesoresSeleccionados([])} className="text-xs text-gray-500 hover:underline">
-                                            Ninguno
+                                            Limpiar
                                         </button>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     {listaProfesores.map(profesor => {
                                         const selected = profesoresSeleccionados.includes(profesor.id);
+                                        const initials = profesor.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
                                         return (
                                             <button
                                                 key={profesor.id}
@@ -1251,13 +1299,13 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                 className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${selected ? 'border-[#293577] bg-[#293577]/5' : 'border-gray-100 hover:border-gray-200 bg-gray-50'}`}
                                             >
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${selected ? 'bg-[#293577] text-white' : 'bg-gray-200 text-gray-600'}`}>
-                                                    {profesor.name.charAt(0)}
+                                                    {initials}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className={`font-medium text-sm truncate ${selected ? 'text-[#293577]' : 'text-gray-700'}`}>{profesor.name}</p>
-                                                    <p className="text-[11px] text-gray-400">Profesor</p>
+                                                    <p className="text-[11px] text-gray-400">{selected ? '✓ Autorizado para dictar esta materia' : 'No asignado'}</p>
                                                 </div>
-                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${selected ? 'border-[#293577] bg-[#293577]' : 'border-gray-300'}`}>
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${selected ? 'border-[#293577] bg-[#293577]' : 'border-gray-300'}`}>
                                                     {selected && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
                                                 </div>
                                             </button>
@@ -1278,7 +1326,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                     Cancelar
                                 </button>
                                 <button type="submit" disabled={processing} className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-[#293577]/25 text-sm font-medium disabled:opacity-50">
-                                    {processing ? 'Guardando...' : 'Guardar profesores'}
+                                    {processing ? 'Guardando...' : `Guardar (${profesoresSeleccionados.length} seleccionados)`}
                                 </button>
                             </div>
                         </form>

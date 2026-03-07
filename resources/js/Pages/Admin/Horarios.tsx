@@ -677,8 +677,28 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
             ws['!cols'] = [{ wch: 14 }, ...dias.map(() => ({ wch: 25 }))];
             XLSX.utils.book_append_sheet(wb, ws, cursoSeleccionado.slice(0, 31));
+        } else if (vistaActiva === 'profesor') {
+            // Por Profesor (todos) — una hoja por profesor
+            profesores.forEach(p => {
+                const { header, rows } = buildGridMatrix('profesor', p.nombre);
+                if (rows.some(r => r.slice(1).some(cell => cell !== '' && cell !== 'DESCANSO'))) {
+                    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+                    ws['!cols'] = [{ wch: 14 }, ...dias.map(() => ({ wch: 25 }))];
+                    XLSX.utils.book_append_sheet(wb, ws, p.nombre.slice(0, 31));
+                }
+            });
+        } else if (vistaActiva === 'curso') {
+            // Por Curso (todos) — una hoja por curso
+            cursos.forEach(c => {
+                const { header, rows } = buildGridMatrix('curso', c.nombre);
+                if (rows.some(r => r.slice(1).some(cell => cell !== '' && cell !== 'DESCANSO'))) {
+                    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+                    ws['!cols'] = [{ wch: 14 }, ...dias.map(() => ({ wch: 25 }))];
+                    XLSX.utils.book_append_sheet(wb, ws, c.nombre.slice(0, 31));
+                }
+            });
         } else {
-            // General: una hoja por curso + una general
+            // General: una hoja general + una por curso + una por profesor
             const { header: gH, rows: gR } = buildGridMatrix('general');
             const wsGeneral = XLSX.utils.aoa_to_sheet([gH, ...gR]);
             wsGeneral['!cols'] = [{ wch: 14 }, ...dias.map(() => ({ wch: 30 }))];
@@ -704,15 +724,23 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         }
 
         const titulo = vistaActiva === 'profesor' && profesorSeleccionado
-            ? `Horario_${profesorSeleccionado.replace(/ /g, '_')}`
+            ? `Horario_Prof_${profesorSeleccionado.replace(/ /g, '_')}`
             : vistaActiva === 'curso' && cursoSeleccionado
-                ? `Horario_${cursoSeleccionado.replace(/ /g, '_')}`
-                : 'Horarios_General';
+                ? `Horario_Curso_${cursoSeleccionado.replace(/ /g, '_')}`
+                : vistaActiva === 'profesor'
+                    ? 'Horarios_Todos_Profesores'
+                    : vistaActiva === 'curso'
+                        ? 'Horarios_Todos_Cursos'
+                        : 'Horarios_General';
 
         XLSX.writeFile(wb, `${titulo}_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    const handlePrintPDF = async () => {
+    const handlePrintPDF = async (singleProfesor?: string) => {
+        const _vista   = singleProfesor ? 'profesor' : vistaActiva;
+        const _profSel = singleProfesor ?? profesorSeleccionado;
+        const _cursoSel = cursoSeleccionado;
+
         const jsPDFModule = await import('jspdf');
         const jsPDF = (jsPDFModule as any).jsPDF ?? jsPDFModule.default;
         const autoTableModule = await import('jspdf-autotable');
@@ -818,17 +846,49 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             doc.text('Emprendedores del Saber — Sistema de Gestión Académica', pageW - 10, pageH - 5, { align: 'right' });
         };
 
-        if (vistaActiva === 'profesor' && profesorSeleccionado) {
-            const prof = profesores.find(p => p.nombre === profesorSeleccionado);
-            addHeader('HORARIO DEL PROFESOR', `${profesorSeleccionado} · ${prof?.especialidad ?? ''} · ${prof?.horasSemanales ?? 0}h semanales`);
-            addGrid(getHorarioProfesor(profesorSeleccionado), 26, true); // showCurso=true
+        if (_vista === 'profesor' && _profSel) {
+            const prof = profesores.find(p => p.nombre === _profSel);
+            addHeader('HORARIO DEL PROFESOR', `${_profSel} · ${prof?.especialidad ?? ''} · ${prof?.horasSemanales ?? 0}h semanales`);
+            addGrid(getHorarioProfesor(_profSel), 26, true); // showCurso=true
             addFooter();
-        } else if (vistaActiva === 'curso' && cursoSeleccionado) {
-            const clasesCount = allClases.filter(c => c.curso === cursoSeleccionado).length;
-            const profsCount = [...new Set(allClases.filter(c => c.curso === cursoSeleccionado).map(c => c.profesor))].length;
-            addHeader('HORARIO DEL CURSO', `${cursoSeleccionado} · ${clasesCount} clases · ${profsCount} profesores`);
-            addGrid(getHorarioCurso(cursoSeleccionado), 26, false); // showCurso=false (ya es el curso)
+        } else if (_vista === 'curso' && _cursoSel) {
+            const clasesCount = allClases.filter(c => c.curso === _cursoSel).length;
+            const profsCount = [...new Set(allClases.filter(c => c.curso === _cursoSel).map(c => c.profesor))].length;
+            addHeader('HORARIO DEL CURSO', `${_cursoSel} · ${clasesCount} clases · ${profsCount} profesores`);
+            addGrid(getHorarioCurso(_cursoSel), 26, false); // showCurso=false (ya es el curso)
             addFooter();
+        } else if (_vista === 'profesor') {
+            // Por Profesor (todos) — una página por cada profesor con clases
+            let paginaIniciada = false;
+            profesores.forEach(p => {
+                const profClases = allClases.filter(cl => cl.profesor === p.nombre);
+                if (profClases.length === 0) return;
+                if (paginaIniciada) doc.addPage();
+                paginaIniciada = true;
+                addHeader('HORARIO DEL PROFESOR', `${p.nombre} · ${p.especialidad} · ${p.horasSemanales}h semanales`);
+                addGrid(getHorarioProfesor(p.nombre), 26, true);
+                addFooter();
+            });
+            if (!paginaIniciada) {
+                addHeader('HORARIO POR PROFESORES', 'Sin clases programadas aún');
+                addFooter();
+            }
+        } else if (_vista === 'curso') {
+            // Por Curso (todos) — una página por cada curso con clases
+            let paginaIniciada = false;
+            cursos.forEach(c => {
+                const cursoClases = allClases.filter(cl => cl.curso === c.nombre);
+                if (cursoClases.length === 0) return;
+                if (paginaIniciada) doc.addPage();
+                paginaIniciada = true;
+                addHeader(`HORARIO — ${c.nombre.toUpperCase()}`, `${cursoClases.length} clases · ${[...new Set(cursoClases.map(cl => cl.profesor))].length} profesores`);
+                addGrid(getHorarioCurso(c.nombre), 26, false);
+                addFooter();
+            });
+            if (!paginaIniciada) {
+                addHeader('HORARIO POR CURSOS', 'Sin clases programadas aún');
+                addFooter();
+            }
         } else {
             // General: resumen primero, luego uno por curso
             addHeader('HORARIO GENERAL', `${allClases.length} clases · ${profesores.length} profesores · ${stats.cursosConClases}/${stats.totalCursos} cursos con horario`);
@@ -866,11 +926,15 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             doc.text(`Página ${i} de ${totalPages}`, pageW / 2, pageH - 5, { align: 'center' });
         }
 
-        const titulo = vistaActiva === 'profesor' && profesorSeleccionado
-            ? `Horario_${profesorSeleccionado.replace(/ /g, '_')}`
-            : vistaActiva === 'curso' && cursoSeleccionado
-                ? `Horario_${cursoSeleccionado.replace(/ /g, '_')}`
-                : 'Horarios_Completo';
+        const titulo = _vista === 'profesor' && _profSel
+            ? `Horario_Prof_${_profSel.replace(/ /g, '_')}`
+            : _vista === 'curso' && _cursoSel
+                ? `Horario_Curso_${_cursoSel.replace(/ /g, '_')}`
+                : _vista === 'profesor'
+                    ? 'Horarios_Todos_Profesores'
+                    : _vista === 'curso'
+                        ? 'Horarios_Todos_Cursos'
+                        : 'Horarios_General';
         doc.save(`${titulo}_${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
@@ -1206,11 +1270,22 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                             })()}
                         </button>
                         <button
-                            onClick={handlePrintPDF}
+                            onClick={() => handlePrintPDF()}
                             className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-gray-100 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                            title={
+                                vistaActiva === 'profesor' && profesorSeleccionado ? `Imprimir horario de ${profesorSeleccionado}`
+                                : vistaActiva === 'profesor' ? 'Imprimir horario de todos los profesores'
+                                : vistaActiva === 'curso' && cursoSeleccionado ? `Imprimir horario de ${cursoSeleccionado}`
+                                : vistaActiva === 'curso' ? 'Imprimir horario de todos los cursos'
+                                : 'Imprimir horario general completo'
+                            }
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M9.75 8.25h.008v.008H9.75V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
-                            Imprimir PDF
+                            {vistaActiva === 'profesor' && profesorSeleccionado ? 'PDF Profesor'
+                                : vistaActiva === 'profesor' ? 'PDF Profesores'
+                                : vistaActiva === 'curso' && cursoSeleccionado ? 'PDF Curso'
+                                : vistaActiva === 'curso' ? 'PDF Cursos'
+                                : 'Imprimir PDF'}
                         </button>
                         <button
                             onClick={handleExportXLSX}
@@ -1578,85 +1653,118 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             {/* ═══════ MODAL DETALLE PROFESOR ═══════ */}
             {profesorDetalle && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setProfesorDetalle(null)}>
-                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <div className={`${profesorDetalle.colorBg} ${profesorDetalle.colorBorder} border-b rounded-t-2xl px-6 py-5`}>
-                            <div className="flex items-center gap-4">
-                                <div className={`w-16 h-16 rounded-xl ${profesorDetalle.colorBg} flex items-center justify-center font-bold text-xl ${profesorDetalle.colorText} shadow-md border-2 ${profesorDetalle.colorBorder}`}>
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+
+                        {/* ── Header degradado ── */}
+                        <div className="bg-gradient-to-r from-[#181b49] to-[#293577] px-6 py-5 flex-shrink-0">
+                            <div className="flex items-start gap-4">
+                                <div className="w-16 h-16 rounded-xl bg-white/15 border-2 border-white/20 flex items-center justify-center font-bold text-2xl text-white shadow-md flex-shrink-0">
                                     {profesorDetalle.foto}
                                 </div>
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-800">{profesorDetalle.nombre}</h2>
-                                    <p className="text-sm text-gray-500">{profesorDetalle.especialidad}</p>
-                                    <div className="flex gap-2 mt-1">
-                                        {profesorDetalle.materias.map((m, i) => (
-                                            <span key={i} className="px-2 py-0.5 bg-white/80 rounded text-[11px] text-gray-600 font-medium">{m}</span>
+                                <div className="flex-1 min-w-0">
+                                    <h2 className="text-lg font-bold text-white leading-tight">{profesorDetalle.nombre}</h2>
+                                    <p className="text-sm text-blue-200 mt-0.5">{profesorDetalle.especialidad}</p>
+                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                        {profesorDetalle.materias.slice(0, 3).map((m, i) => (
+                                            <span key={i} className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] text-white/90 font-medium">{m}</span>
                                         ))}
+                                        {profesorDetalle.materias.length > 3 && (
+                                            <span className="px-2 py-0.5 bg-white/10 rounded-full text-[11px] text-blue-200 font-medium">+{profesorDetalle.materias.length - 3} más</span>
+                                        )}
                                     </div>
                                 </div>
+                                <button onClick={() => setProfesorDetalle(null)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center flex-shrink-0 transition-colors mt-0.5">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                                </button>
                             </div>
                         </div>
-                        <div className="p-6 space-y-5">
-                            <div className="grid grid-cols-4 gap-3">
-                                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                                    <p className="text-xl font-extrabold text-[#293577]" style={{ fontFamily: "'Inter', sans-serif" }}>{profesorDetalle.horasSemanales}h</p>
-                                    <p className="text-[10px] text-gray-500">Horas/Sem</p>
-                                </div>
-                                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                                    <p className="text-xl font-extrabold text-emerald-600" style={{ fontFamily: "'Inter', sans-serif" }}>{profesorDetalle.materias.length}</p>
-                                    <p className="text-[10px] text-gray-500">Materias</p>
-                                </div>
-                                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                                    <p className="text-xl font-extrabold text-amber-600" style={{ fontFamily: "'Inter', sans-serif" }}>{profesorDetalle.cursos.length}</p>
-                                    <p className="text-[10px] text-gray-500">Cursos</p>
-                                </div>
-                                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                                    <p className="text-xl font-extrabold text-purple-600" style={{ fontFamily: "'Inter', sans-serif" }}>{allClases.filter(c => c.profesor === profesorDetalle.nombre).length}</p>
-                                    <p className="text-[10px] text-gray-500">Clases</p>
+
+                        {/* ── Body scrollable ── */}
+                        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+
+                            {/* Stats */}
+                            <div className="grid grid-cols-4 gap-2">
+                                {([
+                                    { value: `${profesorDetalle.horasSemanales}h`, label: 'Horas/Sem', color: 'text-[#293577]', bg: 'bg-indigo-50' },
+                                    { value: profesorDetalle.materias.length, label: 'Materias', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                    { value: profesorDetalle.cursos.length, label: 'Cursos', color: 'text-amber-600', bg: 'bg-amber-50' },
+                                    { value: allClases.filter(c => c.profesor === profesorDetalle.nombre).length, label: 'Clases/Sem', color: 'text-purple-600', bg: 'bg-purple-50' },
+                                ] as const).map((s, i) => (
+                                    <div key={i} className={`text-center p-3 ${s.bg} rounded-xl`}>
+                                        <p className={`text-xl font-extrabold ${s.color}`} style={{ fontFamily: "'Inter', sans-serif" }}>{s.value}</p>
+                                        <p className="text-[10px] text-gray-500">{s.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Carga horaria */}
+                            {(() => {
+                                const carga = getCargaLabel(profesorDetalle.horasSemanales, profesorDetalle.maxHoras);
+                                const pct = Math.min(100, (profesorDetalle.horasSemanales / profesorDetalle.maxHoras) * 100);
+                                return (
+                                    <div className="bg-gray-50 rounded-xl px-4 py-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-xs font-semibold text-gray-600">Carga horaria semanal</p>
+                                            <span className={`text-xs font-semibold ${carga.badge} px-2 py-0.5 rounded-full`}>{carga.label}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div className={`h-2 rounded-full ${carga.bg} transition-all`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                        <p className="text-[11px] text-gray-500 mt-1.5">{profesorDetalle.horasSemanales} de {profesorDetalle.maxHoras} horas máximas</p>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Todas las materias */}
+                            <div>
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Materias que imparte</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {profesorDetalle.materias.map((m, i) => (
+                                        <span key={i} className={`px-2.5 py-1 ${profesorDetalle.colorBg} ${profesorDetalle.colorText} rounded-lg text-xs font-medium border ${profesorDetalle.colorBorder}`}>{m}</span>
+                                    ))}
                                 </div>
                             </div>
 
+                            {/* Cursos */}
                             <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">Información de contacto</p>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
-                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
-                                        <span className="text-sm text-gray-600">{profesorDetalle.email}</span>
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Cursos asignados ({profesorDetalle.cursos.length})</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {profesorDetalle.cursos.map((c, i) => (
+                                        <span key={i} className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs text-gray-700 font-medium transition-colors cursor-default">{c}</span>
+                                    ))}
+                                    {profesorDetalle.cursos.length === 0 && <span className="text-xs text-gray-400">Sin cursos asignados</span>}
+                                </div>
+                            </div>
+
+                            {/* Contacto */}
+                            <div>
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacto</p>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg">
+                                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+                                        <span className="text-sm text-gray-600 truncate">{profesorDetalle.email}</span>
                                     </div>
                                     {profesorDetalle.telefono && (
-                                        <div className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
-                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" /></svg>
+                                        <div className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg">
+                                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" /></svg>
                                             <span className="text-sm text-gray-600">{profesorDetalle.telefono}</span>
                                         </div>
                                     )}
                                 </div>
                             </div>
 
-                            <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">Cursos asignados</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {profesorDetalle.cursos.map((c, i) => (
-                                        <span key={i} className="px-2.5 py-1 bg-gray-100 rounded-lg text-xs text-gray-700 font-medium">{c}</span>
-                                    ))}
-                                    {profesorDetalle.cursos.length === 0 && <span className="text-xs text-gray-400">Sin cursos asignados</span>}
-                                </div>
-                            </div>
-
-                            <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="text-sm font-medium text-gray-700">Carga horaria</p>
-                                    <span className={`text-xs font-semibold ${getCargaLabel(profesorDetalle.horasSemanales, profesorDetalle.maxHoras).badge} px-2 py-0.5 rounded-full`}>
-                                        {getCargaLabel(profesorDetalle.horasSemanales, profesorDetalle.maxHoras).label}
-                                    </span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-3">
-                                    <div className={`h-3 rounded-full ${getCargaLabel(profesorDetalle.horasSemanales, profesorDetalle.maxHoras).bg} transition-all`} style={{ width: `${Math.min(100, (profesorDetalle.horasSemanales / profesorDetalle.maxHoras) * 100)}%` }} />
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">{profesorDetalle.horasSemanales} de {profesorDetalle.maxHoras} horas máximas semanales</p>
-                            </div>
-
                             <div className="flex gap-3">
                                 <button type="button" onClick={() => setProfesorDetalle(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
                                     Cerrar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handlePrintPDF(profesorDetalle.nombre)}
+                                    className="px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-500 flex items-center gap-1.5 transition-colors"
+                                    title={`Imprimir horario de ${profesorDetalle.nombre}`}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M9.75 8.25h.008v.008H9.75V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
+                                    PDF
                                 </button>
                                 <button
                                     onClick={() => { setProfesorDetalle(null); setProfesorSeleccionado(profesorDetalle.nombre); setVistaActiva('profesor'); }}
@@ -1665,6 +1773,28 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                     Ver Horario Completo
                                 </button>
                             </div>
+                        </div>
+
+                        {/* ── Footer fijo ── */}
+                        <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white rounded-b-2xl">
+                            <button type="button" onClick={() => setProfesorDetalle(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
+                                Cerrar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handlePrintPDF(profesorDetalle.nombre)}
+                                className="px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-500 flex items-center gap-1.5 transition-colors"
+                                title={`Imprimir horario de ${profesorDetalle.nombre}`}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M9.75 8.25h.008v.008H9.75V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
+                                PDF
+                            </button>
+                            <button
+                                onClick={() => { setProfesorDetalle(null); setProfesorSeleccionado(profesorDetalle.nombre); setVistaActiva('profesor'); }}
+                                className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl hover:shadow-lg text-sm font-medium"
+                            >
+                                Ver Horario Completo
+                            </button>
                         </div>
                     </div>
                 </div>

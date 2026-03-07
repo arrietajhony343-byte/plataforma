@@ -113,7 +113,7 @@ class HorarioController extends Controller
                 ['hora'=>'11:40','horaFin'=>'12:00','esDescanso'=>true],
                 ['hora'=>'12:00','horaFin'=>'12:50'],['hora'=>'12:50','horaFin'=>'13:40'],
             ],
-            'preescolar'   => [
+            'prejardin'    => [
                 ['hora'=>'7:00','horaFin'=>'7:50'],['hora'=>'7:50','horaFin'=>'8:40'],
                 ['hora'=>'8:40','horaFin'=>'9:10','esDescanso'=>true],
                 ['hora'=>'9:10','horaFin'=>'10:00'],['hora'=>'10:00','horaFin'=>'10:50'],
