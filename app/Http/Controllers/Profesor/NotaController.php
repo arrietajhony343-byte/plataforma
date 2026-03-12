@@ -53,6 +53,8 @@ class NotaController extends Controller
                 'nombre'         => $p->nombre,
                 'estado'         => $p->estado,
                 'notasAbiertas'  => (bool) $p->notas_abiertas,
+                'ventanaInicio'  => $p->ventana_inicio?->setTimezone('America/Bogota')->format('Y-m-d\TH:i'),
+                'ventanaFin'     => $p->ventana_fin?->setTimezone('America/Bogota')->format('Y-m-d\TH:i'),
             ]);
 
         $cursoMateriasMap = $cursoMaterias->map(fn ($cm) => [

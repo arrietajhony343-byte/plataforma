@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, ReactNode, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
+import { coordinadorMenuItems } from '@/Config/coordinadorMenu';
 
 interface MenuItem {
     name?: string;
@@ -55,6 +56,9 @@ export default function SidebarLayout({
     const page = usePage();
     const { url } = page;
     const user = page.props.auth.user;
+
+    // Si el usuario es coordinador, ignorar el menú recibido y usar el menú de coordinador
+    const effectiveMenuItems = (user as any)?.rol === 'coordinador' ? coordinadorMenuItems : menuItems;
 
     // ── Cerrar ambos dropdowns al hacer clic fuera ──
     useEffect(() => {
@@ -114,6 +118,17 @@ export default function SidebarLayout({
         setNotifs(prev => prev.map(n => ({ ...n, leida: true })));
         setNoLeidas(0);
         await axios.post('/api/notificaciones/marcar-todas-leidas');
+    };
+
+    const eliminarNotif = async (e: React.MouseEvent, id: number) => {
+        e.stopPropagation();
+        setNotifs(prev => prev.filter(n => n.id !== id));
+        await axios.delete(`/api/notificaciones/${id}`);
+    };
+
+    const eliminarLeidas = async () => {
+        setNotifs(prev => prev.filter(n => !n.leida));
+        await axios.delete('/api/notificaciones/leidas');
     };
 
     const tipoIcon: Record<string, string> = {
@@ -183,7 +198,7 @@ export default function SidebarLayout({
 
                 {/* Navigation */}
                 <nav className="mt-4 px-3 flex-1 overflow-y-auto">
-                    {menuItems.map((item, index) => {
+                    {effectiveMenuItems.map((item, index) => {
                         const active = item.active !== undefined ? item.active : isActivePage(item.href);
                         return (
                             <Link
@@ -265,14 +280,25 @@ export default function SidebarLayout({
                                         {/* Header */}
                                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
                                             <span className="font-bold text-gray-800 text-sm">Notificaciones</span>
-                                            {noLeidas > 0 && (
-                                                <button
-                                                    onClick={marcarTodas}
-                                                    className="text-xs text-[#293577] hover:underline font-medium"
-                                                >
-                                                    Marcar todas como leídas
-                                                </button>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {noLeidas > 0 && (
+                                                    <button
+                                                        onClick={marcarTodas}
+                                                        className="text-xs text-[#293577] hover:underline font-medium"
+                                                    >
+                                                        Marcar todas como leídas
+                                                    </button>
+                                                )}
+                                                {notifs.some(n => n.leida) && (
+                                                    <button
+                                                        onClick={eliminarLeidas}
+                                                        title="Borrar notificaciones leídas"
+                                                        className="text-xs text-red-500 hover:underline font-medium"
+                                                    >
+                                                        Borrar leídas
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
 
                                         {/* Lista */}
@@ -296,7 +322,7 @@ export default function SidebarLayout({
                                                     <div
                                                         key={n.id}
                                                         onClick={() => !n.leida && marcarLeida(n.id)}
-                                                        className={`flex gap-3 px-4 py-3 transition-colors cursor-pointer ${
+                                                        className={`group flex gap-3 px-4 py-3 transition-colors cursor-pointer ${
                                                             n.leida
                                                                 ? 'bg-white hover:bg-gray-50'
                                                                 : 'bg-indigo-50/60 hover:bg-indigo-50'
@@ -312,7 +338,17 @@ export default function SidebarLayout({
                                                             <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.mensaje}</p>
                                                             <p className="text-[11px] text-gray-400 mt-1">{n.created_at}</p>
                                                         </div>
-                                                        {!n.leida && (
+                                                        {n.leida ? (
+                                                            <button
+                                                                onClick={(e) => eliminarNotif(e, n.id)}
+                                                                title="Eliminar notificación"
+                                                                className="flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                                                </svg>
+                                                            </button>
+                                                        ) : (
                                                             <span className="w-2 h-2 rounded-full bg-[#293577] flex-shrink-0 mt-1.5" />
                                                         )}
                                                     </div>

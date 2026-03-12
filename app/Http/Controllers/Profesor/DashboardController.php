@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Profesor;
 
 use App\Http\Controllers\Controller;
 use App\Models\{CursoMateria, Observacion, Actividad, Entrega, Nota, Mensaje};
+use App\Models\HorarioBloque;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Support\Facades\DB;
@@ -155,15 +156,53 @@ class DashboardController extends Controller
                 'diasRestantes' => (int)now()->diffInDays($a->fecha_entrega, false),
             ]);
 
+        // ── Clases de hoy ──
+        $diasMap = [
+            0 => 'domingo', 1 => 'lunes', 2 => 'martes', 3 => 'miercoles',
+            4 => 'jueves', 5 => 'viernes', 6 => 'sabado',
+        ];
+        $diaHoy = $diasMap[now()->dayOfWeek];
+
+        $clasesHoy = HorarioBloque::whereIn('curso_materia_id', $cmIds)
+            ->where('dia', $diaHoy)
+            ->with(['cursoMateria.materia', 'cursoMateria.curso'])
+            ->orderBy('hora_inicio')
+            ->get()
+            ->map(fn($b) => [
+                'id'          => $b->id,
+                'materia'     => $b->cursoMateria?->materia?->nombre ?? 'N/A',
+                'curso'       => $b->cursoMateria?->curso?->nombre ?? 'N/A',
+                'horaInicio'  => substr($b->hora_inicio, 0, 5),
+                'horaFin'     => substr($b->hora_fin, 0, 5),
+                'salon'       => $b->salon,
+            ]);
+
+        // ── Actividades que vencen hoy ──
+        $actividadesHoy = Actividad::whereIn('curso_materia_id', $cmIds)
+            ->where('activa', true)
+            ->whereDate('fecha_entrega', now()->toDateString())
+            ->with('cursoMateria.materia', 'cursoMateria.curso')
+            ->orderBy('fecha_entrega')
+            ->get()
+            ->map(fn($a) => [
+                'id'     => $a->id,
+                'titulo' => $a->titulo,
+                'tipo'   => $a->tipo,
+                'materia'=> $a->cursoMateria?->materia?->nombre ?? 'N/A',
+                'curso'  => $a->cursoMateria?->curso?->nombre ?? 'N/A',
+            ]);
+
         return Inertia::render('Profesor/Dashboard', [
             'profesor' => [
                 'nombre' => $user->name,
                 'directorDe' => $cursoDirector ? $cursoDirector->nombre : null,
             ],
-            'cursos' => $cursosData,
-            'stats' => $stats,
-            'alertas' => $alertas,
+            'cursos'              => $cursosData,
+            'stats'               => $stats,
+            'alertas'             => $alertas,
             'actividadesProximas' => $actividadesProximas,
+            'clasesHoy'           => $clasesHoy,
+            'actividadesHoy'      => $actividadesHoy,
         ]);
     }
 }

@@ -15,6 +15,8 @@ class RedirectBasedOnRole
             
             if ($user->hasRole('admin')) {
                 return redirect()->route('admin.dashboard');
+            } elseif ($user->hasRole('coordinador')) {
+                return redirect()->route('admin.dashboard');
             } elseif ($user->hasRole('profesor')) {
                 return redirect()->route('profesor.dashboard');
             } elseif ($user->hasRole('estudiante')) {

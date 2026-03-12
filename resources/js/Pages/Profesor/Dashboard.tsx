@@ -52,12 +52,31 @@ interface ActividadProxima {
     diasRestantes: number;
 }
 
+interface ClaseHoy {
+    id: number;
+    materia: string;
+    curso: string;
+    horaInicio: string;
+    horaFin: string;
+    salon: string | null;
+}
+
+interface ActividadHoy {
+    id: number;
+    titulo: string;
+    tipo: string;
+    materia: string;
+    curso: string;
+}
+
 interface Props {
     profesor: { nombre: string; directorDe: string | null };
     cursos: Curso[];
     stats: Stats;
     alertas: Alerta[];
     actividadesProximas: ActividadProxima[];
+    clasesHoy: ClaseHoy[];
+    actividadesHoy: ActividadHoy[];
 }
 
 // ── Nivel colors ──
@@ -73,9 +92,10 @@ const tipoActividadIcons: Record<string, string> = {
     tarea: '📝', quiz: '❓', examen: '📋', proyecto: '🚀', taller: '🔧',
 };
 
-export default function Dashboard({ profesor, cursos, stats, alertas, actividadesProximas }: Props) {
+export default function Dashboard({ profesor, cursos, stats, alertas, actividadesProximas, clasesHoy, actividadesHoy }: Props) {
     const [filtroNivel, setFiltroNivel] = useState<string>('todos');
     const [cursoExpandido, setCursoExpandido] = useState<number | null>(null);
+    const [vistaMode, setVistaMode] = useState<'cards' | 'list'>('cards');
 
     // Greeting dinámico
     const hora = new Date().getHours();
@@ -181,41 +201,177 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
 
                     {/* ── Left: Cursos ── */}
                     <div className="lg:col-span-2 space-y-4">
-                        {/* Filtro nivel */}
-                        <div className="flex items-center justify-between">
+                        {/* Cabecera: título + filtros de nivel + toggle de vista */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <h2 className="text-lg font-bold text-gray-800">Mis Cursos y Materias</h2>
-                            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hidden">
-                                <button
-                                    onClick={() => setFiltroNivel('todos')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                                        filtroNivel === 'todos'
-                                            ? 'bg-[#293577] text-white shadow-sm'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    }`}
-                                >
-                                    Todos ({cursos.length})
-                                </button>
-                                {nivelesDisponibles.map(n => {
-                                    const nc = nivelColors[n] || nivelColors.primaria;
-                                    const count = cursos.filter(c => normalizeNivel(c.nivel) === n).length;
-                                    return (
-                                        <button
-                                            key={n}
-                                            onClick={() => setFiltroNivel(n)}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                                                filtroNivel === n
-                                                    ? `${nc.badge} shadow-sm`
-                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                            }`}
-                                        >
-                                            {nivelLabels[n] ?? (n.charAt(0).toUpperCase() + n.slice(1))} ({count})
-                                        </button>
-                                    );
-                                })}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex gap-1.5 overflow-x-auto scrollbar-hidden pb-0.5">
+                                    <button
+                                        onClick={() => setFiltroNivel('todos')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                                            filtroNivel === 'todos'
+                                                ? 'bg-[#293577] text-white shadow-sm'
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        Todos ({cursos.length})
+                                    </button>
+                                    {nivelesDisponibles.map(n => {
+                                        const nc = nivelColors[n] || nivelColors.primaria;
+                                        const count = cursos.filter(c => normalizeNivel(c.nivel) === n).length;
+                                        return (
+                                            <button
+                                                key={n}
+                                                onClick={() => setFiltroNivel(n)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                                                    filtroNivel === n
+                                                        ? `${nc.badge} shadow-sm`
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                {nivelLabels[n] ?? (n.charAt(0).toUpperCase() + n.slice(1))} ({count})
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {/* Toggle Cards / Lista */}
+                                <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm flex-shrink-0">
+                                    <button
+                                        onClick={() => setVistaMode('cards')}
+                                        title="Vista tarjetas"
+                                        className={`p-1.5 transition-colors ${
+                                            vistaMode === 'cards' ? 'bg-[#293577] text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={() => setVistaMode('list')}
+                                        title="Vista lista"
+                                        className={`p-1.5 transition-colors ${
+                                            vistaMode === 'list' ? 'bg-[#293577] text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Curso cards */}
+                        {/* ── Vista Tarjetas (por defecto) ── */}
+                        {vistaMode === 'cards' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {cursosFiltrados.map(curso => {
+                                    const nc = nivelColors[normalizeNivel(curso.nivel)] || nivelColors.primaria;
+                                    const totalActividades = curso.materias.reduce((s, m) => s + m.actividades, 0);
+                                    const promedios = curso.materias.filter(m => m.promedio !== null).map(m => m.promedio!);
+                                    const promedioGeneral = promedios.length > 0
+                                        ? (promedios.reduce((a, b) => a + b, 0) / promedios.length).toFixed(1)
+                                        : null;
+
+                                    return (
+                                        <div key={curso.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-lg transition-all overflow-hidden flex flex-col">
+                                            {/* Franja de color superior */}
+                                            <div className={`h-1 w-full ${nc.dot}`} />
+
+                                            {/* Header */}
+                                            <div className="p-5 pb-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-12 h-12 rounded-xl ${nc.bg} flex items-center justify-center flex-shrink-0`}>
+                                                            <span className={`text-base font-extrabold ${nc.text}`}>{curso.grado}</span>
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-bold text-gray-800 text-sm leading-tight">{curso.nombre}</h3>
+                                                            <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${nc.badge}`}>
+                                                                {curso.nivelLabel}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {promedioGeneral && (
+                                                        <div className="text-right flex-shrink-0">
+                                                            <p className={`text-xl font-extrabold leading-tight ${getPromedioColor(parseFloat(promedioGeneral))}`}>{promedioGeneral}</p>
+                                                            <p className="text-[10px] text-gray-400">promedio</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Stats */}
+                                                <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
+                                                    <span className="flex items-center gap-1">
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
+                                                        {curso.estudiantes} estudiantes
+                                                    </span>
+                                                    {totalActividades > 0 && (
+                                                        <span className="flex items-center gap-1">
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
+                                                            {totalActividades} actividades
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Materias como chips */}
+                                            <div className="px-5 pb-4 flex-1">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Materias ({curso.materias.length})</p>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {curso.materias.map(mat => (
+                                                        <div key={mat.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${nc.bg}`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${nc.dot} flex-shrink-0`} />
+                                                            <span className={`text-[11px] font-semibold ${nc.text} leading-none`}>{mat.nombre}</span>
+                                                            {mat.promedio !== null && (
+                                                                <span className={`text-[10px] font-extrabold ${getPromedioColor(mat.promedio)} ml-0.5`}>
+                                                                    {mat.promedio.toFixed(1)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Acciones */}
+                                            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60 flex gap-2 flex-wrap">
+                                                <Link
+                                                    href="/profesor/notas"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#293577] text-white text-xs font-semibold rounded-lg hover:bg-[#181b49] transition-colors"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+                                                    Notas
+                                                </Link>
+                                                <Link
+                                                    href="/profesor/actividades"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
+                                                    Actividades
+                                                </Link>
+                                                <Link
+                                                    href="/profesor/asistencias"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                    Asistencia
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {cursosFiltrados.length === 0 && (
+                                    <div className="col-span-2 bg-white rounded-xl border border-gray-200 p-10 text-center">
+                                        <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0118 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                                        <p className="text-sm text-gray-500">No tienes cursos asignados en este nivel.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Vista Lista ── */}
+                        {vistaMode === 'list' && (
                         <div className="space-y-3">
                             {cursosFiltrados.map(curso => {
                                 const nc = nivelColors[normalizeNivel(curso.nivel)] || nivelColors.primaria;
@@ -356,6 +512,7 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
                                 </div>
                             )}
                         </div>
+                        )}
                     </div>
 
                     {/* ── Right Sidebar ── */}
@@ -403,55 +560,105 @@ export default function Dashboard({ profesor, cursos, stats, alertas, actividade
                             )}
                         </div>
 
-                        {/* Alertas */}
+                        {/* Widget Hoy */}
                         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                                <h3 className="text-sm font-bold text-gray-800">Alertas Recientes</h3>
-                                <Link href="/profesor/observador" className="text-xs text-[#293577] font-semibold hover:underline">
-                                    Observador
-                                </Link>
+                            {/* Header calendario */}
+                            <div className="bg-gradient-to-br from-[#293577] to-[#181b49] px-4 py-4 text-white">
+                                <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">
+                                    {new Date().toLocaleDateString('es-CO', { weekday: 'long' })}
+                                </p>
+                                <div className="flex items-end gap-3 mt-1">
+                                    <span className="text-4xl font-black leading-none">
+                                        {new Date().getDate()}
+                                    </span>
+                                    <div className="pb-0.5">
+                                        <p className="text-sm font-semibold capitalize">
+                                            {new Date().toLocaleDateString('es-CO', { month: 'long' })}
+                                        </p>
+                                        <p className="text-white/50 text-xs">{new Date().getFullYear()}</p>
+                                    </div>
+                                </div>
+                                <div className="mt-3 flex gap-2">
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/15 text-xs font-semibold">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        {clasesHoy.length} clase{clasesHoy.length !== 1 ? 's' : ''}
+                                    </span>
+                                    {actividadesHoy.length > 0 && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-400/30 text-red-200 text-xs font-semibold">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                                            {actividadesHoy.length} vence{actividadesHoy.length !== 1 ? 'n' : ''} hoy
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                            {alertas.length > 0 ? (
-                                <div className="divide-y divide-gray-100">
-                                    {alertas.map(a => (
-                                        <div key={a.id} className="px-4 py-3 flex items-start gap-3">
-                                            <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                                                <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                                                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
-                                                </svg>
+
+                            {/* Clases del día */}
+                            {clasesHoy.length > 0 ? (
+                                <div>
+                                    <div className="px-4 pt-3 pb-1">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Clases programadas</p>
+                                    </div>
+                                    <div className="divide-y divide-gray-100">
+                                        {clasesHoy.map(clase => (
+                                            <div key={clase.id} className="px-4 py-2.5 flex items-center gap-3">
+                                                <div className="flex flex-col items-center w-11 flex-shrink-0">
+                                                    <span className="text-[11px] font-black text-[#293577]">{clase.horaInicio}</span>
+                                                    <div className="w-px h-3 bg-gray-200 my-0.5" />
+                                                    <span className="text-[9px] text-gray-400">{clase.horaFin}</span>
+                                                </div>
+                                                <div className="w-1.5 h-10 rounded-full bg-[#293577]/20 flex-shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold text-gray-800 truncate">{clase.materia}</p>
+                                                    <p className="text-xs text-gray-400 truncate">
+                                                        {clase.curso}
+                                                        {clase.salon && <span className="ml-1.5 text-gray-300">· {clase.salon}</span>}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm text-gray-800">
-                                                    <span className="font-semibold">{a.estudiante}</span>
-                                                    <span className="text-gray-400 text-xs ml-1">({a.materia})</span>
-                                                </p>
-                                                <p className="text-xs text-gray-500 truncate">{a.mensaje}</p>
-                                                <p className="text-[10px] text-gray-400 mt-0.5">{a.fecha}</p>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="px-4 py-8 text-center">
-                                    <svg className="w-8 h-8 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    <p className="text-xs text-gray-400">Sin alertas recientes</p>
+                                <div className="px-4 py-5 text-center">
+                                    <svg className="w-8 h-8 mx-auto text-gray-200 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+                                    <p className="text-xs text-gray-400">Sin clases programadas hoy</p>
                                 </div>
                             )}
+
+                            {/* Actividades que vencen hoy */}
+                            {actividadesHoy.length > 0 && (
+                                <div className="border-t border-gray-100">
+                                    <div className="px-4 pt-3 pb-1">
+                                        <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1">
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                                            Vencen hoy
+                                        </p>
+                                    </div>
+                                    <div className="divide-y divide-gray-100">
+                                        {actividadesHoy.map(act => (
+                                            <Link key={act.id} href="/profesor/actividades" className="px-4 py-2.5 flex items-center gap-2.5 hover:bg-red-50/50 transition-colors">
+                                                <span className="text-base">{tipoActividadIcons[act.tipo] || '📋'}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold text-gray-800 truncate">{act.titulo}</p>
+                                                    <p className="text-xs text-gray-400 truncate">{act.materia} · {act.curso}</p>
+                                                </div>
+                                                <span className="text-[10px] font-black text-red-500 flex-shrink-0">HOY</span>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="p-3 border-t border-gray-100">
+                                <Link href="/profesor/asistencias" className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-[#293577]/5 hover:bg-[#293577]/10 text-[#293577] text-xs font-bold transition-colors">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    Registrar asistencia de hoy
+                                </Link>
+                            </div>
                         </div>
 
                         {/* Quick links */}
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                            <div className="px-4 py-3 border-b border-gray-100">
-                                <h3 className="text-sm font-bold text-gray-800">Accesos Rápidos</h3>
-                            </div>
-                            <div className="p-2 space-y-1">
-                                <QuickLink href="/profesor/notas" label="Registrar Notas" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>} />
-                                <QuickLink href="/profesor/actividades" label="Gestionar Actividades" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>} />
-                                <QuickLink href="/profesor/observador" label="Observador del Alumno" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} />
-                                <QuickLink href="/profesor/mensajes" label="Mensajes" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>} badge={stats.mensajesNoLeidos > 0 ? stats.mensajesNoLeidos : undefined} />
-                                <QuickLink href="/profesor/calendario" label="Mi Calendario" icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>} />
-                            </div>
-                        </div>
+                       
                     </div>
                 </div>
             </div>

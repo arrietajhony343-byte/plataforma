@@ -18,9 +18,29 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user();
+
+        $rolLabel = match ($user->getRoleNames()->first()) {
+            'admin'      => 'Administrador',
+            'profesor'   => 'Docente',
+            'padre'      => 'Padre de Familia',
+            'estudiante' => 'Estudiante',
+            default      => 'Usuario',
+        };
+
         return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
-            'status' => session('status'),
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
+            'status'          => session('status'),
+            'userData'        => [
+                'id'          => $user->id,
+                'nombre'      => $user->name,
+                'email'       => $user->email,
+                'rol'         => $user->getRoleNames()->first() ?? '',
+                'rolLabel'    => $rolLabel,
+                'iniciales'   => collect(explode(' ', $user->name))->filter()->take(2)->map(fn ($p) => strtoupper(substr($p, 0, 1)))->implode(''),
+                'miembroDesde'=> $user->created_at->translatedFormat('F Y'),
+                'verificado'  => $user->email_verified_at !== null,
+            ],
         ]);
     }
 

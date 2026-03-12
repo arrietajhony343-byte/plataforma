@@ -339,7 +339,8 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                     </div>
 
                     {/* Filtros secundarios */}
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div className={`grid grid-cols-1 gap-3 ${sedes.length > 1 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+                        {sedes.length > 1 && (
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
                             <select value={sedeSel} onChange={e => setSedeSel(e.target.value)} className="w-full pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] appearance-none bg-white">
@@ -347,6 +348,7 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                                 {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
                             </select>
                         </div>
+                        )}
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Curso</label>
                             <select value={cursoSel} onChange={e => setCursoSel(e.target.value)} className="w-full pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] appearance-none bg-white">

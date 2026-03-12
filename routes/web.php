@@ -21,9 +21,10 @@ use App\Http\Controllers\Profesor\NotaController as ProfesorNotaController;
 use App\Http\Controllers\Profesor\ObservadorController as ProfesorObservadorController;
 use App\Http\Controllers\Profesor\CalendarioController as ProfesorCalendarioController;
 use App\Http\Controllers\Profesor\ActividadController as ProfesorActividadController;
-use App\Http\Controllers\Profesor\MensajeController as ProfesorMensajeController;
+use App\Http\Controllers\MensajeController;
 use App\Http\Controllers\Profesor\AsistenciaController as ProfesorAsistenciaController;
 use App\Http\Controllers\Estudiante\DashboardController as EstudianteDashboardController;
+use App\Http\Controllers\Estudiante\ActividadController as EstudianteActividadController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -42,6 +43,8 @@ Route::get('/dashboard', function () {
     
     if ($user->hasRole('admin')) {
         return redirect()->route('admin.dashboard');
+    } elseif ($user->hasRole('coordinador')) {
+        return redirect()->route('admin.dashboard');
     } elseif ($user->hasRole('profesor')) {
         return redirect()->route('profesor.dashboard');
     } elseif ($user->hasRole('estudiante')) {
@@ -59,24 +62,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/force-change-password', [ForcePasswordChangeController::class, 'update'])->name('password.force-update');
 });
 
-// Rutas de Administrador
-Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+// Rutas de Administrador — accesibles también por Coordinador
+Route::middleware(['auth', 'verified', 'role:admin|coordinador'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 
-    // Sedes
-    Route::get('/sedes', [SedeController::class, 'index'])->name('sedes');
-    Route::post('/sedes', [SedeController::class, 'store'])->name('sedes.store');
-    Route::put('/sedes/{sede}', [SedeController::class, 'update'])->name('sedes.update');
-    Route::delete('/sedes/{sede}', [SedeController::class, 'destroy'])->name('sedes.destroy');
-    Route::get('/sedes/{sede}/detalle', [SedeController::class, 'detalle'])->name('sedes.detalle');
-
-    Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios');
-    Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
-    Route::put('/usuarios/{user}', [UsuarioController::class, 'update'])->name('usuarios.update');
-    Route::patch('/usuarios/{user}/toggle-status', [UsuarioController::class, 'toggleStatus'])->name('usuarios.toggle-status');
-    Route::patch('/usuarios/{user}/reset-password', [UsuarioController::class, 'resetPassword'])->name('usuarios.reset-password');
-    Route::delete('/usuarios/{user}', [UsuarioController::class, 'destroy'])->name('usuarios.destroy');
-    
     // Cursos + Materias
     Route::get('/cursos', [CursoController::class, 'index'])->name('cursos');
     Route::post('/cursos', [CursoController::class, 'store'])->name('cursos.store');
@@ -87,19 +76,6 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::delete('/materias/{materia}', [MateriaController::class, 'destroy'])->name('materias.destroy');
     Route::post('/materias/{materia}/profesores', [MateriaController::class, 'asignarProfesores'])->name('materias.asignar-profesores');
 
-    // Periodos
-    Route::get('/periodos', [PeriodoController::class, 'index'])->name('periodos');
-    Route::post('/periodos', [PeriodoController::class, 'store'])->name('periodos.store');
-    Route::put('/periodos/{periodo}', [PeriodoController::class, 'update'])->name('periodos.update');
-    Route::patch('/periodos/{periodo}/estado', [PeriodoController::class, 'cambiarEstado'])->name('periodos.cambiar-estado');
-    Route::patch('/periodos/{periodo}/ventana', [PeriodoController::class, 'ventanaConfig'])->name('periodos.ventana-config');
-    Route::patch('/periodos/{periodo}/toggle-ventana', [PeriodoController::class, 'toggleVentana'])->name('periodos.toggle-ventana');
-    Route::post('/periodos/{periodo}/excepciones', [PeriodoController::class, 'storeExcepcion'])->name('periodos.excepciones.store');
-    Route::delete('/periodos/{periodo}/excepciones/{excepcion}', [PeriodoController::class, 'destroyExcepcion'])->name('periodos.excepciones.destroy');
-    Route::patch('/periodos/{periodo}/excepciones/{excepcion}/toggle', [PeriodoController::class, 'toggleExcepcion'])->name('periodos.excepciones.toggle');
-    Route::post('/periodos/{periodo}/notificar', [PeriodoController::class, 'notificarProfesores'])->name('periodos.notificar');
-    Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy'])->name('periodos.destroy');
-
     // Estudiantes
     Route::get('/estudiantes', [EstudianteController::class, 'index'])->name('estudiantes');
     Route::get('/estudiantes/export', [EstudianteController::class, 'export'])->name('estudiantes.export');
@@ -109,17 +85,6 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('/estudiantes/{estudiante}/notas', [EstudianteController::class, 'notas'])->name('estudiantes.notas');
     Route::get('/estudiantes/{estudiante}/observaciones', [EstudianteController::class, 'observaciones'])->name('estudiantes.observaciones');
     Route::get('/estudiantes/{estudiante}/pagos', [EstudianteController::class, 'pagos'])->name('estudiantes.pagos');
-
-    // Pagos
-    Route::get('/pagos', [PagoController::class, 'index'])->name('pagos');
-    Route::post('/pagos', [PagoController::class, 'store'])->name('pagos.store');
-    Route::put('/pagos/{pago}', [PagoController::class, 'update'])->name('pagos.update');
-    Route::put('/pagos/{pago}/confirmar', [PagoController::class, 'confirmar'])->name('pagos.confirmar');
-    Route::put('/pagos/{pago}/anular', [PagoController::class, 'anular'])->name('pagos.anular');
-    Route::delete('/pagos/{pago}', [PagoController::class, 'destroy'])->name('pagos.destroy');
-    Route::post('/pagos/conceptos', [PagoController::class, 'storeConcepto'])->name('pagos.conceptos.store');
-    Route::put('/pagos/conceptos/{concepto}', [PagoController::class, 'updateConcepto'])->name('pagos.conceptos.update');
-    Route::put('/pagos/conceptos/{concepto}/toggle', [PagoController::class, 'toggleConcepto'])->name('pagos.conceptos.toggle');
 
     // Boletines
     Route::get('/boletines', [BoletinController::class, 'index'])->name('boletines');
@@ -157,6 +122,57 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::get('/reportes/exportar-rendimiento', [ReporteController::class, 'exportarRendimiento'])->name('reportes.exportar-rendimiento');
     Route::get('/reportes/estudiante/{id}/observaciones', [ReporteController::class, 'estudianteObservaciones'])->name('reportes.estudiante-obs');
 
+    // Mensajes
+    Route::get('/mensajes', [MensajeController::class, 'index'])->name('mensajes');
+    Route::post('/mensajes', [MensajeController::class, 'store'])->name('mensajes.store');
+    Route::post('/mensajes/{contacto}/leer', [MensajeController::class, 'markRead'])->name('mensajes.read');
+    Route::get('/mensajes/{contacto}/novedades', [MensajeController::class, 'poll'])->name('mensajes.poll');
+
+    // Pagos (control de pagos)
+    Route::get('/pagos', [PagoController::class, 'index'])->name('pagos');
+    Route::post('/pagos', [PagoController::class, 'store'])->name('pagos.store');
+    Route::put('/pagos/{pago}', [PagoController::class, 'update'])->name('pagos.update');
+    Route::put('/pagos/{pago}/confirmar', [PagoController::class, 'confirmar'])->name('pagos.confirmar');
+    Route::put('/pagos/{pago}/anular', [PagoController::class, 'anular'])->name('pagos.anular');
+    Route::delete('/pagos/{pago}', [PagoController::class, 'destroy'])->name('pagos.destroy');
+    Route::post('/pagos/conceptos', [PagoController::class, 'storeConcepto'])->name('pagos.conceptos.store');
+    Route::put('/pagos/conceptos/{concepto}', [PagoController::class, 'updateConcepto'])->name('pagos.conceptos.update');
+    Route::put('/pagos/conceptos/{concepto}/toggle', [PagoController::class, 'toggleConcepto'])->name('pagos.conceptos.toggle');
+});
+
+// Rutas de Administrador — exclusivas para admin
+Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    // Sedes
+    Route::get('/sedes', [SedeController::class, 'index'])->name('sedes');
+    Route::post('/sedes', [SedeController::class, 'store'])->name('sedes.store');
+    Route::put('/sedes/{sede}', [SedeController::class, 'update'])->name('sedes.update');
+    Route::delete('/sedes/{sede}', [SedeController::class, 'destroy'])->name('sedes.destroy');
+    Route::get('/sedes/{sede}/detalle', [SedeController::class, 'detalle'])->name('sedes.detalle');
+
+    // Usuarios
+    Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios');
+    Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
+    Route::put('/usuarios/{user}', [UsuarioController::class, 'update'])->name('usuarios.update');
+    Route::patch('/usuarios/{user}/toggle-status', [UsuarioController::class, 'toggleStatus'])->name('usuarios.toggle-status');
+    Route::patch('/usuarios/{user}/reset-password', [UsuarioController::class, 'resetPassword'])->name('usuarios.reset-password');
+    Route::delete('/usuarios/{user}', [UsuarioController::class, 'destroy'])->name('usuarios.destroy');
+
+    // Periodos
+    Route::get('/periodos', [PeriodoController::class, 'index'])->name('periodos');
+    Route::post('/periodos', [PeriodoController::class, 'store'])->name('periodos.store');
+    Route::put('/periodos/{periodo}', [PeriodoController::class, 'update'])->name('periodos.update');
+    Route::patch('/periodos/{periodo}/estado', [PeriodoController::class, 'cambiarEstado'])->name('periodos.cambiar-estado');
+    Route::patch('/periodos/{periodo}/ventana', [PeriodoController::class, 'ventanaConfig'])->name('periodos.ventana-config');
+    Route::patch('/periodos/{periodo}/toggle-ventana', [PeriodoController::class, 'toggleVentana'])->name('periodos.toggle-ventana');
+    Route::post('/periodos/{periodo}/excepciones', [PeriodoController::class, 'storeExcepcion'])->name('periodos.excepciones.store');
+    Route::delete('/periodos/{periodo}/excepciones/{excepcion}', [PeriodoController::class, 'destroyExcepcion'])->name('periodos.excepciones.destroy');
+    Route::patch('/periodos/{periodo}/excepciones/{excepcion}/toggle', [PeriodoController::class, 'toggleExcepcion'])->name('periodos.excepciones.toggle');
+    Route::post('/periodos/{periodo}/notificar', [PeriodoController::class, 'notificarProfesores'])->name('periodos.notificar');
+    Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy'])->name('periodos.destroy');
+
+    // Pagos
+    // (movido al grupo role:admin|coordinador)
+
     // Contabilidad (read-only)
     Route::get('/contabilidad', [ContabilidadController::class, 'index'])->name('contabilidad');
 });
@@ -188,10 +204,13 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
     Route::get('/actividades/{actividad}/entregas', [ProfesorActividadController::class, 'entregas'])->name('actividades.entregas');
     Route::post('/actividades/{actividad}/calificar', [ProfesorActividadController::class, 'calificar'])->name('actividades.calificar');
     Route::put('/entregas/{entrega}/extender', [ProfesorActividadController::class, 'extenderEntrega'])->name('entregas.extender');
+    Route::put('/actividades/{actividad}/extender-plazo', [ProfesorActividadController::class, 'extenderPlazoGeneral'])->name('actividades.extenderPlazo');
 
     // Mensajes
-    Route::get('/mensajes', [ProfesorMensajeController::class, 'index'])->name('mensajes');
-    Route::post('/mensajes', [ProfesorMensajeController::class, 'store'])->name('mensajes.store');
+    Route::get('/mensajes', [MensajeController::class, 'index'])->name('mensajes');
+    Route::post('/mensajes', [MensajeController::class, 'store'])->name('mensajes.store');
+    Route::post('/mensajes/{contacto}/leer', [MensajeController::class, 'markRead'])->name('mensajes.read');
+    Route::get('/mensajes/{contacto}/novedades', [MensajeController::class, 'poll'])->name('mensajes.poll');
 
     // Asistencias
     Route::get('/asistencias', [ProfesorAsistenciaController::class, 'index'])->name('asistencias');
@@ -206,18 +225,23 @@ Route::middleware(['auth', 'verified', 'role:estudiante'])->prefix('estudiante')
     Route::get('/materias', function () {
         return Inertia::render('Estudiante/Materias');
     })->name('materias');
-    Route::get('/actividades', function () {
-        return Inertia::render('Estudiante/Actividades');
-    })->name('actividades');
+    // Actividades (con backend real)
+    Route::get('/actividades', [EstudianteActividadController::class, 'index'])->name('actividades');
+    Route::get('/actividades/{actividad}', [EstudianteActividadController::class, 'show'])->name('actividades.show');
+    Route::post('/actividades/{actividad}/entregar', [EstudianteActividadController::class, 'entregar'])->name('actividades.entregar');
+    Route::post('/actividades/{actividad}/quiz', [EstudianteActividadController::class, 'quiz'])->name('actividades.quiz');
+    Route::delete('/actividades/{actividad}/entrega', [EstudianteActividadController::class, 'cancelar'])->name('actividades.cancelar');
+
     Route::get('/notas', function () {
         return Inertia::render('Estudiante/Notas');
     })->name('notas');
     Route::get('/horario', function () {
         return Inertia::render('Estudiante/Horario');
     })->name('horario');
-    Route::get('/mensajes', function () {
-        return Inertia::render('Estudiante/Mensajes');
-    })->name('mensajes');
+    Route::get('/mensajes', [MensajeController::class, 'index'])->name('mensajes');
+    Route::post('/mensajes', [MensajeController::class, 'store'])->name('mensajes.store');
+    Route::post('/mensajes/{contacto}/leer', [MensajeController::class, 'markRead'])->name('mensajes.read');
+    Route::get('/mensajes/{contacto}/novedades', [MensajeController::class, 'poll'])->name('mensajes.poll');
     Route::get('/observador', function () {
         return Inertia::render('Estudiante/Observador');
     })->name('observador');
@@ -256,9 +280,10 @@ Route::middleware(['auth', 'verified', 'role:padre'])->prefix('padre')->name('pa
         return Inertia::render('Padre/Comprobantes');
     })->name('comprobantes');
 
-    Route::get('/mensajes', function () {
-        return Inertia::render('Padre/Mensajes');
-    })->name('mensajes');
+    Route::get('/mensajes', [MensajeController::class, 'index'])->name('mensajes');
+    Route::post('/mensajes', [MensajeController::class, 'store'])->name('mensajes.store');
+    Route::post('/mensajes/{contacto}/leer', [MensajeController::class, 'markRead'])->name('mensajes.read');
+    Route::get('/mensajes/{contacto}/novedades', [MensajeController::class, 'poll'])->name('mensajes.poll');
 });
 
 Route::middleware('auth')->group(function () {

@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Certificado, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion};
+use App\Http\Controllers\Concerns\ScopesBySede;
+use App\Models\{Certificado, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion, Nota};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -11,16 +12,18 @@ use Inertia\Response;
 
 class CertificadoController extends Controller
 {
-    /**
-     * Display the certificates management page
-     */
+    use ScopesBySede;
+
     public function index(): Response
     {
+        $sedeId = $this->sedeId();
+
         // Pre-cargar tipos por código para resolver registros legacy
         $tiposPorCodigo = TipoCertificado::all()->keyBy('codigo');
 
         // Get all certificates with relationships
         $certificados = Certificado::with(['estudiante', 'tipoCertificado'])
+            ->when($sedeId, fn($q) => $q->whereHas('estudiante', fn($eq) => $eq->where('sede_id', $sedeId)))
             ->orderByDesc('created_at')
             ->get()
             ->map(function (Certificado $c) use ($tiposPorCodigo) {
@@ -51,6 +54,32 @@ class CertificadoController extends Controller
                     ->map(fn($p) => ['id' => $p->id, 'name' => $p->name])
                     ->values();
 
+                $notas = Nota::query()
+                    ->where('estudiante_id', $c->estudiante_id)
+                    ->where('tipo', 'definitiva')
+                    ->when($mat?->curso_id, function ($query, $cursoId) {
+                        $query->whereHas('cursoMateria', fn($cmQ) => $cmQ->where('curso_id', $cursoId));
+                    })
+                    ->with('cursoMateria.materia')
+                    ->orderByDesc('created_at')
+                    ->get()
+                    ->filter(fn($n) => $n->cursoMateria?->materia !== null)
+                    ->unique('curso_materia_id')
+                    ->sortBy(fn($n) => $n->cursoMateria->materia->nombre)
+                    ->values()
+                    ->map(function ($n) {
+                        $definitiva = round((float) $n->valor, 1);
+
+                        return [
+                            'materia'    => $n->cursoMateria->materia->nombre,
+                            'ih'         => (int) ($n->cursoMateria->horas_semanales ?? 0),
+                            'definitiva' => $definitiva,
+                            'escala'     => $definitiva >= 4.6 ? 'SUPERIOR'
+                                : ($definitiva >= 4.0 ? 'ALTO'
+                                    : ($definitiva >= 3.0 ? 'BASICO' : 'BAJO')),
+                        ];
+                    });
+
                 return [
                     'id'                  => $c->id,
                     'tipo_certificado_id' => $c->tipo_certificado_id,
@@ -58,6 +87,8 @@ class CertificadoController extends Controller
                     'tipo_codigo'         => $tipo?->codigo ?? $c->tipo,
                     'estudiante_id'       => $c->estudiante_id,
                     'estudiante'          => $c->estudiante->name,
+                    'estudiante_documento' => $c->estudiante->documento,
+                    'estudiante_tipo_documento' => $c->estudiante->tipo_documento,
                     'nivel'               => $mat?->curso?->nivel ?? '',
                     'curso_id'            => $mat?->curso_id,
                     'curso'               => $mat?->curso?->nombre ?? '',
@@ -67,6 +98,7 @@ class CertificadoController extends Controller
                     'fecha_entrega'       => $c->fecha_entrega?->format('Y-m-d'),
                     'estado'              => $c->estado,
                     'padres'              => $padres,
+                    'notas'               => $notas,
                 ];
             });
 
@@ -117,6 +149,7 @@ class CertificadoController extends Controller
 
         $sedes = Sede::where('activa', true)
             ->orderBy('nombre')
+            ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
             ->get()
             ->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
@@ -220,8 +253,8 @@ class CertificadoController extends Controller
         }
 
         $admin    = auth()->user();
-        $asunto   = "Certificado listo: {$tipo}";
-        $contenido = "Estimado acudiente, le informamos que el {$tipo} solicitado para {$estudiante->name} ya está listo para ser retirado en la secretaría de la institución. Por favor acérquese en horario de atención.";
+    $asunto   = "Certificado disponible: {$tipo}";
+    $contenido = "Estimado acudiente, le informamos que el {$tipo} de {$estudiante->name} ya fue generado en la plataforma y se encuentra disponible para gestión con la institución. Puede comunicarse por este mismo canal o acercarse a secretaría en horario de atención para continuar el trámite.";
 
         foreach ($padres as $padre) {
             Mensaje::create([

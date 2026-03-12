@@ -198,12 +198,42 @@ class PeriodoController extends Controller
         $data = $request->validate([
             'ventana_inicio' => 'nullable|date',
             'ventana_fin'    => 'nullable|date|after_or_equal:ventana_inicio',
+            'notificar'      => 'boolean',
+            'mensaje'        => 'nullable|string|max:1000',
         ]);
 
         $periodo->update([
             'ventana_inicio' => $data['ventana_inicio'] ?: null,
             'ventana_fin'    => $data['ventana_fin'] ?: null,
         ]);
+
+        if (!empty($data['notificar']) && !empty($data['ventana_inicio'])) {
+            $profesores = User::role('profesor')->get();
+
+            $inicio = \Carbon\Carbon::parse($data['ventana_inicio'])
+                ->setTimezone('America/Bogota')
+                ->translatedFormat('d \d\e F \d\e Y \a \l\a\s g:i a');
+
+            $finTexto = '';
+            if (!empty($data['ventana_fin'])) {
+                $fin = \Carbon\Carbon::parse($data['ventana_fin'])
+                    ->setTimezone('America/Bogota')
+                    ->translatedFormat('d \d\e F \d\e Y \a \l\a\s g:i a');
+                $finTexto = " hasta el {$fin}";
+            }
+
+            $mensajeFinal = !empty($data['mensaje'])
+                ? $data['mensaje']
+                : "La ventana de calificación para **{$periodo->nombre}** estará disponible a partir del {$inicio}{$finTexto}. Por favor ten en cuenta estas fechas para el registro de notas.";
+
+            foreach ($profesores as $prof) {
+                $prof->notificaciones()->create([
+                    'tipo'    => 'academica',
+                    'titulo'  => "📅 Ventana programada: {$periodo->nombre}",
+                    'mensaje' => $mensajeFinal,
+                ]);
+            }
+        }
 
         return redirect()->back()->with('success', 'Programación de ventana guardada.');
     }

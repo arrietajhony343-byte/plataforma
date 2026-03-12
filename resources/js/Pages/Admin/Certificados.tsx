@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { adminMenuItems } from '@/Config/adminMenu';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface TipoCertificado {
@@ -43,6 +44,8 @@ interface Certificado {
     tipo_codigo: string;
     estudiante_id: number;
     estudiante: string;
+    estudiante_documento: string | null;
+    estudiante_tipo_documento: string | null;
     nivel: string;
     curso_id: number | null;
     curso: string;
@@ -52,6 +55,7 @@ interface Certificado {
     fecha_entrega: string | null;
     estado: 'solicitado' | 'en_proceso' | 'listo' | 'entregado';
     padres: { id: number; name: string }[];
+    notas: { materia: string; ih: number; definitiva: number; escala: string }[];
 }
 
 interface Props {
@@ -86,6 +90,193 @@ const getEstadoBadge = (estado: string) => estadosConfig[estado]?.color ?? 'bg-g
 const getEstadoLabel = (estado: string) => estadosConfig[estado]?.label ?? estado;
 
 const formatPrecio = (precio: number) => '$' + precio.toLocaleString('es-CO');
+
+const LOGO_CANDIDATES = [
+    '/logo-certificados.png',
+    '/logo-certificados.jpg',
+    '/logo-certificados.jpeg',
+    '/images/logo-certificados.png',
+    '/images/logo-certificados.jpg',
+    '/img/logo-certificados.png',
+    '/certificados-logo.png',
+    '/images/certificados-logo.png',
+];
+
+const INSTITUCION = {
+    nombre1: 'INSTITUTO PEDAGOGICO',
+    nombre2: 'EMPRENDEDORES DEL SABER',
+    lema: 'Ser, saber y emprender',
+    legal: 'Aprobado por Resolución No 3769 del 23 - 05 - 2023',
+    daneNit: 'DANE 313001800093  -  NIT 73143410 -6',
+    firma: 'COORDINADORA',
+    sede: 'Villas de la candelaria Mz. 44 Lt. 11 CEL: 3005257812 - 3006529540',
+    correo: 'CORREO: emprendedores.sersaber2023@gmail.com',
+    ciudad: 'Cartagena de Indias - Colombia',
+};
+
+const getEscalaValorativa = (nota: number) => {
+    if (nota >= 4.6) return 'SUPERIOR';
+    if (nota >= 4.0) return 'ALTO';
+    if (nota >= 3.0) return 'BASICO';
+    return 'BAJO';
+};
+
+const getNivelAcademico = (nivel: string) => {
+    const key = (nivel || '').toLowerCase();
+    if (key === 'prejardin' || key === 'preescolar' || key === 'transicion') return 'EDUCACION PREESCOLAR';
+    if (key === 'primaria') return 'EDUCACION BASICA PRIMARIA';
+    if (key === 'secundaria') return 'EDUCACION BASICA SECUNDARIA';
+    if (key === 'media' || key === 'bachillerato') return 'EDUCACION MEDIA';
+    return 'EDUCACION BASICA';
+};
+
+const normalizarCodigoCertificado = (codigo: string) =>
+    (codigo || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+const fechaLiteral = (fecha = new Date()) => {
+    const dia = fecha.getDate();
+    const mes = fecha.toLocaleString('es-CO', { month: 'long' });
+    const anio = fecha.getFullYear();
+    return { dia, mes, anio };
+};
+
+/**
+ * Carga una imagen, la redimensiona al tamaño máximo indicado (en px a 96dpi)
+ * y aplica opacidad opcional. Devuelve base64 JPEG (opacidad=1) o PNG (opacidad<1).
+ * Usar maxPx pequeño reduce drásticamente el peso del PDF.
+ */
+const cargarImagenConOpacidad = async (src: string, opacidad = 1, maxPx = 400): Promise<string | null> => {
+    const url = src.startsWith('http') ? src : window.location.origin + src;
+    try {
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        const base64: string = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onloadend = () => res(reader.result as string);
+            reader.onerror   = () => rej(new Error('FileReader error'));
+            reader.readAsDataURL(blob);
+        });
+        // Redimensionar + aplicar opacidad siempre vía canvas
+        return new Promise((res) => {
+            const img = new Image();
+            img.onload = () => {
+                const origW = img.naturalWidth  || img.width  || maxPx;
+                const origH = img.naturalHeight || img.height || maxPx;
+                const scale = Math.min(1, maxPx / Math.max(origW, origH));
+                const cW = Math.round(origW * scale);
+                const cH = Math.round(origH * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width  = cW;
+                canvas.height = cH;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { res(null); return; }
+                ctx.clearRect(0, 0, cW, cH);
+                ctx.globalAlpha = opacidad;
+                ctx.drawImage(img, 0, 0, cW, cH);
+                // PNG siempre (preserva transparencia del logo); JPEG solo si opacidad=1 Y no es PNG con alpha
+                // Para simplificar: siempre PNG con fondo blanco cuando opacidad=1
+                if (opacidad >= 1) {
+                    // Redibujar sobre fondo blanco para evitar fondo negro en JPEG
+                    const canvas2 = document.createElement('canvas');
+                    canvas2.width  = cW;
+                    canvas2.height = cH;
+                    const ctx2 = canvas2.getContext('2d');
+                    if (!ctx2) { res(null); return; }
+                    ctx2.fillStyle = '#ffffff';
+                    ctx2.fillRect(0, 0, cW, cH);
+                    ctx2.drawImage(img, 0, 0, cW, cH);
+                    res(canvas2.toDataURL('image/jpeg', 0.85));
+                } else {
+                    res(canvas.toDataURL('image/png'));
+                }
+            };
+            img.onerror = () => res(null);
+            img.src = base64;
+        });
+    } catch {
+        return null;
+    }
+};
+
+const cargarPrimerLogoDisponible = async (opacidad = 1, maxPx = 400): Promise<string | null> => {
+    for (const candidate of LOGO_CANDIDATES) {
+        const result = await cargarImagenConOpacidad(candidate, opacidad, maxPx);
+        if (result) return result;
+    }
+    return null;
+};
+
+/* ═══════════════════════════ RICH-TEXT HELPER ═══════════════════════════ */
+type RichSeg = { text: string; bold?: boolean };
+
+/**
+ * Renders a sequence of normal/bold segments as a wrapped paragraph in jsPDF.
+ * Returns the Y coordinate after the last rendered line.
+ */
+const renderRichParagraph = (
+    doc: jsPDF,
+    segments: RichSeg[],
+    x: number,
+    y: number,
+    maxWidth: number,
+    fontSize: number,
+    fontFamily: string,
+    lineH: number,
+    color: [number, number, number] = [18, 18, 18],
+): number => {
+    doc.setFont(fontFamily, 'normal');
+    doc.setFontSize(fontSize);
+    const spW = doc.getTextWidth(' ');
+
+    type Token = { word: string; bold: boolean };
+    const tokens: Token[] = [];
+    for (const seg of segments) {
+        for (const p of seg.text.split(' ')) {
+            tokens.push({ word: p, bold: seg.bold ?? false });
+        }
+    }
+
+    const getW = (word: string, bold: boolean): number => {
+        doc.setFont(fontFamily, bold ? 'bold' : 'normal');
+        doc.setFontSize(fontSize);
+        return doc.getTextWidth(word);
+    };
+
+    type LineToken = { word: string; bold: boolean; xOff: number };
+    const lines: LineToken[][] = [];
+    let line: LineToken[] = [];
+    let lineW = 0;
+
+    for (const { word, bold } of tokens) {
+        if (word === '') continue;
+        const wW  = getW(word, bold);
+        const gap = line.length > 0 ? spW : 0;
+        if (lineW + gap + wW > maxWidth && line.length > 0) {
+            lines.push(line);
+            line  = [{ word, bold, xOff: 0 }];
+            lineW = wW;
+        } else {
+            line.push({ word, bold, xOff: lineW + gap });
+            lineW = lineW + gap + wW;
+        }
+    }
+    if (line.length > 0) lines.push(line);
+
+    doc.setTextColor(color[0], color[1], color[2]);
+    for (const ln of lines) {
+        for (const t of ln) {
+            doc.setFont(fontFamily, t.bold ? 'bold' : 'normal');
+            doc.setFontSize(fontSize);
+            doc.text(t.word, x + t.xOff, y);
+        }
+        y += lineH;
+    }
+    return y;
+};
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
 export default function Certificados({ certificados, tiposCertificado, estudiantes, cursos, niveles, sedes }: Props) {
@@ -162,119 +353,270 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     }, []);
 
     // ── PDF Generation ──
-    const generarPDF = useCallback((cert: Certificado) => {
+    const generarPDF = useCallback(async (cert: Certificado) => {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const W = 210;
+        const W   = 210;
+        const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
+        const { dia, mes, anio } = fechaLiteral();
+        const logoHeader    = await cargarPrimerLogoDisponible(1,    300);
+        const logoWatermark = await cargarPrimerLogoDisponible(0.08, 260);
 
-        // Top blue header bar
-        doc.setFillColor(41, 53, 119);
-        doc.rect(0, 0, W, 38, 'F');
-        // Gold accent line
-        doc.setFillColor(234, 179, 8);
-        doc.rect(0, 38, W, 3, 'F');
+        const nombreEstudiante = cert.estudiante.toUpperCase();
+        const tipoDoc  = cert.estudiante_tipo_documento || 'T.I.';
+        const documento = cert.estudiante_documento
+            ? `${tipoDoc} N\u00b0${cert.estudiante_documento}`
+            : 'documento registrado en la instituci\u00f3n';
+        const curso          = (cert.curso || '\u2014').toUpperCase();
+        const nivelAcademico = getNivelAcademico(cert.nivel);
+        const detalleAdicional = cert.descripcion?.trim();
 
-        // School name in header
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.text('INSTITUCIÓN EDUCATIVA', W / 2, 16, { align: 'center' });
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Sistema de Gestión Académica', W / 2, 26, { align: 'center' });
-        doc.setFontSize(9);
-        doc.text(`NIT: 000.000.000-0  •  Tel: (000) 000-0000`, W / 2, 34, { align: 'center' });
+        /* ─── Header ─── */
+        // Logo zone: x=8, w=34  |  Triangles max-left at W-38=172mm  |  Text zone: 42..168mm → center=105mm
+        const LOGO_X = 8, LOGO_Y = 4, LOGO_W = 34, LOGO_H = 38;
+        const TRIANG_MAX = 38; // outermost band left-edge distance from right: W - TRIANG_MAX = 172mm
+        const TEXT_RIGHT = W - TRIANG_MAX - 4; // 168mm — derecha del bloque de texto
+        const TEXT_CX  = (LOGO_X + LOGO_W + TEXT_RIGHT) / 2; // ~105mm
+        const drawHeader = () => {
+            doc.setFillColor(255, 255, 255);
+            doc.rect(0, 0, W, 297, 'F');
 
-        // Emblem circle
-        doc.setFillColor(248, 249, 252);
-        doc.setDrawColor(234, 179, 8);
-        doc.setLineWidth(2);
-        doc.circle(W / 2, 54, 16, 'FD');
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(41, 53, 119);
-        doc.text('I.E', W / 2, 52, { align: 'center' });
-        doc.text('2026', W / 2, 58, { align: 'center' });
+            // ── 3 stacked triangles from top-right corner (largest pale → smallest dark navy) ──
+            // All share apex at (W, 0); each drawn on top of the previous one
+            doc.setFillColor(188, 214, 242);          // pale blue — largest
+            doc.triangle(W - 58, 0,  W, 0,  W, 58, 'F');
+            doc.setFillColor(80, 128, 200);            // medium blue
+            doc.triangle(W - 38, 0,  W, 0,  W, 38, 'F');
+            doc.setFillColor(22, 55, 148);             // dark navy — smallest
+            doc.triangle(W - 18, 0,  W, 0,  W, 18, 'F');
 
-        // Certificate title
-        doc.setTextColor(41, 53, 119);
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text(cert.tipo_nombre.toUpperCase(), W / 2, 80, { align: 'center' });
+            // ── Logo ──
+            if (logoHeader) {
+                doc.addImage(logoHeader, 'PNG', LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
+            } else {
+                const cx = LOGO_X + LOGO_W / 2;
+                const cy = LOGO_Y + LOGO_H / 2 - 2;
+                const r  = LOGO_W / 2 - 1;
+                doc.setDrawColor(10, 35, 90);
+                doc.setLineWidth(1.2);
+                doc.circle(cx, cy, r, 'S');
+                doc.setLineWidth(0.6);
+                doc.circle(cx, cy, r - 3, 'S');
+                doc.setFont('times', 'bold');
+                doc.setFontSize(14);
+                doc.setTextColor(10, 35, 90);
+                doc.text('I.P', cx, cy + 2, { align: 'center' });
+                doc.setFont('times', 'italic');
+                doc.setFontSize(4);
+                doc.text('Emprendedores del Saber', cx, cy + r + 3.5, { align: 'center' });
+            }
 
-        // Separator with ornament
-        doc.setDrawColor(41, 53, 119);
-        doc.setLineWidth(0.6);
-        doc.line(35, 85, 85, 85);
-        doc.line(125, 85, 175, 85);
-        doc.setFontSize(12);
-        doc.setTextColor(234, 179, 8);
-        doc.text('✦', W / 2, 87, { align: 'center' });
+            // ── Institution name (bold, navy) ──
+            doc.setTextColor(10, 35, 90);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(19);
+            doc.text('INSTITUTO PEDAGOGICO', TEXT_CX, 14, { align: 'center' });
+            doc.setFontSize(17);
+            doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 24, { align: 'center' });
 
-        // Body text
-        doc.setTextColor(50, 50, 50);
-        doc.setFontSize(11.5);
-        doc.setFont('helvetica', 'normal');
+            // ── Sub-lines ──
+            doc.setTextColor(25, 25, 25);
+            doc.setFont('times', 'italic');
+            doc.setFontSize(9);
+            doc.text('Ser, saber y emprender', TEXT_CX, 31, { align: 'center' });
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.text('Aprobado por Resoluci\u00f3n No 3769 del 23 - 05 - 2023', TEXT_CX, 36, { align: 'center' });
+            doc.text('DANE 313001800093  \u2013  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
 
-        const codigo = (cert.tipo_codigo ?? '').toLowerCase();
-        let cuerpo = '';
-        if (codigo.includes('paz')) {
-            cuerpo = `La Institución Educativa certifica que el/la estudiante ${cert.estudiante.toUpperCase()}, quien cursa actualmente el grado ${cert.curso || '—'}, NO PRESENTA NINGUNA DEUDA pendiente con la institución al día de hoy y se encuentra a PAZ Y SALVO con todas sus obligaciones académicas y financieras.`;
-        } else if (codigo.includes('mat') || codigo.includes('constancia')) {
-            cuerpo = `La Institución Educativa certifica que el/la estudiante ${cert.estudiante.toUpperCase()} se encuentra debidamente matriculado(a) en el grado ${cert.curso || '—'} del año escolar en curso, habiendo cumplido con todos los requisitos de matrícula establecidos por la institución.`;
-        } else if (codigo.includes('nota') || codigo.includes('calific')) {
-            cuerpo = `La Institución Educativa certifica que el/la estudiante ${cert.estudiante.toUpperCase()}, perteneciente al grado ${cert.curso || '—'}, ha aprobado satisfactoriamente las áreas del período académico correspondiente, según los registros académicos oficiales de la institución.`;
+            // ── Navy divider bar under text block (filled + black border) ──
+            const barX = LOGO_X + LOGO_W + 2; // starts just after logo
+            const barW = TEXT_RIGHT - barX;    // ends at text right limit
+            doc.setFillColor(10, 35, 90);
+            doc.setDrawColor(0, 0, 0);
+            doc.setLineWidth(0.4);
+            doc.rect(barX, 46, barW, 2.5, 'FD');
+        };
+
+        /* ─── Watermark ─── */
+        const drawWatermark = () => {
+            if (logoWatermark) {
+                doc.addImage(logoWatermark, 'PNG', 47, 118, 116, 116);
+            } else {
+                doc.setTextColor(228, 230, 238);
+                doc.setFont('times', 'bold');
+                doc.setFontSize(92);
+                doc.text('I.P', W / 2, 185, { align: 'center' });
+            }
+        };
+
+        /* ─── Footer ─── */
+        const drawFooter = () => {
+            doc.setDrawColor(100, 100, 100);
+            doc.setLineWidth(0.25);
+            doc.line(25, 280, 185, 280);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.5);
+            doc.setTextColor(35, 35, 35);
+            doc.text('Villas de la candelaria Mz. 44 Lt. 11  CEL: 3005257812 - 3006529540', W / 2, 284, { align: 'center' });
+            doc.setTextColor(0, 56, 168);
+            doc.text('EMAIL: emprendedores.sersaber2023@gmail.com', W / 2, 288.5, { align: 'center' });
+            doc.setTextColor(35, 35, 35);
+            doc.text('Cartagena de Indias - Colombia', W / 2, 293, { align: 'center' });
+        };
+
+        /* ─── Firma ─── */
+        const drawFirma = (yLine: number) => {
+            doc.setDrawColor(30, 30, 30);
+            doc.setLineWidth(0.3);
+            doc.line(75, yLine, 135, yLine);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9.5);
+            doc.setTextColor(20, 20, 20);
+            doc.text('COORDINADORA', W / 2, yLine + 6, { align: 'center' });
+        };
+
+        /* ─── "Certifica" heading ─── */
+        const drawTituloCertifica = () => {
+            doc.setTextColor(20, 20, 20);
+            doc.setFont('times', 'bold');
+            doc.setFontSize(10.5);
+            doc.text('LA SUSCRITA COORDINADORA DEL', W / 2, 60, { align: 'center' });
+            doc.text('INSTITUTO PEDAG\u00d3GICO EMPRENDEDORES DEL SABER', W / 2, 68, { align: 'center' });
+            doc.setFontSize(13);
+            doc.text('CERTIFICA:', W / 2, 84, { align: 'center' });
+        };
+
+        /* ─── Assemble page ─── */
+        drawHeader();
+        drawWatermark();
+        drawTituloCertifica();
+
+        const marX  = 22;
+        const bodyW = W - marX * 2;
+        const fSize = 10.8;
+        const lH    = 6.5;
+
+        if (codigo.includes('nota') || codigo.includes('calific')) {
+            // ── Certificado de Notas ──
+            const segs: RichSeg[] = [
+                { text: 'Que el estudiante ' },
+                { text: nombreEstudiante, bold: true },
+                { text: ' identificado con ' },
+                { text: documento, bold: true },
+                { text: ' curs\u00f3 y aprob\u00f3 en nuestro instituto durante el a\u00f1o lectivo ' },
+                { text: String(anio), bold: true },
+                { text: ', las \u00e1reas correspondientes a ' },
+                { text: curso, bold: true },
+                { text: ' de ' },
+                { text: nivelAcademico, bold: true },
+                { text: '.' },
+            ];
+            let y = renderRichParagraph(doc, segs, marX, 94, bodyW, fSize, 'times', lH);
+
+            const notas = cert.notas?.length > 0
+                ? cert.notas.map(n => [
+                    n.materia.toUpperCase(),
+                    String(n.ih || 0),
+                    n.definitiva.toFixed(1),
+                    getEscalaValorativa(n.definitiva),
+                ])
+                : [['SIN REGISTROS ACAD\u00c9MICOS', '-', '-', '-']];
+
+            autoTable(doc, {
+                startY: y + 4,
+                margin: { left: marX, right: marX },
+                head: [['\u00c1REAS / ASIGNATURAS', 'I.H.', 'NOTA DEFINITIVA', 'ESCALA VALORATIVA']],
+                body: notas,
+                theme: 'grid',
+                styles: {
+                    font: 'times',
+                    fontSize: 7.8,
+                    cellPadding: 1.9,
+                    textColor: [10, 10, 10],
+                    lineColor: [40, 40, 40],
+                    lineWidth: 0.2,
+                },
+                headStyles: {
+                    fillColor: [215, 215, 215],
+                    textColor: [10, 10, 10],
+                    fontStyle: 'bold',
+                    halign: 'center',
+                    fontSize: 7.8,
+                },
+                columnStyles: {
+                    0: { cellWidth: 74 },
+                    1: { cellWidth: 14, halign: 'center' },
+                    2: { cellWidth: 36, halign: 'center' },
+                    3: { cellWidth: 42, halign: 'center' },
+                },
+            });
+
+            const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 202;
+            const cierreSegs: RichSeg[] = [
+                { text: `El presente certificado se expide en Cartagena de Indias D. T. y C. a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.` },
+            ];
+            const cY = renderRichParagraph(doc, cierreSegs, marX, finalY + 10, bodyW, fSize, 'times', lH);
+            drawFirma(Math.min(Math.max(cY + 6, 200), 256));
+            drawFooter();
         } else {
-            cuerpo = `La Institución Educativa certifica que el/la estudiante ${cert.estudiante.toUpperCase()}, identificado(a) con el documento correspondiente, pertenece activamente a esta institución y cursa el grado ${cert.curso || '—'}, cumpliendo con todos los lineamientos académicos establecidos.`;
+            // ── Paz y Salvo / Estudio / Matrícula ──
+            let segs: RichSeg[] = [];
+
+            if (codigo.includes('paz')) {
+                segs = [
+                    { text: 'Que el estudiante ' },
+                    { text: nombreEstudiante, bold: true },
+                    { text: ' identificado con ' },
+                    { text: documento, bold: true },
+                    { text: ' cursa en nuestro instituto ' },
+                    { text: curso, bold: true },
+                    { text: ' de educaci\u00f3n ' },
+                    { text: nivelAcademico, bold: true },
+                    { text: ', se encuentra a ' },
+                    { text: 'PAZ Y SALVO', bold: true },
+                    { text: ` por todo concepto hasta el mes de ${mes} del a\u00f1o ${anio}.` },
+                ];
+            } else if (codigo.includes('mat') || codigo.includes('estudio') || codigo.includes('constancia')) {
+                segs = [
+                    { text: 'Que el estudiante ' },
+                    { text: nombreEstudiante, bold: true },
+                    { text: ' identificado con ' },
+                    { text: documento, bold: true },
+                    { text: ' cursa en nuestro instituto ' },
+                    { text: curso, bold: true },
+                    { text: ' de ' },
+                    { text: nivelAcademico, bold: true },
+                    { text: ` en el a\u00f1o lectivo ` },
+                    { text: String(anio), bold: true },
+                    { text: '.' },
+                ];
+            } else {
+                segs = [
+                    { text: 'Que el estudiante ' },
+                    { text: nombreEstudiante, bold: true },
+                    { text: ' identificado con ' },
+                    { text: documento, bold: true },
+                    { text: ' pertenece activamente a nuestro instituto y cursa ' },
+                    { text: curso, bold: true },
+                    { text: ' de ' },
+                    { text: nivelAcademico, bold: true },
+                    { text: ` durante el a\u00f1o lectivo ` },
+                    { text: String(anio), bold: true },
+                    { text: '.' },
+                ];
+            }
+
+            let y = renderRichParagraph(doc, segs, marX, 94, bodyW, fSize, 'times', lH);
+
+            const cierreBase = detalleAdicional && !codigo.includes('paz')
+                ? `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. ${detalleAdicional}, a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.`
+                : `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.`;
+
+            const cierreSegs: RichSeg[] = [{ text: cierreBase }];
+            const cY = renderRichParagraph(doc, cierreSegs, marX, y + 8, bodyW, fSize, 'times', lH);
+            drawFirma(Math.min(Math.max(cY + 6, 200), 256));
+            drawFooter();
         }
-
-        const mesActual = new Date().toLocaleString('es-CO', { month: 'long' });
-        const dia = new Date().getDate();
-        const anio = new Date().getFullYear();
-
-        const bodyLines = doc.splitTextToSize(cuerpo, 152);
-        doc.text(bodyLines, 29, 97);
-
-        const expedidoY = 97 + bodyLines.length * 6.5 + 10;
-        const expedidoTxt = `La presente ${cert.tipo_nombre.toLowerCase()} se expide a solicitud del interesado, a los ${dia} días del mes de ${mesActual} del año ${anio}.`;
-        const expLines = doc.splitTextToSize(expedidoTxt, 152);
-        doc.text(expLines, 29, expedidoY);
-
-        // Signature block
-        const sigY = 215;
-        doc.setDrawColor(41, 53, 119);
-        doc.setLineWidth(0.8);
-        doc.line(50, sigY, 150, sigY);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(41, 53, 119);
-        doc.text('RECTOR(A) / SECRETARIA ACADÉMICA', W / 2, sigY + 6, { align: 'center' });
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text('Firma y sello de la institución', W / 2, sigY + 12, { align: 'center' });
-
-        // Stamp ring
-        doc.setDrawColor(41, 53, 119);
-        doc.setLineWidth(1);
-        doc.setFillColor(248, 249, 252);
-        doc.circle(160, sigY - 12, 16, 'FD');
-        doc.circle(160, sigY - 12, 12, 'S');
-        doc.setFontSize(7);
-        doc.setTextColor(41, 53, 119);
-        doc.setFont('helvetica', 'bold');
-        doc.text('SELLO', 160, sigY - 10, { align: 'center' });
-        doc.text('OFICIAL', 160, sigY - 7, { align: 'center' });
-
-        // Footer
-        doc.setFillColor(234, 179, 8);
-        doc.rect(0, 264, W, 3, 'F');
-        doc.setFillColor(41, 53, 119);
-        doc.rect(0, 267, W, 30, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Solicitud N° ${cert.id}  •  Expedido: ${new Date().toLocaleDateString('es-CO')}  •  Estado: ${getEstadoLabel(cert.estado)}`, W / 2, 278, { align: 'center' });
-        doc.text('Documento generado por el Sistema de Gestión Académica — Válido con sello y firma original', W / 2, 286, { align: 'center' });
 
         doc.save(`${cert.tipo_nombre.replace(/\s+/g, '_')}_${cert.estudiante.replace(/\s+/g, '_')}.pdf`);
     }, []);
@@ -575,7 +917,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
 
                     {/* Sede (si hay más de una), Curso, Tipo, Estado, Búsqueda */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {sedes.length > 0 && (
+                        {sedes.length > 1 && (
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
                                 <select

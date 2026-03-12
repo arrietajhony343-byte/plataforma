@@ -121,7 +121,7 @@ class AsistenciaController extends Controller
 
         // Existing attendance records for this date + curso_materia
         $registros = Asistencia::where('curso_materia_id', $cmId)
-            ->where('fecha', $fecha)
+            ->whereDate('fecha', $fecha)
             ->get()
             ->keyBy(fn ($a) => $a->estudiante_id . '-' . ($a->horario_bloque_id ?? 0));
 
@@ -189,23 +189,45 @@ class AsistenciaController extends Controller
             ->where('profesor_id', $user->id)
             ->firstOrFail();
 
+        $saved = 0;
         foreach ($request->registros as $reg) {
-            Asistencia::updateOrCreate(
-                [
-                    'estudiante_id'    => $reg['estudiante_id'],
-                    'curso_materia_id' => $cmId,
-                    'fecha'            => $fecha,
-                    'horario_bloque_id'=> $reg['horario_bloque_id'] ?? null,
-                ],
-                [
+            $bloqueId = $reg['horario_bloque_id'] ?? null;
+
+            $existing = Asistencia::where('estudiante_id', $reg['estudiante_id'])
+                ->where('curso_materia_id', $cmId)
+                ->whereDate('fecha', $fecha)
+                ->when(
+                    is_null($bloqueId),
+                    fn ($q) => $q->whereNull('horario_bloque_id'),
+                    fn ($q) => $q->where('horario_bloque_id', $bloqueId)
+                )
+                ->first();
+
+            if ($existing) {
+                $existing->update([
                     'estado'         => $reg['estado'],
                     'observacion'    => $reg['observacion'] ?? null,
                     'registrado_por' => $user->id,
-                ]
-            );
+                ]);
+            } else {
+                Asistencia::create([
+                    'estudiante_id'     => $reg['estudiante_id'],
+                    'curso_materia_id'  => $cmId,
+                    'fecha'             => $fecha,
+                    'horario_bloque_id' => $bloqueId,
+                    'estado'            => $reg['estado'],
+                    'observacion'       => $reg['observacion'] ?? null,
+                    'registrado_por'    => $user->id,
+                ]);
+            }
+            $saved++;
         }
 
-        return redirect()->back()->with('success', 'Asistencia registrada correctamente.');
+        return response()->json([
+            'success' => true,
+            'message' => 'Asistencia registrada correctamente.',
+            'saved'   => $saved,
+        ]);
     }
 
     /* ================================================================
@@ -221,7 +243,7 @@ class AsistenciaController extends Controller
         $user = auth()->user();
         $cmId = $request->curso_materia_id;
 
-        CursoMateria::where('id', $cmId)
+        $cm = CursoMateria::where('id', $cmId)
             ->where('profesor_id', $user->id)
             ->firstOrFail();
 
@@ -267,9 +289,42 @@ class AsistenciaController extends Controller
             ->pluck('fecha')
             ->map(fn ($f) => $f instanceof \Carbon\Carbon ? $f->format('Y-m-d') : $f);
 
+        // Per-day-per-student records for expandable detail view
+        $detallesQuery = Asistencia::where('curso_materia_id', $cmId);
+        if ($request->periodo_id) {
+            $periodoD = Periodo::find($request->periodo_id);
+            if ($periodoD) {
+                $detallesQuery->whereBetween('fecha', [$periodoD->fecha_inicio, $periodoD->fecha_fin]);
+            }
+        }
+        $detalles = $detallesQuery
+            ->select('estudiante_id', 'fecha', 'estado', 'observacion')
+            ->orderBy('fecha')
+            ->get()
+            ->map(fn ($a) => [
+                'estudiante_id' => $a->estudiante_id,
+                'fecha'         => $a->fecha instanceof \Carbon\Carbon ? $a->fecha->format('Y-m-d') : (string) $a->fecha,
+                'estado'        => $a->estado,
+                'observacion'   => $a->observacion,
+            ]);
+
+        // Students for name lookup
+        $estudiantesResumen = Matricula::where('curso_id', $cm->curso_id)
+            ->where('estado', 'activa')
+            ->with('estudiante:id,name')
+            ->get()
+            ->pluck('estudiante')
+            ->filter()
+            ->unique('id')
+            ->sortBy('name')
+            ->values()
+            ->map(fn ($e) => ['id' => $e->id, 'nombre' => $e->name]);
+
         return response()->json([
             'stats'             => $stats,
             'fechasRegistradas' => $fechasRegistradas,
+            'detalles'          => $detalles,
+            'estudiantes'       => $estudiantesResumen,
         ]);
     }
 

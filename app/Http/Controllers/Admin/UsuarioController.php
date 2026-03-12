@@ -131,7 +131,7 @@ class UsuarioController extends Controller
             'name'             => 'required|string|max:255',
             'email'            => 'required|email|unique:users,email',
             'phone'            => ['nullable', 'string', 'regex:/^[0-9]{7,10}$/'],
-            'role'             => 'required|in:admin,profesor,estudiante,padre',
+            'role'             => 'required|in:admin,coordinador,profesor,estudiante,padre',
             'password'         => 'required|string|min:8',
             'documento'        => ['nullable', 'string', 'regex:/^[0-9]{5,15}$/', 'unique:users,documento'],
             'tipo_documento'   => 'required|in:CC,TI,CE,RC,PP',
@@ -161,9 +161,11 @@ class UsuarioController extends Controller
             'password'             => Hash::make($data['password']),
             'activo'               => true,
             'must_change_password' => true,
-            'email_verified_at'    => now(),
             'sede_id'              => $data['sede_id'] ?? null,
         ]);
+
+        $user->email_verified_at = now();
+        $user->save();
 
         $user->assignRole($data['role']);
 
@@ -202,7 +204,7 @@ class UsuarioController extends Controller
             'name'             => 'required|string|max:255',
             'email'            => ['required', 'email', Rule::unique('users')->ignore($user->id)],
             'phone'            => ['nullable', 'string', 'regex:/^[0-9]{7,10}$/'],
-            'role'             => 'required|in:admin,profesor,estudiante,padre',
+            'role'             => 'required|in:admin,coordinador,profesor,estudiante,padre',
             'status'           => 'nullable|in:activo,bloqueado,pendiente',
             'documento'        => ['nullable', 'string', 'regex:/^[0-9]{5,15}$/', Rule::unique('users')->ignore($user->id)],
             'tipo_documento'   => 'required|in:CC,TI,CE,RC,PP',
@@ -291,20 +293,18 @@ class UsuarioController extends Controller
         $reason = $request->input('reason', null);
 
         if ($currentStatus === 'pendiente') {
-            $user->update([
-                'email_verified_at' => now(),
-                'login_attempts'    => 0,
-            ]);
+            $user->email_verified_at = now();
+            $user->login_attempts    = 0;
+            $user->save();
             $this->logActivity($user->id, 'activar', 'Cuenta activada por administrador');
             return redirect()->back()->with('success', 'Usuario activado exitosamente.');
         }
 
         if ($currentStatus === 'bloqueado') {
-            $user->update([
-                'activo'            => true,
-                'login_attempts'    => 0,
-                'email_verified_at' => $user->email_verified_at ?? now(),
-            ]);
+            $user->activo            = true;
+            $user->login_attempts    = 0;
+            $user->email_verified_at = $user->email_verified_at ?? now();
+            $user->save();
             $this->logActivity($user->id, 'activar', $reason);
             return redirect()->back()->with('success', 'Usuario activado.');
         }

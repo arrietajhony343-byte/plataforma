@@ -89,6 +89,8 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     const [toggleNotify, setToggleNotify] = useState(true);
     const [toggleMsg, setToggleMsg] = useState('');
     const [ventanaProc, setVentanaProc] = useState(false);
+    const [ventanaConfigNotify, setVentanaConfigNotify] = useState(true);
+    const [ventanaConfigMsg, setVentanaConfigMsg] = useState('');
     // Tab excepciones
     const [exTipo, setExTipo] = useState<'profesor' | 'curso'>('profesor');
     const [exRefId, setExRefId] = useState('');
@@ -119,9 +121,6 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     }, [periodoActivo]);
     const progresoAnio = useMemo(() => periodos.filter(p => p.estado === 'finalizado').reduce((s, p) => s + p.porcentaje, 0), [periodos]);
     const porcentajeDisponible = useMemo(() => Math.max(0, 100 - sumaPorcentajes), [sumaPorcentajes]);
-
-    const ventanaEsProgramada = (p: Periodo) =>
-        !p.notas_abiertas && !!p.ventana_inicio && new Date(p.ventana_inicio) > new Date();
 
     const exLista = useMemo(() => {
         const q = exBusq.toLowerCase();
@@ -252,6 +251,8 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
         setNSolo(false);
         setNSuccess('');
         setVentanaProc(false);
+        setVentanaConfigNotify(true);
+        setVentanaConfigMsg('');
         setShowVentanaModal(true);
     };
 
@@ -259,7 +260,11 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
         e.preventDefault();
         if (!ventanaPeriodo) return;
         setVentanaProc(true);
-        router.patch(`/admin/periodos/${ventanaPeriodo.id}/ventana`, ventanaForm, {
+        router.patch(`/admin/periodos/${ventanaPeriodo.id}/ventana`, {
+            ...ventanaForm,
+            notificar: ventanaConfigNotify && !!ventanaForm.ventana_inicio,
+            mensaje: ventanaConfigMsg || null,
+        }, {
             preserveScroll: true,
             onSuccess: () => setVentanaProc(false),
             onError: () => setVentanaProc(false),
@@ -545,11 +550,6 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                                                     <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
                                                                     Notas abiertas
                                                                 </span>
-                                                            ) : ventanaEsProgramada(periodo) ? (
-                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200">
-                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                                                                    Programada
-                                                                </span>
                                                             ) : (
                                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-500 border border-red-100">
                                                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
@@ -664,7 +664,6 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             {periodos.map(p => {
-                                const esProg = ventanaEsProgramada(p);
                                 return (
                                     <button
                                         key={p.id}
@@ -672,9 +671,7 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                         className={`rounded-xl p-4 border-2 text-left transition-all hover:shadow-md ${
                                             p.notas_abiertas
                                                 ? 'border-emerald-400 bg-emerald-50'
-                                                : esProg
-                                                    ? 'border-blue-300 bg-blue-50'
-                                                    : 'border-gray-100 bg-gray-50 hover:border-gray-200'
+                                                : 'border-gray-100 bg-gray-50 hover:border-gray-200'
                                         }`}
                                     >
                                         <div className="flex items-start justify-between mb-2">
@@ -683,18 +680,14 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                                 <span className="bg-emerald-500 text-white p-1 rounded-lg flex-shrink-0 ml-2">
                                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                                 </span>
-                                            ) : esProg ? (
-                                                <span className="bg-blue-400 text-white p-1 rounded-lg flex-shrink-0 ml-2">
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                                                </span>
                                             ) : (
                                                 <span className="bg-gray-300 text-white p-1 rounded-lg flex-shrink-0 ml-2">
                                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                                 </span>
                                             )}
                                         </div>
-                                        <p className={`text-xs font-semibold ${p.notas_abiertas ? 'text-emerald-600' : esProg ? 'text-blue-500' : 'text-gray-400'}`}>
-                                            {p.notas_abiertas ? 'Notas abiertas' : esProg ? 'Programada' : 'Cerrada'}
+                                        <p className={`text-xs font-semibold ${p.notas_abiertas ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                            {p.notas_abiertas ? 'Notas abiertas' : 'Cerrada'}
                                         </p>
                                         {p.excepciones.filter(e => e.activa).length > 0 && (
                                             <p className="text-[10px] text-amber-500 mt-1">
@@ -995,6 +988,28 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                                     />
                                                 </div>
                                             </div>
+                                            {ventanaForm.ventana_inicio && (
+                                                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-2">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={ventanaConfigNotify}
+                                                            onChange={e => setVentanaConfigNotify(e.target.checked)}
+                                                            className="w-4 h-4 rounded accent-[#293577]"
+                                                        />
+                                                        <span className="text-sm text-gray-700 font-medium">Notificar a todos los profesores</span>
+                                                    </label>
+                                                    {ventanaConfigNotify && (
+                                                        <textarea
+                                                            value={ventanaConfigMsg}
+                                                            onChange={e => setVentanaConfigMsg(e.target.value)}
+                                                            placeholder={`La ventana de calificación para ${ventanaPeriodo?.nombre} estará disponible a partir de la fecha programada...`}
+                                                            rows={2}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
                                             <div className="flex gap-3">
                                                 {(ventanaForm.ventana_inicio || ventanaForm.ventana_fin) && (
                                                     <button

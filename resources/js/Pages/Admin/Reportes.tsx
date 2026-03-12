@@ -100,6 +100,7 @@ export default function Reportes({ periodos, periodoActualId, cursos, sedes, ani
     const [asistencia, setAsistencia] = useState<AsistenciaData | null>(null);
     const [estudianteDetalle, setEstudianteDetalle] = useState<EstudianteDetalle | null>(null);
     const [loadingDetalle, setLoadingDetalle] = useState(false);
+    const [cursoDetalle, setCursoDetalle] = useState<AsistenciaData['porCurso'][0] | null>(null);
 
     // Report types
     const reportTypes = [
@@ -677,8 +678,13 @@ export default function Reportes({ periodos, periodoActualId, cursos, sedes, ani
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
                                                 {asistencia.porCurso.map((row, idx) => (
-                                                    <tr key={idx} className="hover:bg-gray-50/50">
-                                                        <td className="px-4 py-3 font-semibold text-gray-800">{row.curso}</td>
+                                                    <tr key={idx} className="hover:bg-blue-50/50 cursor-pointer transition-colors group" onClick={() => setCursoDetalle(row)}>
+                                                        <td className="px-4 py-3 font-semibold text-gray-800 group-hover:text-[#293577] transition-colors">
+                                                            <span className="flex items-center gap-1.5">
+                                                                {row.curso}
+                                                                <svg className="w-3.5 h-3.5 text-[#293577] opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                                            </span>
+                                                        </td>
                                                         <td className="px-4 py-3">
                                                             <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${getNivelBadge(row.nivel)}`}>
                                                                 {getNivelLabel(row.nivel)}
@@ -888,6 +894,136 @@ export default function Reportes({ periodos, periodoActualId, cursos, sedes, ani
                 )}
 
             </div>
+        {/* ── Modal Detalle Curso (Asistencia) ── */}
+        {cursoDetalle && (
+            <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                onClick={() => setCursoDetalle(null)}
+            >
+                <div
+                    className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Header */}
+                    <div className="relative p-6 pb-5 bg-gradient-to-br from-[#293577] to-[#181b49] text-white">
+                        <button
+                            onClick={() => setCursoDetalle(null)}
+                            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        <div className="flex items-center gap-3 pr-10">
+                            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold leading-tight">{cursoDetalle.curso}</h2>
+                                <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs ${getNivelBadge(cursoDetalle.nivel)} bg-white/20 text-white border-0`}>
+                                    {getNivelLabel(cursoDetalle.nivel)}
+                                </span>
+                            </div>
+                        </div>
+                        {/* Stats bar */}
+                        <div className="mt-4 grid grid-cols-3 gap-2">
+                            {[
+                                { label: 'Estudiantes', value: cursoDetalle.totalEstudiantes, color: 'bg-white/20' },
+                                { label: 'Inasistencias', value: cursoDetalle.inasistencias, color: 'bg-rose-400/30' },
+                                { label: 'Tardanzas', value: cursoDetalle.tardanzas, color: 'bg-amber-400/30' },
+                            ].map(stat => (
+                                <div key={stat.label} className={`${stat.color} rounded-xl p-2.5 text-center`}>
+                                    <div className="text-xl font-bold">{stat.value}</div>
+                                    <div className="text-xs text-white/70">{stat.label}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-5 space-y-4">
+                        {/* Barra de asistencia */}
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-sm font-semibold text-gray-700">% Asistencia</span>
+                                <span className={`text-2xl font-black ${
+                                    cursoDetalle.promedioAsist === null ? 'text-gray-400' :
+                                    cursoDetalle.promedioAsist >= 90 ? 'text-green-600' :
+                                    cursoDetalle.promedioAsist >= 75 ? 'text-yellow-600' : 'text-red-600'
+                                }`}>
+                                    {cursoDetalle.promedioAsist !== null ? `${cursoDetalle.promedioAsist}%` : '—'}
+                                </span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-700 ${
+                                        cursoDetalle.promedioAsist === null ? 'bg-gray-300' :
+                                        cursoDetalle.promedioAsist >= 90 ? 'bg-green-500' :
+                                        cursoDetalle.promedioAsist >= 75 ? 'bg-yellow-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${cursoDetalle.promedioAsist ?? 0}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                                <span>0%</span>
+                                <span className="text-yellow-500 font-medium">75%</span>
+                                <span className="text-green-500 font-medium">90%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+
+                        {/* Métricas de detalle */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center">
+                                <p className="text-2xl font-black text-red-600">{cursoDetalle.inasistencias}</p>
+                                <p className="text-xs text-red-500 mt-0.5">Inasistencias</p>
+                                {cursoDetalle.totalEstudiantes > 0 && cursoDetalle.inasistencias > 0 && (
+                                    <p className="text-[10px] text-red-400 mt-1">
+                                        {(cursoDetalle.inasistencias / cursoDetalle.totalEstudiantes).toFixed(1)} por estudiante
+                                    </p>
+                                )}
+                            </div>
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
+                                <p className="text-2xl font-black text-amber-600">{cursoDetalle.tardanzas}</p>
+                                <p className="text-xs text-amber-500 mt-0.5">Tardanzas</p>
+                                {cursoDetalle.totalEstudiantes > 0 && cursoDetalle.tardanzas > 0 && (
+                                    <p className="text-[10px] text-amber-400 mt-1">
+                                        {(cursoDetalle.tardanzas / cursoDetalle.totalEstudiantes).toFixed(1)} por estudiante
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Indicador estado */}
+                        <div className={`rounded-xl p-3 flex items-center gap-3 ${
+                            cursoDetalle.promedioAsist === null ? 'bg-gray-50 border border-gray-200' :
+                            cursoDetalle.promedioAsist >= 90 ? 'bg-green-50 border border-green-200' :
+                            cursoDetalle.promedioAsist >= 75 ? 'bg-yellow-50 border border-yellow-200' :
+                            'bg-red-50 border border-red-200'
+                        }`}>
+                            <span className="text-2xl">
+                                {cursoDetalle.promedioAsist === null ? '📊' :
+                                 cursoDetalle.promedioAsist >= 90 ? '✅' :
+                                 cursoDetalle.promedioAsist >= 75 ? '⚠️' : '🚨'}
+                            </span>
+                            <p className={`text-sm font-semibold ${
+                                cursoDetalle.promedioAsist === null ? 'text-gray-600' :
+                                cursoDetalle.promedioAsist >= 90 ? 'text-green-700' :
+                                cursoDetalle.promedioAsist >= 75 ? 'text-yellow-700' : 'text-red-700'
+                            }`}>
+                                {cursoDetalle.promedioAsist === null ? 'Sin datos de asistencia registrados' :
+                                 cursoDetalle.promedioAsist >= 90 ? 'Asistencia excelente' :
+                                 cursoDetalle.promedioAsist >= 75 ? 'Asistencia aceptable, requiere seguimiento' :
+                                 'Asistencia crítica, requiere atención urgente'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* ── Modal Detalle Estudiante ── */}
         {estudianteDetalle && (
             <div

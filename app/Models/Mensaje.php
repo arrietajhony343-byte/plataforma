@@ -9,6 +9,7 @@ class Mensaje extends Model
 {
     protected $fillable = [
         'remitente_id', 'destinatario_id', 'contenido', 'asunto', 'leido', 'leido_at',
+        'archivo_url', 'archivo_nombre', 'archivo_tipo', 'archivo_tamano',
     ];
 
     protected function casts(): array

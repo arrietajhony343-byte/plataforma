@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{Asistencia, Nota, Observacion, Sede, User, Curso, CursoMateria, Matricula, Periodo};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -11,9 +12,12 @@ use Illuminate\Support\Facades\DB;
 
 class ReporteController extends Controller
 {
+    use ScopesBySede;
+
     public function index(): Response
     {
         $anio = now()->year;
+        $sedeId = $this->sedeId();
 
         // ── Periodos disponibles (del año actual o todos si no hay) ──
         $periodos = Periodo::orderBy('numero')
@@ -32,6 +36,7 @@ class ReporteController extends Controller
         // ── Cursos activos con su nivel ──
         $nivelOrder = "CASE nivel WHEN 'preescolar' THEN 1 WHEN 'transicion' THEN 2 WHEN 'primaria' THEN 3 WHEN 'secundaria' THEN 4 WHEN 'media' THEN 5 WHEN 'bachillerato' THEN 6 ELSE 7 END";
         $cursos = Curso::activo()
+            ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
             ->orderByRaw($nivelOrder)
             ->orderBy('grado')
             ->orderBy('grupo')
@@ -44,10 +49,10 @@ class ReporteController extends Controller
                 'sede_id' => $c->sede_id,
             ]);
 
-        $sedes = Sede::where('activa', true)
-            ->orderBy('nombre')
-            ->get()
-            ->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
+        // Si es coordinador, solo mostrar su sede
+        $sedes = $sedeId
+            ? Sede::where('id', $sedeId)->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre])
+            : Sede::where('activa', true)->orderBy('nombre')->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
         return Inertia::render('Admin/Reportes', [
             'periodos'         => $periodos,
@@ -55,6 +60,7 @@ class ReporteController extends Controller
             'cursos'           => $cursos,
             'sedes'            => $sedes,
             'anioVigente'      => $anio,
+            'sedeRestringida'  => $sedeId,
         ]);
     }
 
@@ -66,7 +72,8 @@ class ReporteController extends Controller
         $periodoId   = $request->input('periodo_id');
         $nivelFiltro = $request->input('nivel', 'todos');
         $cursoId     = $request->input('curso_id');
-        $sedeId      = $request->input('sede_id');
+        // Si es coordinador, forzar su sede; si no, usar la del request
+        $sedeId = $this->sedeId() ?? $request->input('sede_id');
 
         $nivelOrder = "CASE nivel WHEN 'preescolar' THEN 1 WHEN 'transicion' THEN 2 WHEN 'primaria' THEN 3 WHEN 'secundaria' THEN 4 WHEN 'media' THEN 5 WHEN 'bachillerato' THEN 6 ELSE 7 END";
         $query = Curso::activo()
@@ -212,7 +219,7 @@ class ReporteController extends Controller
         $periodoId   = $request->input('periodo_id');
         $cursoId     = $request->input('curso_id');
         $nivelFiltro = $request->input('nivel', 'todos');
-        $sedeId      = $request->input('sede_id');
+        $sedeId = $this->sedeId() ?? $request->input('sede_id');
         $anio = now()->year;
 
         // IDs de estudiantes según filtro de curso/nivel/sede
@@ -344,7 +351,7 @@ class ReporteController extends Controller
         $periodoId   = $request->input('periodo_id');
         $cursoId     = $request->input('curso_id');
         $nivelFiltro = $request->input('nivel', 'todos');
-        $sedeId      = $request->input('sede_id');
+        $sedeId = $this->sedeId() ?? $request->input('sede_id');
 
         $nivelOrder = "CASE nivel WHEN 'preescolar' THEN 1 WHEN 'transicion' THEN 2 WHEN 'primaria' THEN 3 WHEN 'secundaria' THEN 4 WHEN 'media' THEN 5 WHEN 'bachillerato' THEN 6 ELSE 7 END";
 

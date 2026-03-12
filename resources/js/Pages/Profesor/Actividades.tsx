@@ -40,7 +40,9 @@ interface EntregaDetail {
     archivo: string | null;
     calificacion: number | null;
     retroalimentacion: string | null;
+    notaDevolucion: string | null;
     fechaEntrega: string | null;
+    fechaLimiteIndividual: string | null;
 }
 
 interface Props {
@@ -90,6 +92,12 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
     // Modal detalle actividad (vista expandida)
     const [showDetalle, setShowDetalle] = useState<Actividad | null>(null);
 
+    // Devolver / Extender states
+    const [devolviendo, setDevolviendo] = useState<{ id: number; nota: string } | null>(null);
+    const [extendiendoInd, setExtendiendoInd] = useState<{ id: number; fecha: string } | null>(null);
+    const [extendiendoGeneral, setExtendiendoGeneral] = useState(false);
+    const [fechaExtGeneral, setFechaExtGeneral] = useState('');
+
     // ── Computed ──
     const stats = useMemo(() => {
         const activas = actividades.filter(a => a.activa).length;
@@ -115,6 +123,18 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
         }
         return r;
     }, [actividades, filtroEstado, filtroCm, searchTerm]);
+
+    // Agrupadas por materia
+    const actividadesPorMateria = useMemo(() => {
+        const grupos: Record<number, { cmId: number; materia: string; curso: string; actividades: Actividad[] }> = {};
+        filtradas.forEach(act => {
+            if (!grupos[act.cursoMateriaId]) {
+                grupos[act.cursoMateriaId] = { cmId: act.cursoMateriaId, materia: act.materia, curso: act.curso, actividades: [] };
+            }
+            grupos[act.cursoMateriaId].actividades.push(act);
+        });
+        return Object.values(grupos).sort((a, b) => a.materia.localeCompare(b.materia));
+    }, [filtradas]);
 
     // ── Handlers ──
     const openCreate = () => {
@@ -203,7 +223,18 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
         setLoadingEntregas(false);
     }, []);
 
-    const handleGuardarCalificaciones = () => {
+    const csrf = () => document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
+
+    const putEntrega = async (entregaId: number, body: Record<string, unknown>) => {
+        const res = await fetch(`/profesor/entregas/${entregaId}/extender`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        return res.json();
+    };
+
+    const handleGuardarCalificaciones = async () => {
         if (!showEntregas) return;
         const cals = Object.entries(calificaciones)
             .filter(([, v]) => v.nota !== '')
@@ -212,23 +243,60 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                 calificacion: parseFloat(v.nota),
                 retroalimentacion: v.retro || null,
             }));
-
         if (cals.length === 0) return;
         setProcessing(true);
-        router.post(`/profesor/actividades/${showEntregas.id}/calificar`, { calificaciones: cals }, {
-            onSuccess: () => { setShowEntregas(null); },
-            onFinish: () => setProcessing(false),
-        });
+        try {
+            const res = await fetch(`/profesor/actividades/${showEntregas.id}/calificar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' },
+                body: JSON.stringify({ calificaciones: cals }),
+            });
+            if (res.ok) {
+                setShowEntregas(null);
+                router.reload({ only: ['actividades'] });
+            }
+        } finally {
+            setProcessing(false);
+        }
     };
 
-    const handleReenviar = (entregaId: number) => {
-        if (!confirm('¿Permitir que el estudiante reenvíe esta entrega? La calificación actual se eliminará.')) return;
-        router.put(`/profesor/entregas/${entregaId}/extender`, { nuevo_estado: 'pendiente' }, {
-            preserveScroll: true,
-            onSuccess: () => {
-                if (showEntregas) openEntregas(showEntregas);
-            },
-        });
+    const handleDevolver = async (entregaId: number, nota: string) => {
+        await putEntrega(entregaId, { tipo: 'devolver', nota_devolucion: nota || null });
+        setDevolviendo(null);
+        if (showEntregas) await openEntregas(showEntregas);
+        router.reload({ only: ['actividades'] });
+    };
+
+    const handleExtenderIndividual = async (entregaId: number, fecha: string) => {
+        if (!fecha) return;
+        await putEntrega(entregaId, { tipo: 'extender_individual', nueva_fecha: fecha });
+        setExtendiendoInd(null);
+        if (showEntregas) await openEntregas(showEntregas);
+    };
+
+    const handleExtenderGeneral = async () => {
+        if (!showEntregas || !fechaExtGeneral) return;
+        setProcessing(true);
+        try {
+            await fetch(`/profesor/actividades/${showEntregas.id}/extender-plazo`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+                body: JSON.stringify({ nueva_fecha_entrega: fechaExtGeneral }),
+            });
+            setExtendiendoGeneral(false);
+            setFechaExtGeneral('');
+            if (showEntregas) await openEntregas(showEntregas);
+            router.reload({ only: ['actividades'] });
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleReenviar = async (entregaId: number) => {
+        if (!confirm('¿Permitir que el estudiante reenvíe? La calificación actual se eliminará.')) return;
+        await putEntrega(entregaId, { tipo: 'reactivar' });
+        if (showEntregas) await openEntregas(showEntregas);
+        router.reload({ only: ['actividades'] });
     };
 
     const entregasFiltradas = useMemo(() => {
@@ -271,7 +339,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
 
     // ── Render ──
     return (
-        <SidebarLayout menuItems={profesorMenuItems} userInfo={{ name: profesor.nombre, role: 'Profesor' }}>
+        <SidebarLayout menuItems={profesorMenuItems} userInfo={{ name: profesor?.nombre ?? '', role: 'Profesor' }}>
             <Head title="Actividades" />
 
             <div className="max-w-7xl mx-auto space-y-5">
@@ -353,138 +421,146 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                     </div>
                 </div>
 
-                {/* ── Activity List ── */}
-                <div className="space-y-3">
-                    {filtradas.length === 0 && (
-                        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                            <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
-                            <p className="text-sm text-gray-500">No se encontraron actividades</p>
-                            <button onClick={openCreate} className="mt-3 text-sm text-[#293577] font-semibold hover:underline">
-                                Crear primera actividad
-                            </button>
-                        </div>
-                    )}
+                {/* ── Activity List by Materia ── */}
+                {actividadesPorMateria.length === 0 ? (
+                    <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+                        <svg className="w-14 h-14 mx-auto text-gray-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                        <p className="text-sm font-semibold text-gray-500 mb-1">No se encontraron actividades</p>
+                        <p className="text-xs text-gray-400 mb-4">Prueba con otros filtros o crea una nueva actividad</p>
+                        <Link href="/profesor/actividades/crear" className="inline-flex items-center gap-2 text-sm text-[#293577] font-semibold hover:underline">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                            Crear primera actividad
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {actividadesPorMateria.map(grupo => {
+                            const totalGrupo = grupo.actividades.length;
+                            const activasGrupo = grupo.actividades.filter(a => a.activa).length;
+                            const porCalificarGrupo = grupo.actividades.reduce((s, a) => s + Math.max(0, a.entregados - a.calificados), 0);
+                            const pesoTotal = grupo.actividades.reduce((s, a) => s + a.porcentaje, 0);
 
-                    {filtradas.map(act => {
-                        const estado = getEstado(act);
-                        const ec = estadoConfig[estado];
-                        const tc = tiposConfig[act.tipo] || tiposConfig.tarea;
-                        const days = getDaysLeft(act.fechaEntrega);
-                        const progreso = act.totalEstudiantes > 0 ? (act.entregados / act.totalEstudiantes) * 100 : 0;
-                        const progresoCalif = act.totalEstudiantes > 0 ? (act.calificados / act.totalEstudiantes) * 100 : 0;
-                        const sinCalificar = act.entregados - act.calificados;
-
-                        return (
-                            <div key={act.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${
-                                estado === 'cerrada' ? 'border-gray-200 opacity-75' : 'border-gray-200'
-                            }`}>
-                                <div className="p-4 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                                    {/* Icon */}
-                                    <div className={`w-11 h-11 rounded-xl ${tc.bg} flex items-center justify-center flex-shrink-0 hidden sm:flex`}>
-                                        <svg className={`w-5 h-5 ${tc.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                                            <h3 className="font-bold text-gray-900 text-sm sm:text-base truncate">{act.titulo}</h3>
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${ec.cls}`}>{ec.label}</span>
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tc.bg} ${tc.color}`}>{tc.label}</span>
+                            return (
+                                <div key={grupo.cmId} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                                    {/* ── Materia Header ── */}
+                                    <div className="bg-gradient-to-r from-[#293577]/5 via-blue-50/50 to-white border-b border-[#293577]/10 px-5 py-4 flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-11 h-11 rounded-xl bg-[#293577] flex items-center justify-center text-white font-black text-sm flex-shrink-0 shadow-sm">
+                                                {grupo.materia.slice(0, 2).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <h3 className="font-extrabold text-gray-900 text-base leading-tight">{grupo.materia}</h3>
+                                                <p className="text-xs text-gray-500">{grupo.curso} · {totalGrupo} actividad{totalGrupo !== 1 ? 'es' : ''} · {pesoTotal.toFixed(0)}% peso total</p>
+                                            </div>
                                         </div>
-
-                                        {act.descripcion && (
-                                            <p className="text-xs text-gray-500 line-clamp-2 mb-2">{act.descripcion}</p>
-                                        )}
-
-                                        <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
-                                            <span className="flex items-center gap-1 font-semibold text-[#293577]">
-                                                {act.materia} · {act.curso}
-                                            </span>
-                                            <span>Peso: {act.porcentaje}%</span>
-                                            <span className="flex items-center gap-1">
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-                                                {formatDate(act.fechaEntrega)}
-                                            </span>
-                                            {days !== null && act.activa && (
-                                                <span className={`font-semibold ${
-                                                    days < 0 ? 'text-red-500' : days <= 2 ? 'text-amber-500' : 'text-emerald-500'
-                                                }`}>
-                                                    {days < 0 ? `Vencida (${Math.abs(days)}d)` : days === 0 ? 'Hoy' : days === 1 ? 'Mañana' : `${days} días`}
-                                                </span>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            {activasGrupo > 0 && (
+                                                <span className="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full text-xs font-bold">{activasGrupo} activa{activasGrupo !== 1 ? 's' : ''}</span>
+                                            )}
+                                            {porCalificarGrupo > 0 && (
+                                                <span className="bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-bold">{porCalificarGrupo} por calificar</span>
                                             )}
                                         </div>
-
-                                        {/* Progress bar */}
-                                        <div className="mt-2.5 flex items-center gap-3">
-                                            <div className="flex-1 max-w-xs">
-                                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
-                                                    <div className="bg-emerald-500 h-full transition-all" style={{ width: `${progresoCalif}%` }} />
-                                                    <div className="bg-blue-400 h-full transition-all" style={{ width: `${Math.max(0, progreso - progresoCalif)}%` }} />
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-[11px] flex-shrink-0">
-                                                <span className="text-gray-500">{act.entregados}/{act.totalEstudiantes}</span>
-                                                {act.calificados > 0 && (
-                                                    <span className="text-emerald-600 font-semibold">{act.calificados} calif.</span>
-                                                )}
-                                                {sinCalificar > 0 && (
-                                                    <span className="text-amber-600 font-semibold">{sinCalificar} pend.</span>
-                                                )}
-                                            </div>
-                                        </div>
                                     </div>
 
-                                    {/* Actions */}
-                                    <div className="flex sm:flex-col gap-2 flex-shrink-0 sm:items-end">
-                                        <button
-                                            onClick={() => openEntregas(act)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#293577] text-white rounded-lg text-xs font-semibold hover:bg-[#181b49] transition-colors"
-                                        >
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
-                                            Entregas
-                                        </button>
-                                        {sinCalificar > 0 && (
-                                            <button
-                                                onClick={() => openEntregas(act)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600 transition-colors"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
-                                                Calificar
-                                            </button>
-                                        )}
-                                        <div className="flex gap-1">
-                                            <Link
-                                                href={`/profesor/actividades/${act.id}/editar`}
-                                                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-[#293577] transition-colors"
-                                                title="Editar"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                                            </Link>
-                                            <button
-                                                onClick={() => handleToggleActiva(act)}
-                                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
-                                                    act.activa
-                                                        ? 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                                                        : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                                                }`}
-                                                title={act.activa ? 'Cerrar actividad' : 'Reactivar'}
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={act.activa ? 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z' : 'M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z'} /></svg>
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(act)}
-                                                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
-                                                title="Eliminar"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                                            </button>
-                                        </div>
+                                    {/* ── Actividades del grupo ── */}
+                                    <div className="divide-y divide-gray-100">
+                                        {grupo.actividades.map((act, actIdx) => {
+                                            const estado = getEstado(act);
+                                            const ec = estadoConfig[estado];
+                                            const tc = tiposConfig[act.tipo] || tiposConfig.tarea;
+                                            const days = getDaysLeft(act.fechaEntrega);
+                                            const progreso = act.totalEstudiantes > 0 ? (act.entregados / act.totalEstudiantes) * 100 : 0;
+                                            const progresoCalif = act.totalEstudiantes > 0 ? (act.calificados / act.totalEstudiantes) * 100 : 0;
+                                            const sinCalificar = act.entregados - act.calificados;
+
+                                            return (
+                                                <div key={act.id} className={`flex items-start gap-3 sm:gap-4 px-5 py-3.5 transition-colors ${actIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'} hover:bg-blue-50/20 ${!act.activa ? 'opacity-60' : ''}`}>
+                                                    {/* Tipo badge */}
+                                                    <div className={`w-9 h-9 rounded-xl ${tc.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                                                        <svg className={`w-4 h-4 ${tc.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                                                    </div>
+
+                                                    {/* Content */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                                            <h4 className="font-bold text-gray-900 text-sm truncate">{act.titulo}</h4>
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${ec.cls}`}>{ec.label}</span>
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tc.bg} ${tc.color}`}>{tc.label}</span>
+                                                        </div>
+                                                        {act.descripcion && (
+                                                            <p className="text-[11px] text-gray-400 line-clamp-1 mb-1.5">{act.descripcion}</p>
+                                                        )}
+                                                        <div className="flex items-center gap-3 text-[11px] text-gray-400 flex-wrap">
+                                                            <span className="font-semibold text-gray-600">Peso: {act.porcentaje}%</span>
+                                                            <span className="flex items-center gap-1">
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5" /></svg>
+                                                                {formatDate(act.fechaEntrega)}
+                                                            </span>
+                                                            {days !== null && act.activa && (
+                                                                <span className={`font-bold ${days < 0 ? 'text-red-500' : days <= 2 ? 'text-amber-500' : 'text-emerald-600'}`}>
+                                                                    {days < 0 ? `Vencida (${Math.abs(days)}d)` : days === 0 ? 'Vence hoy' : days === 1 ? 'Vence mañana' : `${days}d restantes`}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {/* Barra de progreso */}
+                                                        <div className="mt-2 flex items-center gap-2.5">
+                                                            <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden flex flex-shrink-0">
+                                                                <div className="bg-emerald-500 h-full transition-all" style={{ width: `${progresoCalif}%` }} />
+                                                                <div className="bg-blue-400 h-full transition-all" style={{ width: `${Math.max(0, progreso - progresoCalif)}%` }} />
+                                                            </div>
+                                                            <span className="text-[10px] text-gray-400">{act.entregados}/{act.totalEstudiantes}</span>
+                                                            {act.calificados > 0 && <span className="text-[10px] text-emerald-600 font-bold">{act.calificados} calif.</span>}
+                                                            {sinCalificar > 0 && <span className="text-[10px] text-amber-600 font-bold">{sinCalificar} pend.</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Actions */}
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => openEntregas(act)}
+                                                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                                                                sinCalificar > 0
+                                                                    ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                                                    : 'bg-[#293577] hover:bg-[#181b49] text-white'
+                                                            }`}
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
+                                                            <span className="hidden sm:inline">{sinCalificar > 0 ? 'Calificar' : 'Entregas'}</span>
+                                                        </button>
+                                                        <Link
+                                                            href={`/profesor/actividades/${act.id}/editar`}
+                                                            className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-[#293577] hover:border-[#293577]/30 transition-colors"
+                                                            title="Editar"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                                                        </Link>
+                                                        <button
+                                                            onClick={() => handleToggleActiva(act)}
+                                                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+                                                                act.activa ? 'border-gray-200 text-gray-400 hover:bg-orange-50 hover:text-orange-500 hover:border-orange-200' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                                                            }`}
+                                                            title={act.activa ? 'Cerrar actividad' : 'Reactivar'}
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={act.activa ? 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z' : 'M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z'} /></svg>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(act)}
+                                                            className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
+                                                            title="Eliminar"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* ── Legend ── */}
                 <div className="flex items-center gap-4 text-[10px] text-gray-400 px-1">
@@ -749,16 +825,71 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                                             <span className={`w-1.5 h-1.5 rounded-full ${ec.dot}`} />
                                                             {ec.label}
                                                         </span>
+                                                        {e.fechaLimiteIndividual && (
+                                                            <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">
+                                                                Ext: {new Date(e.fechaLimiteIndividual).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     {e.fechaEntrega && (
                                                         <p className="text-[11px] text-gray-400 mt-0.5">Entregado: {e.fechaEntrega}</p>
                                                     )}
+                                                    {e.notaDevolucion && (
+                                                        <p className="text-[11px] text-orange-600 bg-orange-50 rounded px-2 py-1 mt-1">
+                                                            <span className="font-bold">Devuelta:</span> {e.notaDevolucion}
+                                                        </p>
+                                                    )}
                                                     {e.contenido && (
-                                                        <p className="text-xs text-gray-500 mt-1 bg-white rounded-lg px-2.5 py-1.5 border border-gray-100">{e.contenido}</p>
+                                                        <p className="text-xs text-gray-500 mt-1 bg-white rounded-lg px-2.5 py-1.5 border border-gray-100 line-clamp-2">{e.contenido}</p>
+                                                    )}
+
+                                                    {/* Inline devolver form */}
+                                                    {devolviendo?.id === e.id && (
+                                                        <div className="mt-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
+                                                            <p className="text-[11px] font-bold text-orange-700 mb-1.5">Motivo de devolución (opcional):</p>
+                                                            <textarea
+                                                                value={devolviendo.nota}
+                                                                onChange={ev => setDevolviendo({ id: e.id, nota: ev.target.value })}
+                                                                rows={2}
+                                                                maxLength={400}
+                                                                placeholder="Ej: Falta el desarrollo del problema 3..."
+                                                                className="w-full text-xs border border-orange-200 rounded-lg px-2.5 py-2 resize-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
+                                                            />
+                                                            <div className="flex gap-2 mt-2">
+                                                                <button onClick={() => handleDevolver(e.id, devolviendo.nota)} className="flex-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors">
+                                                                    Confirmar devolución
+                                                                </button>
+                                                                <button onClick={() => setDevolviendo(null)} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors">
+                                                                    Cancelar
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Inline extender individual form */}
+                                                    {extendiendoInd?.id === e.id && (
+                                                        <div className="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
+                                                            <p className="text-[11px] font-bold text-blue-700 mb-1.5">Nueva fecha límite individual:</p>
+                                                            <div className="flex gap-2">
+                                                                <input
+                                                                    type="date"
+                                                                    value={extendiendoInd.fecha}
+                                                                    onChange={ev => setExtendiendoInd({ id: e.id, fecha: ev.target.value })}
+                                                                    min={new Date().toISOString().slice(0, 10)}
+                                                                    className="flex-1 text-xs border border-blue-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-300"
+                                                                />
+                                                                <button onClick={() => handleExtenderIndividual(e.id, extendiendoInd.fecha)} disabled={!extendiendoInd.fecha} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors">
+                                                                    Guardar
+                                                                </button>
+                                                                <button onClick={() => setExtendiendoInd(null)} className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors">
+                                                                    ✕
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     )}
 
                                                     {/* Grade inputs */}
-                                                    {(e.estado === 'entregada' || e.estado === 'calificada') && (
+                                                    {(e.estado === 'entregada' || e.estado === 'calificada') && devolviendo?.id !== e.id && (
                                                         <div className="mt-2 flex flex-col sm:flex-row gap-2">
                                                             <div className="flex items-center gap-2">
                                                                 <label className="text-[11px] text-gray-500 font-medium whitespace-nowrap">Nota:</label>
@@ -767,7 +898,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                                                     min={0}
                                                                     max={5}
                                                                     step={0.1}
-                                                                    value={cal.nota}
+                                                                    value={calificaciones[e.id]?.nota ?? ''}
                                                                     onChange={ev => setCalificaciones(prev => ({
                                                                         ...prev,
                                                                         [e.id]: { ...prev[e.id], nota: ev.target.value },
@@ -778,7 +909,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                                             </div>
                                                             <input
                                                                 type="text"
-                                                                value={cal.retro}
+                                                                value={calificaciones[e.id]?.retro ?? ''}
                                                                 onChange={ev => setCalificaciones(prev => ({
                                                                     ...prev,
                                                                     [e.id]: { ...prev[e.id], retro: ev.target.value },
@@ -792,27 +923,35 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
 
                                                 {/* Actions per entrega */}
                                                 <div className="flex flex-col gap-1 flex-shrink-0">
+                                                    {(e.estado === 'entregada' || e.estado === 'calificada') && devolviendo?.id !== e.id && (
+                                                        <button
+                                                            onClick={() => setDevolviendo({ id: e.id, nota: '' })}
+                                                            className="px-2.5 py-1 bg-orange-100 text-orange-700 rounded-lg text-[10px] font-bold hover:bg-orange-200 transition-colors"
+                                                            title="Devolver para corrección"
+                                                        >
+                                                            Devolver
+                                                        </button>
+                                                    )}
                                                     {e.estado === 'calificada' && (
                                                         <button
                                                             onClick={() => handleReenviar(e.id)}
                                                             className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-200 transition-colors"
-                                                            title="Permitir reenvío"
                                                         >
                                                             Reenviar
+                                                        </button>
+                                                    )}
+                                                    {extendiendoInd?.id !== e.id && (
+                                                        <button
+                                                            onClick={() => setExtendiendoInd({ id: e.id, fecha: '' })}
+                                                            className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-200 transition-colors"
+                                                        >
+                                                            Extender
                                                         </button>
                                                     )}
                                                     {e.estado === 'pendiente' && (
                                                         <span className="px-2.5 py-1 bg-gray-100 text-gray-400 rounded-lg text-[10px] font-medium text-center">
                                                             Sin entrega
                                                         </span>
-                                                    )}
-                                                    {e.estado === 'atrasada' && (
-                                                        <button
-                                                            onClick={() => handleReenviar(e.id)}
-                                                            className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-200 transition-colors"
-                                                        >
-                                                            Extender
-                                                        </button>
                                                     )}
                                                 </div>
                                             </div>
@@ -822,22 +961,68 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                             )}
                         </div>
 
+                        {/* Extender plazo general panel */}
+                        {extendiendoGeneral && (
+                            <div className="px-4 py-3 border-t border-orange-200 bg-orange-50/80">
+                                <p className="text-xs font-bold text-orange-700 mb-2">
+                                    <svg className="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    Nueva fecha límite para <span className="font-black">todos los estudiantes</span>:
+                                </p>
+                                <div className="flex gap-2 items-center">
+                                    <input
+                                        type="date"
+                                        value={fechaExtGeneral}
+                                        onChange={ev => setFechaExtGeneral(ev.target.value)}
+                                        min={new Date().toISOString().slice(0, 10)}
+                                        className="flex-1 text-sm border border-orange-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-orange-400 bg-white"
+                                    />
+                                    <button
+                                        onClick={handleExtenderGeneral}
+                                        disabled={!fechaExtGeneral || processing}
+                                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-colors"
+                                    >
+                                        {processing ? 'Guardando...' : 'Confirmar'}
+                                    </button>
+                                    <button
+                                        onClick={() => { setExtendiendoGeneral(false); setFechaExtGeneral(''); }}
+                                        className="px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Footer */}
-                        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-3 flex-shrink-0">
-                            <button type="button" onClick={() => setShowEntregas(null)} className="sm:flex-1 px-4 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors">
-                                Cerrar
-                            </button>
+                        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-2 flex-shrink-0">
                             <button
-                                onClick={handleGuardarCalificaciones}
-                                disabled={processing || Object.values(calificaciones).every(c => c.nota === '')}
-                                className="sm:flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-700 text-sm font-semibold disabled:opacity-50 transition-colors"
+                                type="button"
+                                onClick={() => setExtendiendoGeneral(v => !v)}
+                                className="px-4 py-2.5 border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2"
                             >
-                                {processing ? (
-                                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
-                                ) : (
-                                    <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" /></svg> Guardar Calificaciones</>
-                                )}
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Extender plazo general
                             </button>
+                            <div className="flex gap-2 sm:ml-auto">
+                                <button type="button" onClick={() => setShowEntregas(null)} className="px-4 py-2.5 border border-gray-300 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors">
+                                    Cerrar
+                                </button>
+                                <button
+                                    onClick={handleGuardarCalificaciones}
+                                    disabled={processing || Object.values(calificaciones).every(c => c.nota === '')}
+                                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-700 text-sm font-semibold disabled:opacity-50 transition-colors"
+                                >
+                                    {processing ? (
+                                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Guardando...</>
+                                    ) : (
+                                        <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" /></svg> Guardar Calificaciones</>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

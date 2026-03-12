@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Sede};
+use App\Http\Controllers\Concerns\ScopesBySede;
+use App\Models\{Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Sede, Actividad};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class BoletinController extends Controller
 {
+    use ScopesBySede;
+
     public function index(): Response
     {
         // Periodos disponibles
@@ -18,6 +21,7 @@ class BoletinController extends Controller
 
         // Cursos activos del año actual
         $cursos = Curso::activo()
+            ->when($this->sedeId(), fn($q, $s) => $q->where('sede_id', $s))
             ->orderByRaw("CASE WHEN nivel = 'preescolar' THEN 1 WHEN nivel = 'transicion' THEN 2 WHEN nivel = 'primaria' THEN 3 WHEN nivel = 'bachillerato' THEN 4 ELSE 5 END")
             ->orderBy('grado')
             ->orderBy('grupo')
@@ -30,10 +34,12 @@ class BoletinController extends Controller
 
         // Sedes activas
         $sedes = Sede::where('activa', true)->orderBy('nombre')
+            ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
             ->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
         // Boletines con relaciones completas
-        $boletines = Boletin::with(['estudiante.padres', 'periodo', 'curso'])
+        $boletines = Boletin::with(['estudiante.padres', 'periodo', 'curso.directorGrupo'])
+            ->when($this->sedeId(), fn($q, $s) => $q->whereHas('curso', fn($cq) => $cq->where('sede_id', $s)))
             ->orderByDesc('created_at')
             ->get()
             ->map(function (Boletin $b) {
@@ -43,35 +49,89 @@ class BoletinController extends Controller
                     ->map(fn($p) => ['id' => $p->id, 'name' => $p->name])
                     ->values();
 
-                // Notas definitivas del estudiante en este período, agrupadas por materia
-                $notas = Nota::where('estudiante_id', $b->estudiante_id)
-                    ->where('periodo_id', $b->periodo_id)
-                    ->where('tipo', 'definitiva')
-                    ->with('cursoMateria.materia')
+                // Todos los períodos del mismo año académico, ordenados por número
+                $todosPeriodos = Periodo::where('anio', $b->periodo->anio)
+                    ->orderBy('numero')
+                    ->get();
+
+                // IDs de CursoMaterias de este curso
+                $cmsAll = CursoMateria::where('curso_id', $b->curso_id)
+                    ->with('materia')
                     ->get()
-                    ->filter(fn($n) => $n->cursoMateria?->materia !== null)
-                    ->map(fn($n) => [
-                        'materia'    => $n->cursoMateria->materia->nombre,
-                        'definitiva' => round((float) $n->valor, 1),
-                    ])
-                    ->values();
+                    ->keyBy('id');
+
+                // Notas definitivas del estudiante en este curso para TODOS los períodos del año
+                $todasNotas = Nota::where('estudiante_id', $b->estudiante_id)
+                    ->whereIn('curso_materia_id', $cmsAll->keys())
+                    ->whereIn('periodo_id', $todosPeriodos->pluck('id'))
+                    ->where('tipo', 'definitiva')
+                    ->get();
+
+                // Indicadores (títulos de actividades) por cursoMateria para el período actual
+                $indicadoresPorCM = Actividad::whereIn('curso_materia_id', $cmsAll->keys())
+                    ->where('periodo_id', $b->periodo_id)
+                    ->orderBy('created_at')
+                    ->get()
+                    ->groupBy('curso_materia_id')
+                    ->map(fn($acts) => $acts->take(6)->pluck('titulo')->values());
+
+                // Agrupar notas por cursoMateria y luego por período
+                $notasPorCM = $todasNotas->groupBy('curso_materia_id');
+
+                // Construir filas por materia
+                $notas = $cmsAll->map(function ($cm) use ($todosPeriodos, $notasPorCM, $indicadoresPorCM, $b) {
+                    $notasMateria   = $notasPorCM->get($cm->id, collect());
+                    $notasPorPeriodo = $notasMateria->keyBy('periodo_id');
+
+                    $ihMateria = (int) ($cm->horas_semanales ?? $cm->materia?->horas_semanales ?? 0);
+
+                    // Indicadores de desempeño
+                    $indicadores = $indicadoresPorCM->get($cm->id, collect())->toArray();
+
+                    // Notas por número de período: p1, p2, p3, p4
+                    $notasPeriodos = [];
+                    foreach ($todosPeriodos as $p) {
+                        $nVal = $notasPorPeriodo->get($p->id);
+                        $notasPeriodos['p' . $p->numero] = $nVal ? round((float) $nVal->valor, 1) : null;
+                    }
+
+                    // Nota definitiva del período actual
+                    $definitiva = $notasPorPeriodo->get($b->periodo_id);
+                    $defVal = $definitiva ? round((float) $definitiva->valor, 1) : null;
+
+                    return [
+                        'materia'    => $cm->materia?->nombre ?? 'Sin nombre',
+                        'ih'         => $ihMateria,
+                        'indicadores'=> $indicadores,
+                        'definitiva' => $defVal,
+                        ...$notasPeriodos,
+                    ];
+                })
+                ->filter(fn($row) => $row['definitiva'] !== null || collect($row)->only(['p1','p2','p3','p4'])->filter()->isNotEmpty())
+                ->values();
 
                 return [
-                    'id'               => $b->id,
-                    'estudiante_id'    => $b->estudiante_id,
-                    'estudiante'       => $b->estudiante->name,
-                    'periodo_id'       => $b->periodo_id,
-                    'periodo'          => $b->periodo->nombre,
-                    'curso_id'         => $b->curso_id,
-                    'curso'            => $b->curso->nombre,
-                    'nivel'            => $b->curso->nivel,
-                    'promedio'         => (float) $b->promedio,
-                    'puesto'           => $b->puesto,
-                    'observacion'      => $b->observacion_general,
-                    'estado'           => $b->estado,
-                    'fecha_generacion' => $b->created_at->format('Y-m-d'),
-                    'padres'           => $padres,
-                    'notas'            => $notas,
+                    'id'              => $b->id,
+                    'estudiante_id'   => $b->estudiante_id,
+                    'estudiante'      => $b->estudiante->name,
+                    'periodo_id'      => $b->periodo_id,
+                    'periodo'         => $b->periodo->nombre,
+                    'periodo_numero'  => $b->periodo->numero ?? 1,
+                    'curso_id'        => $b->curso_id,
+                    'curso'           => $b->curso->nombre,
+                    'nivel'           => $b->curso->nivel,
+                    'grado'           => $b->curso->grado ?? $b->curso->nombre,
+                    'jornada'         => $b->curso->jornada ?? 'Mañana',
+                    'anio'            => $b->periodo->anio,
+                    'total_periodos'  => $todosPeriodos->count(),
+                    'director_grupo'  => $b->curso->directorGrupo?->name ?? 'Sin asignar',
+                    'promedio'        => (float) $b->promedio,
+                    'puesto'          => $b->puesto,
+                    'observacion'     => $b->observacion_general,
+                    'estado'          => $b->estado,
+                    'fecha_generacion'=> $b->created_at->format('Y-m-d'),
+                    'padres'          => $padres,
+                    'notas'           => $notas,
                 ];
             });
 

@@ -1,6 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 interface Sede { id: number; nombre: string; ciudad: string; }
@@ -62,6 +63,103 @@ interface Props {
     sedes: Sede[];
 }
 
+/* ─── SearchSelect: combobox con portal dropdown ─── */
+function SearchSelect({ options, value, onChange, placeholder }: {
+    options: { id: string; text: string }[];
+    value: string;
+    onChange: (id: string) => void;
+    placeholder: string;
+}) {
+    const [search, setSearch] = useState('');
+    const [open, setOpen] = useState(false);
+    const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
+    const ref = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const selected = options.find(o => o.id === value);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            const t = e.target as Node;
+            if (!ref.current?.contains(t) && !panelRef.current?.contains(t)) {
+                setOpen(false);
+                setSearch('');
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filtered = search
+        ? options.filter(o => o.text.toLowerCase().includes(search.toLowerCase()))
+        : options;
+
+    const handleOpen = () => {
+        if (!open && ref.current) {
+            const r = ref.current.getBoundingClientRect();
+            setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+        }
+        setOpen(prev => !prev);
+        setSearch('');
+    };
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={handleOpen}
+                className="w-full flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white text-left transition-all focus:outline-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+            >
+                <span className={`flex-1 truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>
+                    {selected ? selected.text : placeholder}
+                </span>
+                {selected && (
+                    <span
+                        onClick={(e) => { e.stopPropagation(); onChange(''); }}
+                        className="cursor-pointer text-gray-300 hover:text-gray-500 flex-shrink-0 text-lg leading-none"
+                    >×</span>
+                )}
+                <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+            </button>
+            {open && dropPos && createPortal(
+                <div
+                    ref={panelRef}
+                    className="fixed z-[9999] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden"
+                    style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}
+                >
+                    <div className="p-2 border-b border-gray-100">
+                        <input
+                            autoFocus
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Buscar..."
+                            className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#293577]/30"
+                        />
+                    </div>
+                    <div className="max-h-52 overflow-y-auto">
+                        {filtered.length === 0 && (
+                            <div className="px-3 py-3 text-sm text-gray-400 italic text-center">Sin resultados</div>
+                        )}
+                        {filtered.map(o => (
+                            <button
+                                key={o.id}
+                                type="button"
+                                onMouseDown={() => { onChange(o.id); setOpen(false); setSearch(''); }}
+                                className={`w-full text-left px-3 py-2.5 text-sm hover:bg-[#293577]/5 hover:text-[#293577] transition-colors ${value === o.id ? 'bg-[#293577]/10 text-[#293577] font-medium' : 'text-gray-700'}`}
+                            >
+                                {o.text}
+                            </button>
+                        ))}
+                    </div>
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
 const EMPTY_FORM = {
     name: '', email: '', phone: '', role: 'estudiante', password: '', status: 'activo',
     documento: '', tipo_documento: 'CC', direccion: '', fecha_nacimiento: '', genero: '',
@@ -103,6 +201,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
     const getRoleBadge = (role: string) => {
         switch (role) {
             case 'admin': return { bg: 'bg-purple-50 text-purple-700 ring-purple-200', dot: 'bg-purple-500', label: 'Administrador' };
+            case 'coordinador': return { bg: 'bg-teal-50 text-teal-700 ring-teal-200', dot: 'bg-teal-500', label: 'Coordinador' };
             case 'profesor': return { bg: 'bg-sky-50 text-sky-700 ring-sky-200', dot: 'bg-sky-500', label: 'Profesor' };
             case 'estudiante': return { bg: 'bg-emerald-50 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500', label: 'Estudiante' };
             case 'padre': return { bg: 'bg-amber-50 text-amber-700 ring-amber-200', dot: 'bg-amber-500', label: 'Padre' };
@@ -373,6 +472,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                             >
                                 <option value="todos">Todos los roles</option>
                                 <option value="admin">Administradores</option>
+                                <option value="coordinador">Coordinadores</option>
                                 <option value="profesor">Profesores</option>
                                 <option value="estudiante">Estudiantes</option>
                                 <option value="padre">Padres</option>
@@ -791,6 +891,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                         className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
                                     >
                                         <option value="admin">Administrador</option>
+                                        <option value="coordinador">Coordinador</option>
                                         <option value="profesor">Profesor</option>
                                         <option value="estudiante">Estudiante</option>
                                         <option value="padre">Padre de familia</option>
@@ -835,34 +936,21 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                             </select>
                                         </div>
 
-                                        {/* Curso (filtrado por nivel) */}
+                                        {/* Grado y Sección */}
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Grado y Sección</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Buscar curso..."
-                                                value={cursoBusq}
-                                                onChange={e => { setCursoBusq(e.target.value); setFormData(f => ({ ...f, curso_id: '' })); }}
-                                                className="w-full pl-4 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all mb-1"
-                                            />
-                                            <select
-                                                value={formData.curso_id}
-                                                onChange={(e) => { setFormData(f => ({ ...f, curso_id: e.target.value })); const opt = e.target.options[e.target.selectedIndex]; setCursoBusq(opt.text === '— Sin asignar —' ? '' : opt.text); }}
-                                                className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
-                                                size={4}
-                                            >
-                                                <option value="">— Sin asignar —</option>
-                                                {(formData.nivel_educativo
+                                            <SearchSelect
+                                                options={(formData.nivel_educativo
                                                     ? cursos.filter(c => {
                                                         const nv = (c.nivel === 'preescolar' || c.nivel === 'transicion') ? 'prejardin' : c.nivel;
                                                         return nv === formData.nivel_educativo;
                                                     })
                                                     : cursos
-                                                ).filter(c => !cursoBusq || c.nombre.toLowerCase().includes(cursoBusq.toLowerCase()))
-                                                .map(c => (
-                                                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                                                ))}
-                                            </select>
+                                                ).map(c => ({ id: c.id.toString(), text: c.nombre }))}
+                                                value={formData.curso_id}
+                                                onChange={(id) => setFormData(f => ({ ...f, curso_id: id }))}
+                                                placeholder="— Seleccionar grado —"
+                                            />
                                             {cursos.length === 0 && (
                                                 <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" /></svg>
@@ -874,31 +962,12 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
                                         {/* Acudiente */}
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Acudiente</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Buscar acudiente por nombre o documento..."
-                                                value={acudienteBusq}
-                                                onChange={e => { setAcudienteBusq(e.target.value); setFormData(f => ({ ...f, acudiente_id: '' })); }}
-                                                className="w-full pl-4 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all mb-1"
-                                            />
-                                            <select
+                                            <SearchSelect
+                                                options={padres.map(p => ({ id: p.id.toString(), text: p.name + (p.documento ? ` — ${p.documento}` : '') }))}
                                                 value={formData.acudiente_id}
-                                                onChange={(e) => { setFormData(f => ({ ...f, acudiente_id: e.target.value })); const opt = e.target.options[e.target.selectedIndex]; setAcudienteBusq(opt.value ? opt.text : ''); }}
-                                                className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] text-sm bg-white transition-all appearance-none"
-                                                size={4}
-                                            >
-                                                <option value="">— Sin asignar —</option>
-                                                {padres
-                                                    .filter(p => !acudienteBusq ||
-                                                        p.name.toLowerCase().includes(acudienteBusq.toLowerCase()) ||
-                                                        (p.documento ?? '').includes(acudienteBusq)
-                                                    )
-                                                    .map(p => (
-                                                        <option key={p.id} value={p.id}>
-                                                            {p.name}{p.documento ? ` — ${p.documento}` : ''}
-                                                        </option>
-                                                    ))}
-                                            </select>
+                                                onChange={(id) => setFormData(f => ({ ...f, acudiente_id: id }))}
+                                                placeholder="— Buscar acudiente —"
+                                            />
                                             {padres.length === 0 && (
                                                 <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" /></svg>

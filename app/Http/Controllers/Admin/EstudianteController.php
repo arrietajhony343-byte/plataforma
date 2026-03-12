@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{User, Matricula, Nota, Pago, Observacion, Curso, Periodo, Mensaje, UserActivityLog, Sede};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Hash, Response};
@@ -12,6 +13,7 @@ use Inertia\Response as InertiaResponse;
 
 class EstudianteController extends Controller
 {
+    use ScopesBySede;
     /* ──────────────────── INDEX ──────────────────── */
     public function index(): InertiaResponse
     {
@@ -25,7 +27,9 @@ class EstudianteController extends Controller
             ->orderBy('name')->get()
             ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'documento' => $p->documento]);
 
-        $sedes = Sede::orderBy('nombre')->get()
+        $sedes = Sede::orderBy('nombre')
+            ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
+            ->get()
             ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
 
         return Inertia::render('Admin/Estudiantes', [
@@ -285,7 +289,10 @@ class EstudianteController extends Controller
     /* ──────────────────── HELPERS ──────────────────── */
     private function getEstudiantes()
     {
+        $sedeId = $this->sedeId();
+
         return User::role('estudiante')
+            ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
             ->with([
                 'matriculas' => fn ($q) => $q->where('estado', 'activa')->with('curso'),
                 'padres',

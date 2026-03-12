@@ -42,18 +42,19 @@ class ObservadorController extends Controller
 
         // Observaciones escritas por este profesor
         $observaciones = Observacion::where('profesor_id', $user->id)
-            ->with(['estudiante', 'cursoMateria.curso', 'cursoMateria.materia'])
+            ->with(['estudiante', 'materia'])
             ->latest()
             ->limit(50)
             ->get()
             ->map(fn($o) => [
                 'id'          => $o->id,
                 'estudiante'  => $o->estudiante->name,
-                'curso'       => $o->cursoMateria?->curso?->nombre ?? 'N/A',
-                'materia'     => $o->cursoMateria?->materia?->nombre ?? 'N/A',
+                'materia'     => $o->materia?->nombre ?? 'N/A',
+                'curso'       => '',
                 'tipo'        => $o->tipo,
+                'categoria'   => $o->categoria,
                 'descripcion' => $o->descripcion,
-                'fecha'       => $o->created_at->format('Y-m-d'),
+                'fecha'       => $o->fecha instanceof \Carbon\Carbon ? $o->fecha->format('Y-m-d') : $o->fecha,
             ]);
 
         $cursoMateriasMap = $cursoMaterias->map(fn($cm) => [
@@ -76,11 +77,17 @@ class ObservadorController extends Controller
         $data = $request->validate([
             'estudiante_id'    => 'required|exists:users,id',
             'curso_materia_id' => 'required|exists:curso_materia,id',
-            'tipo'             => 'required|in:positiva,negativa,neutral',
+            'tipo'             => 'required|in:positiva,negativa',
+            'categoria'        => 'required|string|max:100',
             'descripcion'      => 'required|string|max:1000',
         ]);
 
+        // Extraer materia_id del curso_materia y descartar curso_materia_id (no existe en la tabla)
+        $cm = CursoMateria::find($data['curso_materia_id']);
+        unset($data['curso_materia_id']);
+        $data['materia_id']  = $cm?->materia_id;
         $data['profesor_id'] = auth()->id();
+        $data['fecha']       = now()->toDateString();
 
         Observacion::create($data);
 

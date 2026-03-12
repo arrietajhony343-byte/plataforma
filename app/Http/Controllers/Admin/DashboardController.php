@@ -3,34 +3,45 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{User, Curso, Periodo, Matricula, Pago, Observacion, Notificacion};
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    use ScopesBySede;
+
     public function index(): Response
     {
         $periodoActivo = Periodo::activo()->first();
+        $sedeId = $this->sedeId();
 
-        // Stats reales
-        $totalEstudiantes = User::role('estudiante')->activo()->count();
-        $totalProfesores  = User::role('profesor')->activo()->count();
-        $cursosActivos    = Curso::activo()->where('anio', now()->year)->count();
+        // Stats reales (filtradas por sede si es coordinador)
+        $totalEstudiantes = User::role('estudiante')->activo()
+            ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
+            ->count();
+        $totalProfesores  = User::role('profesor')->activo()
+            ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
+            ->count();
+        $cursosActivos    = Curso::activo()->where('anio', now()->year)
+            ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
+            ->count();
 
         $diasRestantes = $periodoActivo
             ? (int) now()->diffInDays($periodoActivo->fecha_fin, false)
             : 0;
 
-        // Resumen financiero
-        $pagoPendiente = Pago::pendiente()->count();
-        $pagoVencido   = Pago::vencido()->count();
+        // Resumen financiero (solo admin ve pagos)
+        $pagoPendiente = $this->isCoordinador() ? 0 : Pago::pendiente()->count();
+        $pagoVencido   = $this->isCoordinador() ? 0 : Pago::vencido()->count();
 
         // Actividad reciente real (últimas acciones de distintas tablas)
         $actividadReciente = collect();
 
         // Últimos 3 estudiantes matriculados
         Matricula::with('estudiante', 'curso')
+            ->when($sedeId, fn($q) => $q->whereHas('curso', fn($cq) => $cq->where('sede_id', $sedeId)))
             ->latest()
             ->take(3)
             ->get()

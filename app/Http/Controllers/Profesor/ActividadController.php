@@ -17,16 +17,13 @@ class ActividadController extends Controller
         $user = auth()->user();
         $anio = now()->year;
 
-        $cursoMaterias = CursoMateria::where('profesor_id', $user->id)
-            ->whereHas('curso', fn($q) => $q->where('anio', $anio))
-            ->with(['curso', 'materia'])
-            ->get();
-
+        // loadCursoMaterias already computes pesoUsado
+        $cursoMaterias = $this->loadCursoMaterias($user->id);
         $cmIds = $cursoMaterias->pluck('id')->toArray();
 
         // Estudiantes matriculados por curso (sin duplicados)
         $estudiantesPorCurso = DB::table('matriculas')
-            ->whereIn('curso_id', $cursoMaterias->pluck('curso_id')->unique())
+            ->whereIn('curso_id', CursoMateria::whereIn('id', $cmIds)->pluck('curso_id'))
             ->where('estado', 'activa')
             ->select('curso_id', DB::raw('COUNT(DISTINCT estudiante_id) as total'))
             ->groupBy('curso_id')
@@ -65,28 +62,20 @@ class ActividadController extends Controller
                     'materia'         => $a->cursoMateria?->materia?->nombre,
                     'cursoMateriaId'  => $a->curso_materia_id,
                     'fechaAsignacion' => $a->fecha_asignacion?->format('Y-m-d'),
-                    'fechaEntrega'    => $a->fecha_entrega?->format('Y-m-d H:i'),
+                    'fechaEntrega'    => $a->fecha_entrega?->format('Y-m-d\TH:i'),
                     'porcentaje'      => (float)$a->porcentaje,
                     'activa'          => $a->activa,
-                    'totalEstudiantes'=> $totalEst,
+                    'totalEstudiantes'=> (int)$totalEst,
                     'entregados'      => (int)($stats->entregados ?? 0),
                     'calificados'     => (int)($stats->calificados ?? 0),
                     'pendientes'      => (int)($stats->pendientes ?? 0),
                 ];
             });
 
-        $cursoMateriasMap = $cursoMaterias->map(fn($cm) => [
-            'id'      => $cm->id,
-            'curso'   => $cm->curso->nombre,
-            'cursoId' => $cm->curso->id,
-            'materia' => $cm->materia->nombre,
-            'nivel'   => $cm->curso->nivel,
-        ]);
-
         return Inertia::render('Profesor/Actividades', [
             'profesor'      => ['nombre' => $user->name],
             'actividades'   => $actividades,
-            'cursoMaterias' => $cursoMateriasMap,
+            'cursoMaterias' => $cursoMaterias,
         ]);
     }
 
@@ -95,15 +84,18 @@ class ActividadController extends Controller
         $user = auth()->user();
 
         $data = $request->validate([
-            'curso_materia_id' => 'required|exists:curso_materia,id',
-            'titulo'           => 'required|string|max:255',
-            'descripcion'      => 'nullable|string|max:5000',
-            'tipo'             => 'required|in:tarea,examen,quiz,proyecto,taller',
-            'fecha_entrega'    => 'required|date',
-            'porcentaje'       => 'required|numeric|min:0|max:100',
-            'activa'           => 'boolean',
-            'archivo_instrucciones' => 'nullable|file|max:10240',
-            'preguntas'        => 'nullable|array',
+            'curso_materia_id'       => 'required|exists:curso_materia,id',
+            'titulo'                 => 'required|string|max:255',
+            'descripcion'            => 'nullable|string|max:5000',
+            'tipo'                   => 'required|in:tarea,examen,quiz,proyecto,taller',
+            'fecha_entrega'          => 'required|date',
+            'porcentaje'             => 'required|numeric|min:0|max:100',
+            'activa'                 => 'boolean',
+            'permite_entrega_tardia' => 'nullable|boolean',
+            'max_intentos'           => 'nullable|integer|min:1|max:20',
+            'cerrada_manualmente'    => 'nullable|boolean',
+            'archivo_instrucciones'  => 'nullable|file|max:10240',
+            'preguntas'              => 'nullable|array',
             'preguntas.*.enunciado' => 'required_with:preguntas|string',
             'preguntas.*.tipo'      => 'required_with:preguntas|in:seleccion_multiple,verdadero_falso,abierta',
             'preguntas.*.puntos'    => 'required_with:preguntas|numeric|min:0',
@@ -148,6 +140,9 @@ class ActividadController extends Controller
             'porcentaje'             => $data['porcentaje'],
             'activa'                 => $data['activa'],
             'tiene_preguntas'        => $tienePreguntas,
+            'permite_entrega_tardia' => filter_var($request->input('permite_entrega_tardia', false), FILTER_VALIDATE_BOOLEAN),
+            'max_intentos'           => $request->input('max_intentos') !== '' && $request->input('max_intentos') !== null ? (int)$request->input('max_intentos') : null,
+            'cerrada_manualmente'    => filter_var($request->input('cerrada_manualmente', false), FILTER_VALIDATE_BOOLEAN),
         ]);
 
         // Create questions if quiz/examen
@@ -258,10 +253,13 @@ class ActividadController extends Controller
             'descripcion'          => $actividad->descripcion,
             'archivoInstrucciones' => $actividad->archivo_instrucciones,
             'tipo'                 => $actividad->tipo,
-            'fechaEntrega'         => $actividad->fecha_entrega?->format('Y-m-d\TH:i'),
-            'porcentaje'           => (float)$actividad->porcentaje,
-            'activa'               => $actividad->activa,
-            'tienePreguntas'       => $actividad->tiene_preguntas,
+            'fechaEntrega'          => $actividad->fecha_entrega?->format('Y-m-d\TH:i'),
+            'porcentaje'            => (float)$actividad->porcentaje,
+            'activa'                => $actividad->activa,
+            'permiteEntregaTardia'  => (bool)$actividad->permite_entrega_tardia,
+            'maxIntentos'           => $actividad->max_intentos,
+            'cerradaManualmente'    => (bool)$actividad->cerrada_manualmente,
+            'tienePreguntas'        => $actividad->tiene_preguntas,
             'preguntas'            => $actividad->preguntas->map(fn($p) => [
                 'id'        => $p->id,
                 'enunciado' => $p->enunciado,
@@ -294,13 +292,16 @@ class ActividadController extends Controller
         }
 
         $data = $request->validate([
-            'titulo'        => 'sometimes|required|string|max:255',
-            'descripcion'   => 'nullable|string|max:5000',
-            'tipo'          => 'sometimes|required|in:tarea,examen,quiz,proyecto,taller',
-            'fecha_entrega' => 'sometimes|required|date',
-            'porcentaje'    => 'sometimes|required|numeric|min:0|max:100',
-            'activa'        => 'nullable',
-            'archivo_instrucciones' => 'nullable|file|max:10240',
+            'titulo'                 => 'sometimes|required|string|max:255',
+            'descripcion'            => 'nullable|string|max:5000',
+            'tipo'                   => 'sometimes|required|in:tarea,examen,quiz,proyecto,taller',
+            'fecha_entrega'          => 'sometimes|required|date',
+            'porcentaje'             => 'sometimes|required|numeric|min:0|max:100',
+            'activa'                 => 'nullable',
+            'permite_entrega_tardia' => 'nullable|boolean',
+            'max_intentos'           => 'nullable|integer|min:1|max:20',
+            'cerrada_manualmente'    => 'nullable|boolean',
+            'archivo_instrucciones'  => 'nullable|file|max:10240',
             'preguntas'     => 'nullable|array',
             'preguntas.*.enunciado' => 'required_with:preguntas|string',
             'preguntas.*.tipo'      => 'required_with:preguntas|in:seleccion_multiple,verdadero_falso,abierta',
@@ -318,9 +319,19 @@ class ActividadController extends Controller
             $data['archivo_instrucciones'] = $request->file('archivo_instrucciones')->store('actividades/instrucciones', 'public');
         }
 
-        // Cast activa desde string FormData ('1'/'0') a boolean
+        // Cast boolean fields desde string FormData ('1'/'0')
         if (array_key_exists('activa', $data)) {
             $data['activa'] = filter_var($data['activa'], FILTER_VALIDATE_BOOLEAN);
+        }
+        if ($request->has('permite_entrega_tardia')) {
+            $data['permite_entrega_tardia'] = filter_var($request->input('permite_entrega_tardia'), FILTER_VALIDATE_BOOLEAN);
+        }
+        if ($request->has('cerrada_manualmente')) {
+            $data['cerrada_manualmente'] = filter_var($request->input('cerrada_manualmente'), FILTER_VALIDATE_BOOLEAN);
+        }
+        if ($request->has('max_intentos')) {
+            $raw = $request->input('max_intentos');
+            $data['max_intentos'] = ($raw !== '' && $raw !== null) ? (int)$raw : null;
         }
 
         $tienePreguntas = !empty($data['preguntas']) && in_array($data['tipo'] ?? $actividad->tipo, ['quiz', 'examen']);
@@ -391,15 +402,17 @@ class ActividadController extends Controller
             ->orderBy('estudiante_id')
             ->get()
             ->map(fn($e) => [
-                'id'              => $e->id,
-                'estudianteId'    => $e->estudiante_id,
-                'estudiante'      => $e->estudiante->name ?? 'N/A',
-                'estado'          => $e->estado,
-                'contenido'       => $e->contenido,
-                'archivo'         => $e->archivo,
-                'calificacion'    => $e->calificacion,
-                'retroalimentacion' => $e->retroalimentacion,
-                'fechaEntrega'    => $e->fecha_entrega?->format('d M Y H:i'),
+                'id'                    => $e->id,
+                'estudianteId'          => $e->estudiante_id,
+                'estudiante'            => $e->estudiante->name ?? 'N/A',
+                'estado'                => $e->estado,
+                'contenido'             => $e->contenido,
+                'archivo'               => $e->archivo,
+                'calificacion'          => $e->calificacion ? (float)$e->calificacion : null,
+                'retroalimentacion'     => $e->retroalimentacion,
+                'notaDevolucion'        => $e->nota_devolucion,
+                'fechaEntrega'          => $e->fecha_entrega?->format('d M Y H:i'),
+                'fechaLimiteIndividual' => $e->fecha_limite_individual?->format('Y-m-d\TH:i'),
             ]);
 
         return response()->json([
@@ -408,13 +421,15 @@ class ActividadController extends Controller
                 'id'          => $actividad->id,
                 'titulo'      => $actividad->titulo,
                 'tipo'        => $actividad->tipo,
-                'fechaEntrega'=> $actividad->fecha_entrega?->format('Y-m-d'),
+                'porcentaje'  => (float)$actividad->porcentaje,
+                'fechaEntrega'=> $actividad->fecha_entrega?->format('Y-m-d\TH:i'),
+                'descripcion' => $actividad->descripcion,
             ],
         ]);
     }
 
     /**
-     * Bulk grade entregas.
+     * Bulk grade entregas — returns JSON.
      */
     public function calificar(Request $request, Actividad $actividad)
     {
@@ -430,6 +445,7 @@ class ActividadController extends Controller
             'calificaciones.*.retroalimentacion'=> 'nullable|string|max:500',
         ]);
 
+        $saved = 0;
         foreach ($data['calificaciones'] as $cal) {
             $entrega = Entrega::where('id', $cal['entrega_id'])
                 ->where('actividad_id', $actividad->id)
@@ -441,14 +457,16 @@ class ActividadController extends Controller
                     'retroalimentacion'=> $cal['retroalimentacion'] ?? null,
                     'estado'           => 'calificada',
                 ]);
+                $saved++;
             }
         }
 
-        return redirect()->back()->with('success', 'Calificaciones guardadas exitosamente.');
+        return response()->json(['success' => true, 'saved' => $saved]);
     }
 
     /**
-     * Extend deadline for a specific entrega (reenviar/extensión).
+     * Extend or return an individual entrega — returns JSON.
+     * tipo: devolver | extender_individual | reactivar
      */
     public function extenderEntrega(Request $request, Entrega $entrega)
     {
@@ -458,15 +476,69 @@ class ActividadController extends Controller
         }
 
         $data = $request->validate([
-            'nuevo_estado' => 'required|in:pendiente,entregada',
+            'tipo'            => 'required|in:devolver,extender_individual,reactivar',
+            'nueva_fecha'     => 'required_if:tipo,extender_individual|nullable|date',
+            'nota_devolucion' => 'nullable|string|max:500',
         ]);
 
-        $entrega->update([
-            'estado'        => $data['nuevo_estado'],
-            'calificacion'  => null,
-            'fecha_entrega' => null,
+        switch ($data['tipo']) {
+            case 'devolver':
+                $entrega->update([
+                    'estado'            => 'pendiente',
+                    'calificacion'      => null,
+                    'retroalimentacion' => null,
+                    'nota_devolucion'   => $data['nota_devolucion'] ?? null,
+                    'fecha_entrega'     => null,
+                ]);
+                break;
+
+            case 'extender_individual':
+                $entrega->update([
+                    'fecha_limite_individual' => $data['nueva_fecha'],
+                    // If the student was marked atrasada and now has a future deadline, reset
+                    'estado' => $entrega->estado === 'atrasada' ? 'pendiente' : $entrega->estado,
+                ]);
+                break;
+
+            case 'reactivar':
+                $entrega->update([
+                    'estado'        => 'pendiente',
+                    'calificacion'  => null,
+                    'fecha_entrega' => null,
+                    'nota_devolucion'=> null,
+                ]);
+                break;
+        }
+
+        return response()->json(['success' => true, 'entrega_id' => $entrega->id, 'estado' => $entrega->fresh()->estado]);
+    }
+
+    /**
+     * Extend the deadline for ALL students in an actividad.
+     */
+    public function extenderPlazoGeneral(Request $request, Actividad $actividad)
+    {
+        $user = auth()->user();
+        if ($actividad->cursoMateria->profesor_id !== $user->id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'nueva_fecha' => 'required|date',
         ]);
 
-        return redirect()->back()->with('success', 'Estado de entrega actualizado. El estudiante puede reenviar.');
+        $actividad->update(['fecha_entrega' => $data['nueva_fecha']]);
+
+        // If the new date is in the future, reset atrasadas to pendiente so students can still submit
+        if (now()->lt($data['nueva_fecha'])) {
+            Entrega::where('actividad_id', $actividad->id)
+                ->where('estado', 'atrasada')
+                ->update(['estado' => 'pendiente', 'updated_at' => now()]);
+        }
+
+        return response()->json([
+            'success'     => true,
+            'nueva_fecha' => $actividad->fecha_entrega->format('Y-m-d\TH:i'),
+        ]);
     }
 }

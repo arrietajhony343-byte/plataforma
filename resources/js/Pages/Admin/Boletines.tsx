@@ -9,7 +9,17 @@ import autoTable from 'jspdf-autotable';
 interface Periodo { id: number; nombre: string; anio: number; activo: boolean; }
 interface Curso   { id: number; nombre: string; nivel: string; sede_id: number | null; }
 interface Sede    { id: number; nombre: string; }
-interface NotaBoletin { materia: string; definitiva: number | null; }
+
+interface NotaBoletin {
+    materia: string;
+    ih: number;
+    indicadores: string[];
+    definitiva: number | null;
+    p1?: number | null;
+    p2?: number | null;
+    p3?: number | null;
+    p4?: number | null;
+}
 
 interface Boletin {
     id: number;
@@ -17,9 +27,15 @@ interface Boletin {
     estudiante: string;
     periodo_id: number;
     periodo: string;
+    periodo_numero: number;
     curso_id: number;
     curso: string;
     nivel: string;
+    grado: string;
+    jornada: string;
+    anio: number;
+    total_periodos: number;
+    director_grupo: string;
     promedio: number;
     puesto: number | null;
     observacion: string | null;
@@ -92,143 +108,384 @@ const getNivelLabel      = (n: string) => nivelesConfig[n]?.label     ?? n;
 const getNivelChipActive = (n: string) => nivelesConfig[n]?.chipActive ?? 'bg-gray-500';
 const promedioColor      = (p: number) => p >= 4 ? 'text-green-600' : p >= 3 ? 'text-yellow-600' : 'text-red-500';
 
+/* ═══════════════════════════ INSTITUTION CONSTANTS ═══════════════════════════ */
+const LOGO_CANDIDATES_BOL = [
+    '/logo-certificados.png', '/logo-certificados.jpg', '/logo-certificados.jpeg',
+    '/images/logo-certificados.png', '/images/logo-certificados.jpg',
+    '/img/logo-certificados.png', '/certificados-logo.png',
+];
+
+const cargarImagenBoletin = async (src: string, opacidad = 1, maxPx = 400): Promise<string | null> => {
+    const url = src.startsWith('http') ? src : window.location.origin + src;
+    try {
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        const base64: string = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onloadend = () => res(reader.result as string);
+            reader.onerror   = () => rej(new Error('err'));
+            reader.readAsDataURL(blob);
+        });
+        return new Promise((res) => {
+            const img = new Image();
+            img.onload = () => {
+                const origW = img.naturalWidth || img.width || maxPx;
+                const origH = img.naturalHeight || img.height || maxPx;
+                const scale = Math.min(1, maxPx / Math.max(origW, origH));
+                const cW = Math.round(origW * scale), cH = Math.round(origH * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width = cW; canvas.height = cH;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { res(null); return; }
+                if (opacidad >= 1) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, cW, cH);
+                }
+                ctx.globalAlpha = opacidad;
+                ctx.drawImage(img, 0, 0, cW, cH);
+                res(opacidad >= 1 ? canvas.toDataURL('image/jpeg', 0.85) : canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => res(null);
+            img.src = base64;
+        });
+    } catch { return null; }
+};
+
+const cargarLogoBoletin = async (opacidad = 1, maxPx = 400): Promise<string | null> => {
+    for (const c of LOGO_CANDIDATES_BOL) {
+        const r = await cargarImagenBoletin(c, opacidad, maxPx);
+        if (r) return r;
+    }
+    return null;
+};
+
+/* ═══════════════════════════ PDF HELPERS ═══════════════════════════ */
+const getDescriptor = (nota: number | null): string => {
+    if (nota === null) return '';
+    if (nota >= 4.5) return 'SUPERIOR';
+    if (nota >= 4.0) return 'ALTO';
+    if (nota >= 3.0) return 'BÁSICO';
+    return 'BAJO';
+};
+
 /* ─── PDF builder for one boletin page ─── */
-function dibujarBoletinPagina(doc: jsPDF, b: Boletin) {
+async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string | null, logoWatermark: string | null) {
     const W = 210;
+    const LOGO_X = 8, LOGO_Y = 3, LOGO_W = 36, LOGO_H = 40;
+    const TRIANG_MAX = 58;
+    const TEXT_RIGHT = W - TRIANG_MAX - 2;
+    const TEXT_CX = (LOGO_X + LOGO_W + TEXT_RIGHT) / 2;
 
-    // Header azul
-    doc.setFillColor(41, 53, 119);
-    doc.rect(0, 0, W, 32, 'F');
-    doc.setFillColor(234, 179, 8);
-    doc.rect(0, 32, W, 2.5, 'F');
+    // ── Fondo blanco ──
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, W, 297, 'F');
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13);
+    // ── Triángulos apilados (idénticos a Certificados) ──
+    doc.setFillColor(188, 214, 242);
+    doc.triangle(W - 58, 0, W, 0, W, 58, 'F');
+    doc.setFillColor(80, 130, 205);
+    doc.triangle(W - 38, 0, W, 0, W, 38, 'F');
+    doc.setFillColor(22, 55, 148);
+    doc.triangle(W - 18, 0, W, 0, W, 18, 'F');
+
+    // ── Logo ──
+    if (logoHeader) {
+        doc.addImage(logoHeader, 'JPEG', LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
+    } else {
+        const cx = LOGO_X + LOGO_W / 2, cy = LOGO_Y + LOGO_H / 2 - 2, r = LOGO_W / 2 - 1;
+        doc.setDrawColor(10, 35, 90); doc.setLineWidth(1.2);
+        doc.circle(cx, cy, r, 'S');
+        doc.setLineWidth(0.6); doc.circle(cx, cy, r - 3, 'S');
+        doc.setFont('times', 'bold'); doc.setFontSize(14);
+        doc.setTextColor(10, 35, 90);
+        doc.text('I.P', cx, cy + 2, { align: 'center' });
+    }
+
+    // ── Nombre institución ──
+    doc.setTextColor(10, 35, 90);
     doc.setFont('helvetica', 'bold');
-    doc.text('INSTITUCIÓN EDUCATIVA', W / 2, 12, { align: 'center' });
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Sistema de Gestión Académica  —  Boletín de Calificaciones', W / 2, 21, { align: 'center' });
-    doc.setFontSize(8);
-    doc.text(`Período: ${b.periodo}`, W / 2, 29, { align: 'center' });
+    doc.setFontSize(19);
+    doc.text('INSTITUTO PEDAGÓGICO', TEXT_CX, 13, { align: 'center' });
+    doc.setFontSize(17);
+    doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 23, { align: 'center' });
+    doc.setTextColor(25, 25, 25);
+    doc.setFont('times', 'italic'); doc.setFontSize(9);
+    doc.text('Ser, Saber y Emprender', TEXT_CX, 30, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+    doc.text('Aprobado por Resolución No 3769 del 23 - 05 - 2023', TEXT_CX, 36, { align: 'center' });
+    doc.text('DANE 313001800093  –  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
 
-    // Caja info estudiante
-    doc.setFillColor(248, 249, 252);
-    doc.setDrawColor(220, 220, 230);
+    // ── Barra divisora navy ──
+    const barX = LOGO_X + LOGO_W + 2;
+    const barW = TEXT_RIGHT - barX;
+    doc.setFillColor(10, 35, 90);
+    doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.4);
-    doc.roundedRect(12, 38, W - 24, 24, 2, 2, 'FD');
-    doc.setTextColor(40, 40, 40);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(b.estudiante, 18, 48);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text(`Curso: ${b.curso}  ·  Nivel: ${getNivelLabel(b.nivel)}`, 18, 55);
+    doc.rect(barX, 46, barW, 2.5, 'FD');
 
-    // Promedio badge
-    const pColor: [number, number, number] = b.promedio >= 4 ? [22, 163, 74] : b.promedio >= 3 ? [202, 138, 4] : [220, 38, 38];
-    doc.setFillColor(...pColor);
-    doc.roundedRect(W - 55, 38, 43, 24, 2, 2, 'F');
+    // ── Título del informe ──
+    doc.setTextColor(10, 35, 90);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('INFORME ACADEMICO Y DISCIPLINARIO', W / 2, 57, { align: 'center' });
+    doc.setFontSize(11);
+    doc.text(`AÑO LECTIVO ${b.anio}`, W / 2, 65, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10.5);
+    doc.text(b.periodo, W / 2, 72, { align: 'center' });
+
+    // ── Fila estudiante / grado / jornada ──
+    const fY = 76;
+    doc.setFillColor(10, 35, 90);
+    doc.setDrawColor(10, 35, 90);
+    doc.setLineWidth(0.4);
+    doc.rect(8, fY, 194, 8, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(b.promedio.toFixed(1), W - 33, 52, { align: 'center' });
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.text('PROMEDIO', W - 33, 58, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.text(`ESTUDIANTE: ${b.estudiante.toUpperCase()}`, 11, fY + 5.3);
+    doc.text(`GRADO: ${b.grado.toUpperCase()}`, 126, fY + 5.3);
+    doc.text(`JORNADA: ${b.jornada.toUpperCase()}`, 170, fY + 5.3);
 
-    // Tabla notas
-    const rows = b.notas.length > 0
-        ? b.notas.map((n, i) => [
-            i + 1,
-            n.materia,
-            n.definitiva !== null ? n.definitiva.toFixed(1) : '—',
-            n.definitiva !== null ? (n.definitiva >= 3 ? 'APROBADO' : 'REPROBADO') : '—',
-          ])
-        : [['—', 'Sin notas registradas', '—', '—']];
+    // ── Fila valoración ──
+    const vY = fY + 8;
+    doc.setFillColor(31, 58, 131);
+    doc.rect(8, vY, 194, 6.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.text('<VALORACION: LOGROS/DIFICULTADES>', W / 2, vY + 4.5, { align: 'center' });
+
+    // ── Tabla de notas ──
+    const totalPer = Math.min(b.total_periodos, 4);
+    const perCols = Array.from({ length: totalPer }, (_, i) => `${i + 1}P`);
+
+    // Los anchos de columna están ajustados al espacio disponible (194mm total)
+    // AREA=30, INDICADORES=55, períodos=11 c/u, NOTA FINAL=14, DESCRIPTORES=30
+    const notaW = 11;
+    const areaW = 30;
+    const finalW = 15;
+    const descW  = 31;
+    const indicW = 194 - areaW - (notaW * totalPer) - finalW - descW;
+
+    const head = [
+        [
+            { content: 'AREA', rowSpan: 2, styles: { valign: 'middle' as const, halign: 'center' as const, fontStyle: 'bold' as const } },
+            { content: 'INDICADORES DE DESEMPEÑOS', rowSpan: 2, styles: { valign: 'middle' as const, halign: 'center' as const, fontStyle: 'bold' as const } },
+            { content: 'NOTA', colSpan: totalPer + 1, styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
+            { content: 'DESCRIPTORES DE DESEMPEÑO', rowSpan: 2, styles: { valign: 'middle' as const, halign: 'center' as const, fontStyle: 'bold' as const } },
+        ],
+        perCols.map(p => ({ content: p, styles: { halign: 'center' as const, fontStyle: 'bold' as const } })).concat([
+            { content: 'NOTA FINAL', styles: { halign: 'center' as const, fontStyle: 'bold' as const } },
+        ]) as never[],
+    ];
+
+    // Watermark detrás de la tabla
+    if (logoWatermark) {
+        doc.addImage(logoWatermark, 'PNG', 47, 110, 116, 116);
+    }
+
+    const body = b.notas.map(n => {
+        const areaText = `${n.materia.toUpperCase()}${n.ih ? `\n${n.ih} hora${n.ih !== 1 ? 's' : ''}` : ''}`;
+        const indicText = n.indicadores.length > 0
+            ? n.indicadores.map((ind, idx) => `${idx + 1}. ${ind}`).join('\n')
+            : '-';
+        const notasP = Array.from({ length: totalPer }, (_, i) => {
+            const val = (n as unknown as Record<string, unknown>)[`p${i + 1}`] as number | null | undefined;
+            return (val !== null && val !== undefined) ? String(val.toFixed(1)) : '-';
+        });
+        const definitiva = n.definitiva !== null ? String(n.definitiva.toFixed(1)) : '-';
+        const descriptor = getDescriptor(n.definitiva);
+        return [areaText, indicText, ...notasP, definitiva, descriptor];
+    });
+
+    if (body.length === 0) {
+        body.push(['Sin materias', 'Sin indicadores registrados', ...Array(totalPer).fill('-'), '-', '-']);
+    }
+
+    const tableStartY = vY + 6.5;
 
     autoTable(doc, {
-        startY: 68,
-        head: [['#', 'MATERIA', 'DEFINITIVA', 'ESTADO']],
-        body: rows,
+        startY: tableStartY,
+        margin: { left: 8, right: 8 },
+        head,
+        body,
         theme: 'grid',
+        styles: {
+            font: 'helvetica',
+            fontSize: 7.5,
+            cellPadding: { top: 2, bottom: 2, left: 2.5, right: 2.5 },
+            textColor: [15, 15, 15],
+            lineColor: [10, 35, 90],
+            lineWidth: 0.35,
+            valign: 'middle',
+            overflow: 'linebreak',
+        },
         headStyles: {
-            fillColor: [41, 53, 119],
-            textColor: 255,
-            fontSize: 8,
+            fillColor: [10, 35, 90],
+            textColor: [255, 255, 255],
             fontStyle: 'bold',
+            fontSize: 7.5,
             halign: 'center',
         },
-        bodyStyles: { fontSize: 8.5, textColor: [40, 40, 40] },
-        alternateRowStyles: { fillColor: [248, 249, 252] },
+        alternateRowStyles: { fillColor: [243, 246, 255] },
         columnStyles: {
-            0: { halign: 'center', cellWidth: 12 },
-            2: { halign: 'center', cellWidth: 28 },
-            3: { halign: 'center', cellWidth: 30,
-                 fontStyle: 'bold' },
+            0: { cellWidth: areaW, halign: 'center', fontStyle: 'bold' },
+            1: { cellWidth: indicW, halign: 'left', fontSize: 6.8 },
+            ...Object.fromEntries(
+                Array.from({ length: totalPer }, (_, i) => [i + 2, { cellWidth: notaW, halign: 'center' as const, fontStyle: 'bold' as const }])
+            ),
+            [totalPer + 2]: { cellWidth: finalW, halign: 'center', fontStyle: 'bold', fontSize: 8.5 },
+            [totalPer + 3]: { cellWidth: descW, halign: 'center', fontStyle: 'bold', fontSize: 7.5 },
         },
         didParseCell: (data) => {
-            if (data.column.index === 3 && data.section === 'body') {
-                const v = data.cell.raw as string;
-                data.cell.styles.textColor = v === 'APROBADO' ? [22, 163, 74] : v === 'REPROBADO' ? [220, 38, 38] : [100, 100, 100];
+            if (data.section === 'body') {
+                const descIdx = totalPer + 3;
+                const finalIdx = totalPer + 2;
+                if (data.column.index === descIdx) {
+                    const v = data.cell.raw as string;
+                    if (v === 'SUPERIOR')      { data.cell.styles.textColor = [6, 115, 6]; data.cell.styles.fillColor = [220, 248, 220]; }
+                    else if (v === 'ALTO')     { data.cell.styles.textColor = [0, 48, 163]; data.cell.styles.fillColor = [218, 230, 255]; }
+                    else if (v === 'BÁSICO')   { data.cell.styles.textColor = [140, 90, 0]; data.cell.styles.fillColor = [255, 244, 210]; }
+                    else if (v === 'BAJO')     { data.cell.styles.textColor = [160, 0, 0]; data.cell.styles.fillColor = [255, 224, 224]; }
+                }
+                if (data.column.index === finalIdx) {
+                    const v = parseFloat(data.cell.raw as string);
+                    if (!isNaN(v)) {
+                        if (v >= 4.5)      { data.cell.styles.textColor = [6, 115, 6]; data.cell.styles.fillColor = [220, 248, 220]; }
+                        else if (v >= 4.0) { data.cell.styles.textColor = [0, 48, 163]; data.cell.styles.fillColor = [218, 230, 255]; }
+                        else if (v >= 3.0) { data.cell.styles.textColor = [140, 90, 0]; data.cell.styles.fillColor = [255, 244, 210]; }
+                        else               { data.cell.styles.textColor = [160, 0, 0]; data.cell.styles.fillColor = [255, 224, 224]; }
+                    }
+                }
+                // Columna de período actual → negrita + fondo suave
+                const perActualIdx = (b.periodo_numero <= totalPer) ? (b.periodo_numero + 1) : -1;
+                if (data.column.index === perActualIdx) {
+                    data.cell.styles.fillColor = [235, 240, 255];
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+            // Cabecera: subrayar la columna NOTA FINAL
+            if (data.section === 'head' && data.column.index === totalPer + 2 && data.row.index === 1) {
+                data.cell.styles.fillColor = [22, 55, 148];
             }
         },
     });
 
-    const lastY = (doc as any).lastAutoTable?.finalY ?? 150;
+    const lastY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 210;
+    let curY = lastY + 5;
 
-    // Observaciones
-    if (b.observacion) {
-        doc.setFillColor(255, 252, 230);
-        doc.setDrawColor(234, 179, 8);
-        doc.setLineWidth(0.4);
-        doc.roundedRect(12, lastY + 6, W - 24, 22, 2, 2, 'FD');
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(120, 90, 0);
-        doc.text('Observaciones:', 17, lastY + 13);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(60, 60, 60);
-        const lines = doc.splitTextToSize(b.observacion, W - 36);
-        doc.text(lines.slice(0, 2), 17, lastY + 20);
+    // ── Descriptores de desempeño ──
+    if (curY + 32 > 285) { doc.addPage(); curY = 10; }
+
+    const descItems = [
+        { nivel: 'SUPERIOR (4.5 A 5.0):', color: [6, 115, 6] as [number,number,number], bg: [220, 248, 220] as [number,number,number], text: 'Participa activamente en el desempeño, manejando adecuadamente los conceptos aprendidos y los relaciona con experiencias vividas, adoptando una posición crítica y de aplicación para mejorar su vida y su entorno.' },
+        { nivel: 'ALTO (4.0 A 4.4):', color: [0, 48, 163] as [number,number,number], bg: [218, 230, 255] as [number,number,number], text: 'Maneja y argumenta los conceptos aprendidos en clase, participando moderadamente en el desarrollo de las actividades en el aula y aplica lo aprendido en su vida.' },
+        { nivel: 'BASICO (3.0 A 3.9):', color: [140, 90, 0] as [number,number,number], bg: [255, 244, 210] as [number,number,number], text: 'Manifiesta poco interés por aclarar las dudas sobre las temáticas trabajadas, mostrando poco interés por cumplir sus actividades escolares y extraescolares.' },
+        { nivel: 'BAJO (1.0 A 2.9):', color: [160, 0, 0] as [number,number,number], bg: [255, 224, 224] as [number,number,number], text: 'Registra con poca eventualidad sus consultas y el desarrollo de las temáticas, evidenciando desinterés frente a sus compromisos.' },
+    ];
+
+    // Cabecera descriptores
+    doc.setFillColor(10, 35, 90);
+    doc.setDrawColor(10, 35, 90);
+    doc.setLineWidth(0.35);
+    doc.rect(8, curY, 194, 6, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.text('DESCRIPTORES DE DESEMPEÑO', W / 2, curY + 4.2, { align: 'center' });
+    curY += 6;
+
+    for (const item of descItems) {
+        const labelW = 38;
+        const textW = 194 - labelW - 4;
+        const wrappedText = doc.setFont('helvetica', 'normal').setFontSize(6.8).splitTextToSize(item.text, textW);
+        const rowH = Math.max(7, wrappedText.length * 3.6 + 3);
+
+        // Fondo nivel
+        doc.setFillColor(...item.bg);
+        doc.rect(8, curY, labelW, rowH, 'F');
+        doc.setFillColor(250, 251, 255);
+        doc.rect(8 + labelW, curY, 194 - labelW, rowH, 'F');
+        // Borde
+        doc.setDrawColor(10, 35, 90);
+        doc.setLineWidth(0.3);
+        doc.rect(8, curY, 194, rowH, 'S');
+        doc.line(8 + labelW, curY, 8 + labelW, curY + rowH);
+        // Texto nivel
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+        doc.setTextColor(...item.color);
+        doc.text(item.nivel, 10, curY + rowH / 2 + 1, { baseline: 'middle' });
+        // Texto descripción
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8);
+        doc.setTextColor(30, 30, 30);
+        doc.text(wrappedText, 8 + labelW + 2, curY + rowH / 2 - (wrappedText.length - 1) * 1.8 + 0.5);
+        curY += rowH;
+    }
+    curY += 4;
+
+    // ── Promedio ──
+    if (curY + 12 > 285) { doc.addPage(); curY = 10; }
+    const promedioColor: [number,number,number] = b.promedio >= 4.5 ? [6,115,6] : b.promedio >= 4.0 ? [0,48,163] : b.promedio >= 3.0 ? [140,90,0] : [160,0,0];
+    doc.setFillColor(245, 246, 252);
+    doc.setDrawColor(10, 35, 90);
+    doc.setLineWidth(0.35);
+    doc.rect(8, curY, 194, 9, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+    doc.setTextColor(20, 20, 20);
+    doc.text('PROMEDIO:', 13, curY + 6);
+    doc.setTextColor(...promedioColor);
+    doc.setFontSize(10.5);
+    doc.text(b.promedio.toFixed(2), 45, curY + 6.2);
+    doc.setFontSize(8);
+    doc.setTextColor(20, 20, 20);
+    doc.text(`(${getDescriptor(b.promedio)})`, 57, curY + 6);
+    curY += 13;
+
+    // ── Observaciones ──
+    const obsTexto = b.observacion?.trim() || '';
+    if (obsTexto && obsTexto !== 'Boletín generado automáticamente.') {
+        if (curY + 18 > 285) { doc.addPage(); curY = 10; }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.setTextColor(10, 35, 90);
+        doc.text('OBSERVACIONES:', 8, curY + 5);
+        doc.setDrawColor(10, 35, 90);
+        doc.setLineWidth(0.35);
+        const obsLines = doc.setFont('helvetica', 'normal').setFontSize(7.5).splitTextToSize(obsTexto, 186);
+        const obsH = Math.max(11, obsLines.length * 4 + 8);
+        doc.setFillColor(254, 252, 240);
+        doc.rect(8, curY + 7, 194, obsH, 'FD');
+        doc.setTextColor(40, 40, 40);
+        doc.text(obsLines, 11, curY + 13);
+        curY += obsH + 11;
     }
 
-    // Firmas
-    const sigY = 240;
-    doc.setDrawColor(180, 180, 190);
-    doc.setLineWidth(0.5);
-    doc.line(30, sigY, 90, sigY);
-    doc.line(120, sigY, 180, sigY);
-    doc.setFontSize(8);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Director(a) de Grupo', 60, sigY + 5, { align: 'center' });
-    doc.text('Rector(a)', 150, sigY + 5, { align: 'center' });
+    // ── Firmas ──
+    const sigY = Math.max(curY + 5, 252);
+    if (sigY + 20 > 290) { doc.addPage(); }
+    const actualSigY = sigY > 290 ? 255 : sigY;
 
-    // Sello
-    doc.setDrawColor(41, 53, 119);
-    doc.setLineWidth(0.8);
-    doc.setFillColor(248, 249, 252);
-    doc.circle(W / 2, sigY - 8, 12, 'FD');
-    doc.circle(W / 2, sigY - 8, 9, 'S');
-    doc.setFontSize(6.5);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(41, 53, 119);
-    doc.text('SELLO', W / 2, sigY - 6, { align: 'center' });
-    doc.text('OFICIAL', W / 2, sigY - 3, { align: 'center' });
+    doc.setDrawColor(30, 30, 30); doc.setLineWidth(0.6);
+    doc.line(22, actualSigY, 92, actualSigY);
+    doc.line(118, actualSigY, 188, actualSigY);
 
-    // Footer
-    doc.setFillColor(234, 179, 8);
-    doc.rect(0, 270, W, 2, 'F');
-    doc.setFillColor(41, 53, 119);
-    doc.rect(0, 272, W, 25, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.setTextColor(10, 10, 10);
+    doc.text('INDIRA CANO ROMAN', 57, actualSigY - 2, { align: 'center' });
+    doc.text(b.director_grupo.toUpperCase(), 153, actualSigY - 2, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    doc.setTextColor(50, 50, 50);
+    doc.text('Coordinadora', 57, actualSigY + 5, { align: 'center' });
+    doc.text('Director(a) de Grupo', 153, actualSigY + 5, { align: 'center' });
+
+    // ── Pie de página ──
+    doc.setFillColor(10, 35, 90);
+    doc.rect(0, 284, W, 13, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
     doc.text(
-        `Fecha de expedición: ${new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}`,
-        W / 2, 281, { align: 'center' }
+        `Documento generado el ${new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}  ·  Instituto Pedagógico Emprendedores del Saber`,
+        W / 2, 292, { align: 'center' }
     );
-    doc.text('Documento generado por el Sistema de Gestión Académica — Válido con firma y sello original', W / 2, 289, { align: 'center' });
 }
 
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
@@ -336,21 +593,29 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     };
 
     // ── PDF individual ──
-    const generarPDFIndividual = useCallback((boletin: Boletin) => {
+    const generarPDFIndividual = useCallback(async (boletin: Boletin) => {
+        const [logoHeader, logoWatermark] = await Promise.all([
+            cargarLogoBoletin(1, 300),
+            cargarLogoBoletin(0.08, 260),
+        ]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        dibujarBoletinPagina(doc, boletin);
+        await dibujarBoletinPagina(doc, boletin, logoHeader, logoWatermark);
         doc.save(`Boletin_${boletin.estudiante.replace(/\s+/g, '_')}_${boletin.periodo.replace(/\s+/g, '_')}.pdf`);
     }, []);
 
     // ── PDF múltiple (un sólo archivo, una página por estudiante) ──
-    const exportarTodosUnPDF = useCallback(() => {
+    const exportarTodosUnPDF = useCallback(async () => {
         const lista = boletinesFiltrados;
         if (lista.length === 0) { alert('No hay boletines para exportar.'); return; }
+        const [logoHeader, logoWatermark] = await Promise.all([
+            cargarLogoBoletin(1, 300),
+            cargarLogoBoletin(0.08, 260),
+        ]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        lista.forEach((b, idx) => {
+        for (let idx = 0; idx < lista.length; idx++) {
             if (idx > 0) doc.addPage();
-            dibujarBoletinPagina(doc, b);
-        });
+            await dibujarBoletinPagina(doc, lista[idx], logoHeader, logoWatermark);
+        }
         const periodo = lista[0].periodo.replace(/\s+/g, '_');
         doc.save(`Boletines_${periodo}_${new Date().toLocaleDateString('es-CO').replace(/\//g, '-')}.pdf`);
         setShowModal(false);
@@ -418,7 +683,7 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {sedes.length > 0 && (
+                        {sedes.length > 1 && (
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Sede</label>
                                 <select value={sedeSel} onChange={e => { setSedeSel(e.target.value); setCursoSel('todos'); }}

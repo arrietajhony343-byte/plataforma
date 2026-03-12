@@ -68,4 +68,31 @@ class NotificacionController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /**
+     * Elimina una notificación leída del usuario autenticado.
+     */
+    public function destroy(int $id)
+    {
+        $notif = Notificacion::where('id', $id)
+            ->where('user_id', Auth::id())
+            ->where('leida', true)
+            ->firstOrFail();
+
+        $notif->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Elimina todas las notificaciones leídas del usuario autenticado.
+     */
+    public function destroyLeidas()
+    {
+        Notificacion::where('user_id', Auth::id())
+            ->where('leida', true)
+            ->delete();
+
+        return response()->json(['ok' => true]);
+    }
 }

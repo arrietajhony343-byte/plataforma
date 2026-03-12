@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{Pago, ConceptoPago, User, Periodo, Matricula, Curso, Sede};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -10,11 +11,20 @@ use Inertia\Response;
 
 class PagoController extends Controller
 {
+    use ScopesBySede;
+
     public function index(): Response
     {
         $periodoActivo = Periodo::where('activo', true)->first();
+        $sedeId = $this->sedeId();
 
         $pagos = Pago::with(['estudiante.matriculas' => fn($q) => $q->where('estado', 'activa')->latest()->limit(1)->with('curso'), 'conceptoPago', 'periodo', 'comprobantes'])
+            ->when($sedeId, fn($q) =>
+                $q->whereHas('estudiante.matriculas', fn($mq) =>
+                    $mq->where('estado', 'activa')
+                       ->whereHas('curso', fn($cq) => $cq->where('sede_id', $sedeId))
+                )
+            )
             ->orderByDesc('created_at')
             ->get()
             ->map(function (Pago $p) {
@@ -56,6 +66,12 @@ class PagoController extends Controller
             ]);
 
         $estudiantes = User::role('estudiante')->activo()
+            ->when($sedeId, fn($q) =>
+                $q->whereHas('matriculas', fn($mq) =>
+                    $mq->where('estado', 'activa')
+                       ->whereHas('curso', fn($cq) => $cq->where('sede_id', $sedeId))
+                )
+            )
             ->with(['matriculas' => fn($q) => $q->where('estado', 'activa')->latest()->limit(1)->with('curso')])
             ->orderBy('name')
             ->get()
@@ -70,6 +86,7 @@ class PagoController extends Controller
             ->map(fn($p) => ['id' => $p->id, 'nombre' => $p->nombre, 'anio' => $p->anio, 'activo' => $p->activo]);
 
         $sedes = Sede::where('activa', true)->orderBy('nombre')
+            ->when($sedeId, fn($q) => $q->where('id', $sedeId))
             ->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
         return Inertia::render('Admin/Pagos', [

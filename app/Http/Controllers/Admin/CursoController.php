@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{Curso, Materia, CursoMateria, User, Matricula, Sede};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -10,11 +11,14 @@ use Inertia\Response;
 
 class CursoController extends Controller
 {
+    use ScopesBySede;
+
     public function index(): Response
     {
         $anio = Curso::max('anio') ?? now()->year;
 
         $cursos = Curso::where('anio', $anio)
+            ->when($this->sedeId(), fn($q, $sedeId) => $q->where('sede_id', $sedeId))
             ->with(['directorGrupo', 'cursoMaterias.materia', 'cursoMaterias.profesor', 'sede'])
             ->orderBy('nivel')->orderBy('grado')->orderBy('grupo')
             ->get()
@@ -24,6 +28,16 @@ class CursoController extends Controller
                     ->where('estado', 'activa')
                     ->distinct('estudiante_id')
                     ->count('estudiante_id');
+
+                $estudiantesList = Matricula::where('matriculas.curso_id', $c->id)
+                    ->where('matriculas.estado', 'activa')
+                    ->join('users', 'users.id', '=', 'matriculas.estudiante_id')
+                    ->select('users.id', 'users.name')
+                    ->orderBy('users.name')
+                    ->get()
+                    ->map(fn($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->values()
+                    ->toArray();
 
                 return [
                     'id'               => $c->id,
@@ -43,6 +57,7 @@ class CursoController extends Controller
                     'materias_nombres' => $c->cursoMaterias->pluck('materia.nombre')->filter()->values()->toArray(),
                     'profesor_guia'    => $c->directorGrupo?->name ?? 'Sin asignar',
                     'estudiantes'      => $estudiantesCount,
+                    'estudiantes_lista'=> $estudiantesList,
                     'activo'           => $c->activo,
                     'sede_id'          => $c->sede_id,
                     'sede_nombre'      => $c->sede?->nombre ?? null,
@@ -70,7 +85,9 @@ class CursoController extends Controller
 
         $profesores = User::role('profesor')->activo()->select('id', 'name', 'sede_id')->orderBy('name')->get();
 
-        $sedes = Sede::activa()->orderBy('nombre')->get()
+        $sedes = Sede::activa()->orderBy('nombre')
+            ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
+            ->get()
             ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
 
         // Total de estudiantes DISTINTOS matriculados activamente en cursos de este año

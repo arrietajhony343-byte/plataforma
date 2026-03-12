@@ -12,9 +12,10 @@ interface EstudianteBack {
 interface ObservacionBack {
     id: number;
     estudiante: string;
-    curso: string;
+    curso?: string;
     materia: string;
     tipo: string;
+    categoria?: string;
     descripcion: string;
     fecha: string;
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{HorarioBloque, CursoMateria, Curso, User, Materia, Sede, Jornada};
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -11,6 +12,7 @@ use Inertia\Response;
 
 class HorarioController extends Controller
 {
+    use ScopesBySede;
     /* ================================================================
      *  INDEX — Vista principal con todos los datos
      * ================================================================ */
@@ -24,6 +26,7 @@ class HorarioController extends Controller
 
         $cursosQuery = Curso::activo()
             ->where('anio', $anio)
+            ->when($this->sedeId(), fn($q, $s) => $q->where('sede_id', $s))
             ->with(['cursoMaterias.horarioBloques', 'cursoMaterias.materia', 'cursoMaterias.profesor', 'sede'])
             ->orderBy('grado')
             ->orderBy('grupo')
@@ -74,6 +77,9 @@ class HorarioController extends Controller
 
         // Profesores con carga horaria real
         $profesores = User::role('profesor')->activo()
+            ->when($this->sedeId(), fn($q, $s) =>
+                $q->whereHas('cursoMaterias.curso', fn($cq) => $cq->where('sede_id', $s)->where('anio', $anio)->where('activo', true))
+            )
             ->with(['cursoMaterias' => fn($q) => $q->with('materia', 'curso', 'horarioBloques')
                 ->whereHas('curso', fn($cq) => $cq->where('anio', $anio)->where('activo', true))])
             ->get()
@@ -101,7 +107,9 @@ class HorarioController extends Controller
 
         $materias = Materia::activa()->select('id', 'nombre')->orderBy('nombre')->get();
 
-        $sedes = Sede::activa()->orderBy('nombre')->get()
+        $sedes = Sede::activa()->orderBy('nombre')
+            ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
+            ->get()
             ->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre, 'ciudad' => $s->ciudad ?? '']);
 
         // Jornadas configuradas por nivel (defaults si aún no existen)

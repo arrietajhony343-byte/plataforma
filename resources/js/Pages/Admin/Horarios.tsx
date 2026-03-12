@@ -1302,7 +1302,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                     <>
                         <div className="flex flex-wrap items-center gap-3">
                             <h2 className="text-sm font-bold text-gray-700">{getDisplayTitle()}</h2>
-                            {sedes.length > 0 && (
+                            {sedes.length > 1 && (
                                 <div className="relative">
                                     <select
                                         value={sedeSel}
@@ -1352,7 +1352,6 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                         </div>
                                         <div className="text-left">
                                             <p className="text-xs font-semibold leading-tight">{p.nombre}</p>
-                                            <p className="text-[10px] opacity-70">{p.materias.slice(0, 2).join(', ')}</p>
                                         </div>
                                     </button>
                                 ))}
@@ -1456,12 +1455,6 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                                     </div>
                                                 </div>
 
-                                                <div className="flex flex-wrap gap-1 mb-4">
-                                                    {profesor.materias.map((m, i) => (
-                                                        <span key={i} className={`px-2 py-0.5 ${profesor.colorBg} ${profesor.colorText} rounded text-[11px] font-medium`}>{m}</span>
-                                                    ))}
-                                                </div>
-
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={() => setProfesorSeleccionado(profesor.nombre)}
@@ -1491,7 +1484,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                             <div className="flex items-center justify-between mb-3">
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Seleccionar curso — {anioVigente}</p>
                                 <div className="flex items-center gap-3">
-                                    {sedes.length > 0 && (
+                                    {sedes.length > 1 && (
                                         <div className="relative">
                                             <select
                                                 value={sedeSel}
@@ -1664,14 +1657,6 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                 <div className="flex-1 min-w-0">
                                     <h2 className="text-lg font-bold text-white leading-tight">{profesorDetalle.nombre}</h2>
                                     <p className="text-sm text-blue-200 mt-0.5">{profesorDetalle.especialidad}</p>
-                                    <div className="flex flex-wrap gap-1.5 mt-2">
-                                        {profesorDetalle.materias.slice(0, 3).map((m, i) => (
-                                            <span key={i} className="px-2 py-0.5 bg-white/20 rounded-full text-[11px] text-white/90 font-medium">{m}</span>
-                                        ))}
-                                        {profesorDetalle.materias.length > 3 && (
-                                            <span className="px-2 py-0.5 bg-white/10 rounded-full text-[11px] text-blue-200 font-medium">+{profesorDetalle.materias.length - 3} más</span>
-                                        )}
-                                    </div>
                                 </div>
                                 <button onClick={() => setProfesorDetalle(null)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center flex-shrink-0 transition-colors mt-0.5">
                                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
@@ -1753,26 +1738,6 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                 </div>
                             </div>
 
-                            <div className="flex gap-3">
-                                <button type="button" onClick={() => setProfesorDetalle(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
-                                    Cerrar
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => handlePrintPDF(profesorDetalle.nombre)}
-                                    className="px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-500 flex items-center gap-1.5 transition-colors"
-                                    title={`Imprimir horario de ${profesorDetalle.nombre}`}
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M9.75 8.25h.008v.008H9.75V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
-                                    PDF
-                                </button>
-                                <button
-                                    onClick={() => { setProfesorDetalle(null); setProfesorSeleccionado(profesorDetalle.nombre); setVistaActiva('profesor'); }}
-                                    className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl hover:shadow-lg text-sm font-medium"
-                                >
-                                    Ver Horario Completo
-                                </button>
-                            </div>
                         </div>
 
                         {/* ── Footer fijo ── */}

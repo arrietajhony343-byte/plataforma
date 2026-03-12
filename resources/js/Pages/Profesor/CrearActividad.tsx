@@ -40,6 +40,9 @@ interface ActividadEdit {
     fechaEntrega: string;
     porcentaje: number;
     activa: boolean;
+    permiteEntregaTardia: boolean;
+    maxIntentos: number | null;
+    cerradaManualmente: boolean;
     tienePreguntas: boolean;
     preguntas: {
         id: number;
@@ -100,6 +103,9 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
     const [fechaEntrega, setFechaEntrega] = useState(actividad?.fechaEntrega ?? '');
     const [porcentaje, setPorcentaje] = useState(actividad?.porcentaje?.toString() ?? '');
     const [activa, setActiva] = useState(actividad?.activa ?? true);
+    const [permiteEntregaTardia, setPermiteEntregaTardia] = useState(actividad?.permiteEntregaTardia ?? false);
+    const [maxIntentos, setMaxIntentos] = useState(actividad?.maxIntentos?.toString() ?? '');
+    const [cerradaManualmente, setCerradaManualmente] = useState(actividad?.cerradaManualmente ?? false);
     const [archivoFile, setArchivoFile] = useState<File | null>(null);
     const [archivoExistente] = useState(actividad?.archivoInstrucciones ?? null);
     const [archivoDrag, setArchivoDrag] = useState(false);
@@ -308,6 +314,9 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
         formData.append('fecha_entrega', fechaEntrega);
         formData.append('porcentaje', porcentaje);
         formData.append('activa', activa ? '1' : '0');
+        formData.append('permite_entrega_tardia', permiteEntregaTardia ? '1' : '0');
+        formData.append('cerrada_manualmente', cerradaManualmente ? '1' : '0');
+        if (maxIntentos) formData.append('max_intentos', maxIntentos);
 
         if (archivoFile) {
             formData.append('archivo_instrucciones', archivoFile);
@@ -636,6 +645,62 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
                                 >
                                     <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-0.5 transition-all ${activa ? 'right-0.5' : 'left-0.5'}`} />
                                 </button>
+                            </div>
+
+                            {/* ── Opciones de entrega ── */}
+                            <div className="space-y-3">
+                                <p className="text-sm font-semibold text-gray-700">Opciones de entrega</p>
+
+                                {/* Permitir entrega tardía */}
+                                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-800">Permitir entrega tardía</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">Los estudiantes podrán entregar después de la fecha límite</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPermiteEntregaTardia(!permiteEntregaTardia)}
+                                        className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${permiteEntregaTardia ? 'bg-amber-500' : 'bg-gray-300'}`}
+                                    >
+                                        <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-0.5 transition-all ${permiteEntregaTardia ? 'right-0.5' : 'left-0.5'}`} />
+                                    </button>
+                                </div>
+
+                                {/* Máximo de intentos (solo quiz/examen) */}
+                                {esQuizExamen && (
+                                    <div className="p-4 bg-gray-50 rounded-xl space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-800">Máximo de intentos</p>
+                                                <p className="text-xs text-gray-400 mt-0.5">Déjalo vacío para intentos ilimitados</p>
+                                            </div>
+                                            <input
+                                                type="number"
+                                                value={maxIntentos}
+                                                onChange={e => setMaxIntentos(e.target.value)}
+                                                min="1"
+                                                max="20"
+                                                placeholder="∞"
+                                                className="w-20 px-3 py-2 border border-gray-300 rounded-xl text-sm text-center focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Cerrar manualmente */}
+                                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-800">Cerrar actividad manualmente</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">Nadie podrá entregar hasta que la reactives, sin importar la fecha</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCerradaManualmente(!cerradaManualmente)}
+                                        className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${cerradaManualmente ? 'bg-red-500' : 'bg-gray-300'}`}
+                                    >
+                                        <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-0.5 transition-all ${cerradaManualmente ? 'right-0.5' : 'left-0.5'}`} />
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Resumen */}

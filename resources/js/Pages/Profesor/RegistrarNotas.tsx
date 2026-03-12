@@ -10,6 +10,8 @@ interface Periodo {
     nombre: string;
     estado: string;
     notasAbiertas: boolean;
+    ventanaInicio: string | null;
+    ventanaFin: string | null;
 }
 
 interface CursoMateriaMap {
@@ -262,21 +264,44 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
     };
 
     const addConcepto = () => {
-        setEditConceptos(prev => [
-            ...prev,
-            { id: null, nombre: '', porcentaje: 0, tipo: 'manual', orden: prev.length },
-        ]);
+        const actIdx = editConceptos.findIndex(c => c.tipo === 'actividades');
+        const totalOtros = editConceptos.reduce((s, c) => s + (Number(c.porcentaje) || 0), 0);
+        const nuevoPorc = Math.max(0, Math.floor((100 - totalOtros) / 2));
+        const newList = [
+            ...editConceptos,
+            { id: null, nombre: '', porcentaje: nuevoPorc, tipo: 'manual' as const, orden: editConceptos.length },
+        ];
+        // Ajustar actividades para que sumen 100
+        if (actIdx !== -1) {
+            const sumSinAct = newList.reduce((s, c, i) => i === actIdx ? s : s + (Number(c.porcentaje) || 0), 0);
+            newList[actIdx] = { ...newList[actIdx], porcentaje: Math.max(0, 100 - sumSinAct) };
+        }
+        setEditConceptos(newList);
     };
 
     const removeConcepto = (idx: number) => {
-        if (editConceptos[idx].tipo === 'actividades') return; // can't remove actividades
-        setEditConceptos(prev => prev.filter((_, i) => i !== idx).map((c, i) => ({ ...c, orden: i })));
+        if (editConceptos[idx].tipo === 'actividades') return;
+        const filtered = editConceptos.filter((_, i) => i !== idx).map((c, i) => ({ ...c, orden: i }));
+        // Recalcular actividades para que sumen 100
+        const actIdx = filtered.findIndex(c => c.tipo === 'actividades');
+        if (actIdx !== -1) {
+            const sumSinAct = filtered.reduce((s, c, i) => i === actIdx ? s : s + (Number(c.porcentaje) || 0), 0);
+            filtered[actIdx] = { ...filtered[actIdx], porcentaje: Math.max(0, 100 - sumSinAct) };
+        }
+        setEditConceptos(filtered);
     };
 
     const updateConcepto = (idx: number, field: keyof ConceptoNota, value: any) => {
         setEditConceptos(prev => {
-            const copy = [...prev];
-            copy[idx] = { ...copy[idx], [field]: value };
+            const copy = prev.map((c, i) => i === idx ? { ...c, [field]: value } : { ...c });
+            // Auto-ajustar actividades cuando cambia un porcentaje manual
+            if (field === 'porcentaje') {
+                const actIdx = copy.findIndex(c => c.tipo === 'actividades');
+                if (actIdx !== -1 && actIdx !== idx) {
+                    const sumSinAct = copy.reduce((s, c, i) => i === actIdx ? s : s + (Number(c.porcentaje) || 0), 0);
+                    copy[actIdx] = { ...copy[actIdx], porcentaje: Math.max(0, 100 - sumSinAct) };
+                }
+            }
             return copy;
         });
     };
@@ -430,7 +455,8 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                         <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Curso</label>
                             <select value={cursoSel} onChange={e => { const v = e.target.value; guardedChange(() => setCursoSel(v)); }}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[100px]">
+                                disabled={configOpen}
+                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[100px] disabled:opacity-50 disabled:cursor-not-allowed">
                                 {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                             </select>
                         </div>
@@ -439,7 +465,8 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                         <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Materia</label>
                             <select value={materiaSel} onChange={e => { const v = e.target.value; guardedChange(() => setMateriaSel(v)); }}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[140px]">
+                                disabled={configOpen}
+                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed">
                                 {materiasDisponibles.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                             </select>
                         </div>
@@ -448,7 +475,8 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                         <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Periodo</label>
                             <select value={periodoSel} onChange={e => { const v = e.target.value; guardedChange(() => setPeriodoSel(v)); }}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[160px]">
+                                disabled={configOpen}
+                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[160px] disabled:opacity-50 disabled:cursor-not-allowed">
                                 {periodos.map(p => (
                                     <option key={p.id} value={p.id}>
                                         {p.nombre}{p.estado === 'activo' ? ' ✓' : p.estado === 'finalizado' ? ' (Cerrado)' : ''}
@@ -456,6 +484,14 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                 ))}
                             </select>
                         </div>
+
+                        {/* Lock indicator + config-open warning */}
+                        {configOpen && (
+                            <div className="mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                Selectores bloqueados
+                            </div>
+                        )}
 
                         {/* Lock indicator */}
                         {periodoActual && (
@@ -480,9 +516,25 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                 {!notasAbiertas && cursoMateriaId && !loading && (
                     <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
                         <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                        <div>
+                        <div className="flex-1">
                             <p className="font-bold text-amber-800 text-sm">Registro de notas bloqueado</p>
                             <p className="text-amber-700 text-xs mt-0.5">El periodo actual no permite registrar o modificar notas. Contacta al administrador si necesitas realizar cambios.</p>
+                            {periodoActual?.ventanaInicio && (
+                                <div className="mt-2 flex flex-wrap gap-3">
+                                    <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                        <span className="font-semibold">Apertura:</span>
+                                        {new Date(periodoActual.ventanaInicio).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                    </span>
+                                    {periodoActual.ventanaFin && (
+                                        <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                                            <span className="font-semibold">Cierre:</span>
+                                            {new Date(periodoActual.ventanaFin).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -572,10 +624,14 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                                     min="0" max="100" step="1"
                                                     value={c.porcentaje}
                                                     onChange={e => updateConcepto(idx, 'porcentaje', Number(e.target.value))}
-                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm pr-7 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                                    disabled={c.tipo === 'actividades'}
+                                                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm pr-7 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] disabled:bg-gray-50 disabled:text-gray-400"
                                                 />
                                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
                                             </div>
+                                            {c.tipo === 'actividades' && (
+                                                <p className="text-[10px] text-gray-400 mt-0.5">Auto</p>
+                                            )}
                                         </div>
                                         <div className="w-36">
                                             <label className="text-[10px] font-semibold text-gray-400 uppercase">Tipo</label>

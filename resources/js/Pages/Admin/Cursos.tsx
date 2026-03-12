@@ -50,6 +50,7 @@ interface Curso {
     materias_nombres: string[];
     profesor_guia: string;
     estudiantes: number;
+    estudiantes_lista: { id: number; name: string }[];
     activo: boolean;
     sede_id?: number;
     sede_nombre?: string;
@@ -224,6 +225,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showProfesoresModal, setShowProfesoresModal] = useState(false);
     const [cursoDetalle, setCursoDetalle] = useState<Curso | null>(null);
+    const [detalleTab, setDetalleTab] = useState<'materias' | 'estudiantes'>('materias');
 
     // CRUD state
     const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
@@ -276,6 +278,8 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
         if (!cursoForm.sede_id) return listaProfesores;
         return listaProfesores.filter(p => !p.sede_id || String(p.sede_id) === cursoForm.sede_id);
     }, [listaProfesores, cursoForm.sede_id]);
+
+    const openDetalle = (curso: Curso) => { setDetalleTab('materias'); setCursoDetalle(curso); };
 
     const stats = useMemo(() => ({
         totalCursos: cursos.length,
@@ -615,7 +619,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                     {nivelesEducativos[k].label} ({cursos.filter(c => (c.nivel === k) || (k === 'prejardin' && (c.nivel === 'transicion' || c.nivel === 'preescolar'))).length})
                                 </button>
                             ))}
-                            {sedes.length > 0 && (
+                            {sedes.length > 1 && (
                                 <select
                                     value={sedeSel}
                                     onChange={e => setSedeSel(e.target.value)}
@@ -660,7 +664,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                 <div key={curso.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all group overflow-hidden flex flex-col">
                                                     <div className={`h-1.5 bg-gradient-to-r ${nivelCardAccent[curso.nivel] || 'from-gray-400 to-gray-500'}`} />
                                                     <div className="p-5 flex-1">
-                                                        <div className="flex items-start gap-3 mb-4 cursor-pointer" onClick={() => setCursoDetalle(curso)}>
+                                                        <div className="flex items-start gap-3 mb-4 cursor-pointer" onClick={() => openDetalle(curso)}>
                                                             <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${nivelCardAccent[curso.nivel] || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0`}>
                                                                 {curso.grado.replace('Transición', 'T').replace('Pre-Jardín', 'PJ').replace('Jardín', 'J').substring(0, 3)}{curso.seccion}
                                                             </div>
@@ -678,7 +682,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                             <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
                                                             <span className="truncate">Guía: <strong>{curso.profesor_guia}</strong></span>
                                                         </div>
-                                                        <div className="grid grid-cols-2 gap-2 mb-4">
+                                                        <div className="grid grid-cols-2 gap-2 mb-2">
                                                             <div className="bg-gray-50 rounded-lg p-2 text-center">
                                                                 <p className="text-lg font-extrabold text-[#293577]" style={{ fontFamily: "'Inter', sans-serif" }}>{curso.estudiantes}</p>
                                                                 <p className="text-[10px] text-gray-500 uppercase tracking-wide">Estudiantes</p>
@@ -688,22 +692,11 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                                 <p className="text-[10px] text-gray-500 uppercase tracking-wide">Materias</p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {curso.materias_nombres.slice(0, 4).map((m, i) => (
-                                                                <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[11px]">{m}</span>
-                                                            ))}
-                                                            {curso.materias_nombres.length > 4 && (
-                                                                <span className="px-2 py-0.5 bg-[#293577]/10 text-[#293577] rounded text-[11px] font-medium">+{curso.materias_nombres.length - 4} más</span>
-                                                            )}
-                                                            {curso.materias_nombres.length === 0 && (
-                                                                <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded text-[11px]">Sin materias asignadas</span>
-                                                            )}
-                                                        </div>
                                                     </div>
                                                     {/* ── Barra de acciones siempre visible ── */}
                                                     <div className="px-4 pb-4 flex gap-2">
                                                         <button
-                                                            onClick={() => setCursoDetalle(curso)}
+                                                            onClick={() => openDetalle(curso)}
                                                             className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-[#293577] bg-[#293577]/5 hover:bg-[#293577]/10 rounded-lg transition-colors"
                                                         >
                                                             <EyeIcon /> Ver detalle
@@ -769,7 +762,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                     <td className="px-4 py-3 text-center"><span className="text-xs text-gray-500">{curso.jornada}</span></td>
                                                     <td className="px-4 py-3 text-right">
                                                         <div className="flex items-center justify-end gap-1">
-                                                            <button onClick={() => setCursoDetalle(curso)} className="p-1.5 text-[#293577] hover:bg-blue-50 rounded-lg transition-colors" title="Ver detalle">
+                                                            <button onClick={() => openDetalle(curso)} className="p-1.5 text-[#293577] hover:bg-blue-50 rounded-lg transition-colors" title="Ver detalle">
                                                                 <EyeIcon />
                                                             </button>
                                                             <button onClick={() => openEditCurso(curso)} className="p-1.5 text-gray-400 hover:text-[#293577] hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
@@ -1167,14 +1160,22 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                         </div>
                         <div className="p-6 space-y-5">
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                                    <p className="text-2xl font-extrabold text-[#293577]" style={{ fontFamily: "'Inter', sans-serif" }}>{cursoDetalle.estudiantes}</p>
-                                    <p className="text-xs text-gray-500">Estudiantes</p>
-                                </div>
-                                <div className="text-center p-3 bg-gray-50 rounded-xl">
-                                    <p className="text-2xl font-extrabold text-emerald-600" style={{ fontFamily: "'Inter', sans-serif" }}>{cursoDetalle.materias.length}</p>
-                                    <p className="text-xs text-gray-500">Materias</p>
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setDetalleTab('estudiantes')}
+                                    className={`text-center p-3 rounded-xl transition-colors ${detalleTab === 'estudiantes' ? 'bg-[#293577] shadow-md' : 'bg-gray-50 hover:bg-gray-100'}`}
+                                >
+                                    <p className={`text-2xl font-extrabold ${detalleTab === 'estudiantes' ? 'text-white' : 'text-[#293577]'}`} style={{ fontFamily: "'Inter', sans-serif" }}>{cursoDetalle.estudiantes}</p>
+                                    <p className={`text-xs ${detalleTab === 'estudiantes' ? 'text-white/80' : 'text-gray-500'}`}>Estudiantes</p>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDetalleTab('materias')}
+                                    className={`text-center p-3 rounded-xl transition-colors ${detalleTab === 'materias' ? 'bg-emerald-500 shadow-md' : 'bg-gray-50 hover:bg-gray-100'}`}
+                                >
+                                    <p className={`text-2xl font-extrabold ${detalleTab === 'materias' ? 'text-white' : 'text-emerald-600'}`} style={{ fontFamily: "'Inter', sans-serif" }}>{cursoDetalle.materias.length}</p>
+                                    <p className={`text-xs ${detalleTab === 'materias' ? 'text-white/80' : 'text-gray-500'}`}>Materias</p>
+                                </button>
                                 <div className="text-center p-3 bg-gray-50 rounded-xl">
                                     <p className="text-2xl font-extrabold text-amber-600" style={{ fontFamily: "'Inter', sans-serif" }}>{cursoDetalle.cupo_maximo || '-'}</p>
                                     <p className="text-xs text-gray-500">Cupo máx.</p>
@@ -1190,24 +1191,49 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                     </div>
                                 </div>
                             </div>
-                            <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">Plan de estudios ({cursoDetalle.materias.length} materias)</p>
-                                {cursoDetalle.materias.length > 0 ? (
-                                    <div className="grid grid-cols-1 gap-2">
-                                        {cursoDetalle.materias.map((m, i) => (
-                                            <div key={i} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-lg">{getMateriaStyle(m.nombre).icono}</span>
-                                                    <span className="text-sm font-medium text-gray-700">{m.nombre}</span>
+                            {detalleTab === 'materias' && (
+                                <div>
+                                    <p className="text-sm font-medium text-gray-700 mb-2">Plan de estudios ({cursoDetalle.materias.length} materias)</p>
+                                    {cursoDetalle.materias.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-2">
+                                            {cursoDetalle.materias.map((m, i) => (
+                                                <div key={i} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-lg">{getMateriaStyle(m.nombre).icono}</span>
+                                                        <span className="text-sm font-medium text-gray-700">{m.nombre}</span>
+                                                    </div>
+                                                    {m.profesor && <span className="text-xs text-gray-500">{m.profesor}</span>}
                                                 </div>
-                                                {m.profesor && <span className="text-xs text-gray-500">{m.profesor}</span>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-amber-500 italic">No hay materias asignadas a este curso</p>
-                                )}
-                            </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-amber-500 italic">No hay materias asignadas a este curso</p>
+                                    )}
+                                </div>
+                            )}
+                            {detalleTab === 'estudiantes' && (
+                                <div>
+                                    <p className="text-sm font-medium text-gray-700 mb-2">Estudiantes matriculados ({cursoDetalle.estudiantes_lista.length})</p>
+                                    {cursoDetalle.estudiantes_lista.length > 0 ? (
+                                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                            {cursoDetalle.estudiantes_lista.map((est, i) => (
+                                                <div key={est.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#293577] to-[#181b49] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                                        {est.name.charAt(0)}{est.name.split(' ')[1]?.charAt(0) || ''}
+                                                    </div>
+                                                    <span className="text-sm font-medium text-gray-800 flex-1 truncate">{est.name}</span>
+                                                    <span className="text-xs text-gray-400 flex-shrink-0">#{i + 1}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-6">
+                                            <svg className="w-10 h-10 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+                                            <p className="text-sm text-gray-400">No hay estudiantes matriculados</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <div className="flex gap-3">
                                 <button type="button" onClick={() => setCursoDetalle(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
                                     Cerrar
