@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Materia;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class MateriaController extends Controller
 {
@@ -16,9 +17,14 @@ class MateriaController extends Controller
             'area'            => 'required|string|max:100',
             'codigo'          => 'required|string|max:10|unique:materias,codigo',
             'horas_semanales' => 'required|integer|min:1|max:10',
+            'imagen_preset'   => 'nullable|string|max:255',
+            'imagen_file'     => 'nullable|image|max:4096',
         ]);
 
-        Materia::create(array_merge($data, ['activa' => true]));
+        Materia::create(array_merge($data, [
+            'activa' => true,
+            'imagen' => $this->resolveImageInput($request),
+        ]));
 
         return redirect()->back()->with('success', 'Materia creada.');
     }
@@ -30,8 +36,11 @@ class MateriaController extends Controller
             'area'            => 'required|string|max:100',
             'codigo'          => 'required|string|max:10|unique:materias,codigo,' . $materia->id,
             'horas_semanales' => 'required|integer|min:1|max:10',
+            'imagen_preset'   => 'nullable|string|max:255',
+            'imagen_file'     => 'nullable|image|max:4096',
         ]);
 
+        $data['imagen'] = $this->resolveImageInput($request, $materia->imagen);
         $materia->update($data);
 
         return redirect()->back()->with('success', 'Materia actualizada.');
@@ -69,5 +78,23 @@ class MateriaController extends Controller
         $materia->profesores()->sync($validIds);
 
         return redirect()->back()->with('success', 'Profesores de la materia actualizados.');
+    }
+
+    private function resolveImageInput(Request $request, ?string $current = null): string
+    {
+        if ($request->hasFile('imagen_file')) {
+            if ($current && !str_starts_with($current, '/images/presets/')) {
+                Storage::disk('public')->delete($current);
+            }
+
+            return $request->file('imagen_file')->store('catalogo/materias', 'public');
+        }
+
+        $preset = $request->input('imagen_preset');
+        if (is_string($preset) && $preset !== '') {
+            return $preset;
+        }
+
+        return $current ?: '/images/presets/materia-default.svg';
     }
 }

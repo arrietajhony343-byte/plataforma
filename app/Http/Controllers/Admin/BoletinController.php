@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
-use App\Models\{Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Sede, Actividad};
+use App\Models\{Asistencia, Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Observacion, Sede, Actividad};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -110,6 +110,13 @@ class BoletinController extends Controller
                 ->filter(fn($row) => $row['definitiva'] !== null || collect($row)->only(['p1','p2','p3','p4'])->filter()->isNotEmpty())
                 ->values();
 
+                $completitud = $this->buildBoletinCompleteness(
+                    $b->estudiante_id,
+                    $b->curso_id,
+                    $b->periodo,
+                    $b->observacion_general,
+                );
+
                 return [
                     'id'              => $b->id,
                     'estudiante_id'   => $b->estudiante_id,
@@ -132,6 +139,7 @@ class BoletinController extends Controller
                     'fecha_generacion'=> $b->created_at->format('Y-m-d'),
                     'padres'          => $padres,
                     'notas'           => $notas,
+                    'completitud'     => $completitud,
                 ];
             });
 
@@ -231,7 +239,11 @@ class BoletinController extends Controller
             'periodo_id' => 'required|exists:periodos,id',
             'curso_id'   => 'nullable|exists:cursos,id',
             'nivel'      => 'nullable|string',
+            'modo_validacion' => 'nullable|in:advertir,bloquear',
         ]);
+
+        $modoValidacion = $data['modo_validacion'] ?? 'advertir';
+        $periodo = Periodo::findOrFail($data['periodo_id']);
 
         $query = Matricula::where('periodo_id', $data['periodo_id'])->where('estado', 'activa');
 
@@ -244,29 +256,83 @@ class BoletinController extends Controller
 
         $matriculas = $query->with('curso')->get();
         $count = 0;
+        $omitidos = 0;
+        $incompletos = [];
 
         foreach ($matriculas as $mat) {
+            $notasStatus = $this->buildNotasStatus($mat->estudiante_id, $mat->curso_id, $periodo->id);
+
+            $boletin = Boletin::firstOrNew([
+                'estudiante_id' => $mat->estudiante_id,
+                'periodo_id'    => $data['periodo_id'],
+            ]);
+            $boletin->curso_id = $mat->curso_id;
+
+            $directorObs = is_string($boletin->observacion_general)
+                ? trim($boletin->observacion_general)
+                : '';
+
+            $obsSources = $this->collectObservationSources(
+                $mat->estudiante_id,
+                $mat->curso_id,
+                $periodo,
+                $directorObs,
+            );
+
+            $estaCompleto = $notasStatus['notas_completas'] && $obsSources['tiene_observacion_director'];
+
+            if (!$estaCompleto && $modoValidacion === 'bloquear') {
+                $omitidos++;
+                continue;
+            }
+
             $promedio = Nota::where('estudiante_id', $mat->estudiante_id)
                 ->where('periodo_id', $data['periodo_id'])
                 ->where('tipo', 'definitiva')
                 ->avg('valor');
 
-            Boletin::updateOrCreate(
-                [
+            $boletin->promedio = round($promedio ?? 0, 1);
+            $boletin->observacion_general = $this->buildBoletinObservationText($directorObs, $obsSources);
+            $boletin->estado = $estaCompleto ? 'generado' : 'borrador';
+            $boletin->save();
+
+            if (!$estaCompleto) {
+                $incompletos[] = [
                     'estudiante_id' => $mat->estudiante_id,
-                    'periodo_id'    => $data['periodo_id'],
-                    'curso_id'      => $mat->curso_id,
-                ],
-                [
-                    'promedio'            => round($promedio ?? 0, 1),
-                    'observacion_general' => 'Boletín generado automáticamente.',
-                    'estado'              => 'generado',
-                ]
-            );
+                    'notas' => $notasStatus,
+                    'director' => $obsSources['tiene_observacion_director'],
+                ];
+            }
+
             $count++;
         }
 
-        return redirect()->back()->with('success', "Se generaron {$count} boletines.");
+        if ($count === 0 && $omitidos > 0) {
+            return redirect()->back()->with('error', "No se generaron boletines: {$omitidos} registro(s) están incompletos (notas y/o observación de director).\nUsa modo advertir o completa la información faltante.");
+        }
+
+        if (!empty($incompletos)) {
+            $mensaje = "Se generaron {$count} boletines. {$omitidos} omitidos. "
+                . count($incompletos)
+                . " quedaron en borrador por información incompleta (notas y/o observación del director de grupo).";
+
+            return redirect()->back()->with('warning', $mensaje);
+        }
+
+        return redirect()->back()->with('success', "Se generaron {$count} boletines completos.");
+    }
+
+    public function updateObservacion(Request $request, Boletin $boletin)
+    {
+        $data = $request->validate([
+            'observacion_general' => 'required|string|min:8|max:2500',
+        ]);
+
+        $boletin->update([
+            'observacion_general' => trim($data['observacion_general']),
+        ]);
+
+        return redirect()->back()->with('success', 'Observación general actualizada.');
     }
 
     /**
@@ -378,5 +444,114 @@ class BoletinController extends Controller
     {
         $boletin->update(['estado' => 'entregado']);
         return redirect()->back()->with('success', 'Boletín marcado como entregado.');
+    }
+
+    private function buildBoletinCompleteness(int $estudianteId, int $cursoId, Periodo $periodo, ?string $observacionActual): array
+    {
+        $notas = $this->buildNotasStatus($estudianteId, $cursoId, $periodo->id);
+        $obsSources = $this->collectObservationSources($estudianteId, $cursoId, $periodo, $observacionActual);
+
+        $mensajes = [];
+        if (!$notas['notas_completas']) {
+            $mensajes[] = "Faltan notas definitivas ({$notas['con_nota']}/{$notas['materias_total']}).";
+        }
+        if (!$obsSources['tiene_observacion_director']) {
+            $mensajes[] = 'Falta observación del director de grupo.';
+        }
+
+        return [
+            'estado' => empty($mensajes) ? 'completo' : 'incompleto',
+            'notas_completas' => $notas['notas_completas'],
+            'materias_total' => $notas['materias_total'],
+            'materias_con_nota' => $notas['con_nota'],
+            'tiene_observacion_director' => $obsSources['tiene_observacion_director'],
+            'comentarios_docentes_count' => $obsSources['comentarios_docentes_count'],
+            'comentarios_asistencia_count' => $obsSources['comentarios_asistencia_count'],
+            'mensajes' => $mensajes,
+        ];
+    }
+
+    private function buildNotasStatus(int $estudianteId, int $cursoId, int $periodoId): array
+    {
+        $cmIds = CursoMateria::where('curso_id', $cursoId)->pluck('id');
+        $materiasTotal = $cmIds->count();
+
+        $conNota = Nota::where('estudiante_id', $estudianteId)
+            ->whereIn('curso_materia_id', $cmIds)
+            ->where('periodo_id', $periodoId)
+            ->where('tipo', 'definitiva')
+            ->distinct('curso_materia_id')
+            ->count('curso_materia_id');
+
+        return [
+            'materias_total' => $materiasTotal,
+            'con_nota' => $conNota,
+            'notas_completas' => $materiasTotal > 0 && $conNota >= $materiasTotal,
+        ];
+    }
+
+    private function collectObservationSources(int $estudianteId, int $cursoId, Periodo $periodo, ?string $observacionActual): array
+    {
+        $inicio = $periodo->fecha_inicio;
+        $fin = $periodo->fecha_fin;
+
+        $directorObs = is_string($observacionActual) ? trim($observacionActual) : '';
+        $tieneDirectorObs = $directorObs !== '' && stripos($directorObs, 'boletín generado automáticamente') === false;
+
+        $comentariosDocentes = Observacion::where('estudiante_id', $estudianteId)
+            ->whereBetween('fecha', [$inicio, $fin])
+            ->orderByDesc('fecha')
+            ->limit(4)
+            ->pluck('descripcion')
+            ->map(fn($txt) => trim((string) $txt))
+            ->filter()
+            ->values();
+
+        $cmIds = CursoMateria::where('curso_id', $cursoId)->pluck('id');
+        $comentariosAsistencia = Asistencia::where('estudiante_id', $estudianteId)
+            ->whereIn('curso_materia_id', $cmIds)
+            ->whereBetween('fecha', [$inicio, $fin])
+            ->whereNotNull('observacion')
+            ->where('observacion', '!=', '')
+            ->orderByDesc('fecha')
+            ->limit(4)
+            ->pluck('observacion')
+            ->map(fn($txt) => trim((string) $txt))
+            ->filter()
+            ->values();
+
+        return [
+            'tiene_observacion_director' => $tieneDirectorObs,
+            'director_observacion' => $directorObs,
+            'comentarios_docentes' => $comentariosDocentes->all(),
+            'comentarios_docentes_count' => $comentariosDocentes->count(),
+            'comentarios_asistencia' => $comentariosAsistencia->all(),
+            'comentarios_asistencia_count' => $comentariosAsistencia->count(),
+        ];
+    }
+
+    private function buildBoletinObservationText(string $directorObs, array $obsSources): string
+    {
+        $secciones = [];
+
+        $directorLimpia = trim($directorObs);
+        if ($directorLimpia !== '' && stripos($directorLimpia, 'boletín generado automáticamente') === false) {
+            $secciones[] = "Director de grupo:\n" . $directorLimpia;
+        } else {
+            $secciones[] = 'Director de grupo: Pendiente por completar.';
+        }
+
+        if (!empty($obsSources['comentarios_docentes'])) {
+            $secciones[] = "Comentarios docentes (reportes globales):\n- "
+                . implode("\n- ", $obsSources['comentarios_docentes']);
+        }
+
+        if (!empty($obsSources['comentarios_asistencia'])) {
+            $secciones[] = "Observaciones de asistencia:\n- "
+                . implode("\n- ", $obsSources['comentarios_asistencia']);
+        }
+
+        $texto = trim(implode("\n\n", $secciones));
+        return $texto !== '' ? $texto : 'Boletín generado automáticamente.';
     }
 }

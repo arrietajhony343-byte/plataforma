@@ -18,6 +18,18 @@ interface UserData {
     iniciales: string;
     miembroDesde: string;
     verificado: boolean;
+    foto?: string | null;
+    tipo_documento?: string | null;
+    documento?: string | null;
+    telefono?: string | null;
+    direccion?: string | null;
+    fecha_nacimiento?: string | null;
+    lugar_nacimiento?: string | null;
+    genero?: string | null;
+    grupo_sanguineo?: string | null;
+    eps?: string | null;
+    acudiente_nombre?: string | null;
+    acudiente_telefono?: string | null;
 }
 
 function getMenuItems(rol: string) {
@@ -94,8 +106,12 @@ export default function Edit({
                     <div className="relative px-6 py-8 flex flex-col sm:flex-row items-center sm:items-start gap-6">
                         {/* Avatar */}
                         <div className="flex-shrink-0">
-                            <div className="w-24 h-24 rounded-2xl bg-white/15 border-2 border-white/30 flex items-center justify-center shadow-xl">
-                                <span className="text-3xl font-black text-white tracking-tight">{userData.iniciales}</span>
+                            <div className="w-24 h-24 rounded-2xl bg-white/15 border-2 border-white/30 flex items-center justify-center shadow-xl overflow-hidden">
+                                {userData.foto ? (
+                                    <img src={userData.foto} alt={userData.nombre} className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="text-3xl font-black text-white tracking-tight">{userData.iniciales}</span>
+                                )}
                             </div>
                         </div>
 
@@ -155,6 +171,7 @@ export default function Edit({
                             <UpdateProfileInformationForm
                                 mustVerifyEmail={mustVerifyEmail}
                                 status={status}
+                                userData={userData}
                             />
                         )}
                         {activeTab === 'seguridad' && <UpdatePasswordForm />}

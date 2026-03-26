@@ -43,6 +43,16 @@ interface Boletin {
     fecha_generacion: string;
     padres: { id: number; name: string }[];
     notas: NotaBoletin[];
+    completitud?: {
+        estado: 'completo' | 'incompleto';
+        notas_completas: boolean;
+        materias_total: number;
+        materias_con_nota: number;
+        tiene_observacion_director: boolean;
+        comentarios_docentes_count: number;
+        comentarios_asistencia_count: number;
+        mensajes: string[];
+    };
 }
 
 interface MateriaDetalle {
@@ -501,6 +511,7 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     const [showModal, setShowModal]           = useState(false);
     const [processing, setProcessing]         = useState(false);
     const [sendingNotif, setSendingNotif]     = useState<number | null>(null);
+    const [validacionEstricta, setValidacionEstricta] = useState(false);
     const [detalleResumen, setDetalleResumen] = useState<ResumenNotas | null>(null);
     const [detalleTab, setDetalleTab]         = useState<'materias' | 'estudiantes'>('materias');
 
@@ -572,6 +583,7 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
             periodo_id: parseInt(periodoSeleccionado),
             curso_id:   cursoSeleccionado !== 'todos' ? parseInt(cursoSeleccionado) : null,
             nivel:      cursoSeleccionado === 'todos' && nivelSeleccionado !== 'todos' ? nivelSeleccionado : null,
+            modo_validacion: validacionEstricta ? 'bloquear' : 'advertir',
         }, { onFinish: () => setProcessing(false) });
     };
 
@@ -871,7 +883,14 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                                                                     </div>
                                                                     <div>
                                                                         <p className="text-sm font-semibold text-gray-800">{b.estudiante}</p>
-                                                                        <p className="text-xs text-gray-400">{b.periodo}</p>
+                                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                                            <p className="text-xs text-gray-400">{b.periodo}</p>
+                                                                            {b.completitud?.estado === 'incompleto' && (
+                                                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                                                                    Incompleto
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </td>
@@ -946,6 +965,9 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                                                         <div className="flex items-center gap-2 mt-0.5">
                                                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getNivelBadge(b.nivel)}`}>{getNivelLabel(b.nivel)}</span>
                                                             <span className="text-xs text-gray-500">{b.curso}</span>
+                                                            {b.completitud?.estado === 'incompleto' && (
+                                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">Incompleto</span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1379,6 +1401,19 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                                     Si no existen boletines aún, primero usa <strong>"Generar boletines"</strong> para crearlos. Los existentes serán actualizados con las notas definitivas más recientes.
                                 </p>
                             </div>
+
+                            <label className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                                <input
+                                    type="checkbox"
+                                    checked={validacionEstricta}
+                                    onChange={e => setValidacionEstricta(e.target.checked)}
+                                    className="mt-0.5"
+                                />
+                                <span className="text-xs text-gray-600">
+                                    <strong>Modo estricto:</strong> si falta información (notas completas o observación del director), no se generan esos boletines.
+                                    Si está desactivado, se generan en <strong>borrador</strong> y quedan marcados como incompletos.
+                                </span>
+                            </label>
                         </div>
 
                         {/* Footer */}

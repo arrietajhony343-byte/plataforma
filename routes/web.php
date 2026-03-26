@@ -25,6 +25,16 @@ use App\Http\Controllers\MensajeController;
 use App\Http\Controllers\Profesor\AsistenciaController as ProfesorAsistenciaController;
 use App\Http\Controllers\Estudiante\DashboardController as EstudianteDashboardController;
 use App\Http\Controllers\Estudiante\ActividadController as EstudianteActividadController;
+use App\Http\Controllers\Estudiante\MateriaController as EstudianteMateriaController;
+use App\Http\Controllers\Estudiante\NotaController as EstudianteNotaController;
+use App\Http\Controllers\Estudiante\SeguimientoController as EstudianteSeguimientoController;
+use App\Http\Controllers\Padre\DashboardController as PadreDashboardController;
+use App\Http\Controllers\Padre\BoletinController as PadreBoletinController;
+use App\Http\Controllers\Padre\CalendarioController as PadreCalendarioController;
+use App\Http\Controllers\Padre\SeguimientoController as PadreSeguimientoController;
+use App\Http\Controllers\Padre\NotificacionController as PadreNotificacionController;
+use App\Http\Controllers\Padre\CertificadoController as PadreCertificadoController;
+use App\Http\Controllers\Padre\PagoController as PadrePagoController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -89,6 +99,7 @@ Route::middleware(['auth', 'verified', 'role:admin|coordinador'])->prefix('admin
     // Boletines
     Route::get('/boletines', [BoletinController::class, 'index'])->name('boletines');
     Route::post('/boletines/generar', [BoletinController::class, 'generate'])->name('boletines.generar');
+    Route::post('/boletines/{boletin}/observacion', [BoletinController::class, 'updateObservacion'])->name('boletines.observacion');
     Route::post('/boletines/{boletin}/notificar', [BoletinController::class, 'notificar'])->name('boletines.notificar');
     Route::post('/boletines/notificar-masivo', [BoletinController::class, 'notificarMasivo'])->name('boletines.notificar-masivo');
     Route::post('/boletines/{boletin}/enviar', [BoletinController::class, 'marcarEnviado'])->name('boletines.enviar');
@@ -167,6 +178,8 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
     Route::post('/periodos/{periodo}/excepciones', [PeriodoController::class, 'storeExcepcion'])->name('periodos.excepciones.store');
     Route::delete('/periodos/{periodo}/excepciones/{excepcion}', [PeriodoController::class, 'destroyExcepcion'])->name('periodos.excepciones.destroy');
     Route::patch('/periodos/{periodo}/excepciones/{excepcion}/toggle', [PeriodoController::class, 'toggleExcepcion'])->name('periodos.excepciones.toggle');
+    Route::post('/periodos/{periodo}/eventos', [PeriodoController::class, 'storeEvento'])->name('periodos.eventos.store');
+    Route::delete('/periodos/{periodo}/eventos/{evento}', [PeriodoController::class, 'destroyEvento'])->name('periodos.eventos.destroy');
     Route::post('/periodos/{periodo}/notificar', [PeriodoController::class, 'notificarProfesores'])->name('periodos.notificar');
     Route::delete('/periodos/{periodo}', [PeriodoController::class, 'destroy'])->name('periodos.destroy');
 
@@ -190,6 +203,9 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
     // Observador
     Route::get('/observador', [ProfesorObservadorController::class, 'index'])->name('observador');
     Route::post('/observador', [ProfesorObservadorController::class, 'store'])->name('observador.store');
+    Route::get('/observador/comentarios-consolidados', [ProfesorObservadorController::class, 'comentariosConsolidados'])->name('observador.comentarios');
+    Route::post('/observador/director-reporte', [ProfesorObservadorController::class, 'storeDirectorReporte'])->name('observador.director.store');
+    Route::post('/observador/boletin-observacion', [ProfesorObservadorController::class, 'storeBoletinObservacion'])->name('observador.boletin.store');
 
     // Calendario
     Route::get('/calendario', [ProfesorCalendarioController::class, 'index'])->name('calendario');
@@ -222,63 +238,43 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
 // Rutas de Estudiante
 Route::middleware(['auth', 'verified', 'role:estudiante'])->prefix('estudiante')->name('estudiante.')->group(function () {
     Route::get('/dashboard', [EstudianteDashboardController::class, 'index'])->name('dashboard');
-    Route::get('/materias', function () {
-        return Inertia::render('Estudiante/Materias');
-    })->name('materias');
-    // Actividades (con backend real)
-    Route::get('/actividades', [EstudianteActividadController::class, 'index'])->name('actividades');
+    Route::get('/materias', [EstudianteMateriaController::class, 'index'])->name('materias');
+    // Actividades se gestionan desde Materias; mantener URL anterior por compatibilidad.
+    Route::redirect('/actividades', '/estudiante/materias')->name('actividades');
     Route::get('/actividades/{actividad}', [EstudianteActividadController::class, 'show'])->name('actividades.show');
     Route::post('/actividades/{actividad}/entregar', [EstudianteActividadController::class, 'entregar'])->name('actividades.entregar');
     Route::post('/actividades/{actividad}/quiz', [EstudianteActividadController::class, 'quiz'])->name('actividades.quiz');
     Route::delete('/actividades/{actividad}/entrega', [EstudianteActividadController::class, 'cancelar'])->name('actividades.cancelar');
 
-    Route::get('/notas', function () {
-        return Inertia::render('Estudiante/Notas');
-    })->name('notas');
-    Route::get('/horario', function () {
-        return Inertia::render('Estudiante/Horario');
-    })->name('horario');
+    Route::get('/notas', [EstudianteNotaController::class, 'index'])->name('notas');
+    Route::get('/horario', [EstudianteSeguimientoController::class, 'horario'])->name('horario');
     Route::get('/mensajes', [MensajeController::class, 'index'])->name('mensajes');
     Route::post('/mensajes', [MensajeController::class, 'store'])->name('mensajes.store');
     Route::post('/mensajes/{contacto}/leer', [MensajeController::class, 'markRead'])->name('mensajes.read');
     Route::get('/mensajes/{contacto}/novedades', [MensajeController::class, 'poll'])->name('mensajes.poll');
-    Route::get('/observador', function () {
-        return Inertia::render('Estudiante/Observador');
-    })->name('observador');
-    Route::get('/boletines', function () {
-        return Inertia::render('Estudiante/Boletines');
-    })->name('boletines');
+    Route::get('/observador', [EstudianteSeguimientoController::class, 'observador'])->name('observador');
+    Route::get('/boletines', [EstudianteSeguimientoController::class, 'boletines'])->name('boletines');
 });
 
 // Rutas de Padre
 Route::middleware(['auth', 'verified', 'role:padre'])->prefix('padre')->name('padre.')->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Padre/Dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [PadreDashboardController::class, 'index'])->name('dashboard');
 
-    Route::get('/boletin', function () {
-        return Inertia::render('Padre/Boletin');
-    })->name('boletin');
+    Route::get('/boletin', [PadreBoletinController::class, 'index'])->name('boletin');
 
-    Route::get('/calendario', function () {
-        return Inertia::render('Padre/Calendario');
-    })->name('calendario');
+    Route::get('/calendario', [PadreCalendarioController::class, 'index'])->name('calendario');
 
-    Route::get('/seguimiento', function () {
-        return Inertia::render('Padre/Seguimiento');
-    })->name('seguimiento');
+    Route::get('/seguimiento', [PadreSeguimientoController::class, 'index'])->name('seguimiento');
 
-    Route::get('/notificaciones', function () {
-        return Inertia::render('Padre/Notificaciones');
-    })->name('notificaciones');
+    Route::get('/notificaciones', [PadreNotificacionController::class, 'index'])->name('notificaciones');
 
-    Route::get('/pagos', function () {
-        return Inertia::render('Padre/Pagos');
-    })->name('pagos');
+    Route::get('/certificados', [PadreCertificadoController::class, 'index'])->name('certificados');
+    Route::post('/certificados', [PadreCertificadoController::class, 'store'])->name('certificados.store');
 
-    Route::get('/comprobantes', function () {
-        return Inertia::render('Padre/Comprobantes');
-    })->name('comprobantes');
+    Route::get('/pagos', [PadrePagoController::class, 'index'])->name('pagos');
+    Route::post('/pagos/{pago}/pagar', [PadrePagoController::class, 'pagar'])->name('pagos.pagar');
+
+    Route::get('/comprobantes', [PadrePagoController::class, 'comprobantes'])->name('comprobantes');
 
     Route::get('/mensajes', [MensajeController::class, 'index'])->name('mensajes');
     Route::post('/mensajes', [MensajeController::class, 'store'])->name('mensajes.store');
@@ -296,6 +292,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/',                        [\App\Http\Controllers\NotificacionController::class, 'index']);
         Route::post('/{id}/marcar-leida',      [\App\Http\Controllers\NotificacionController::class, 'marcarLeida']);
         Route::post('/marcar-todas-leidas',    [\App\Http\Controllers\NotificacionController::class, 'marcarTodasLeidas']);
+        Route::delete('/{id}',                 [\App\Http\Controllers\NotificacionController::class, 'destroy']);
+        Route::delete('/leidas',               [\App\Http\Controllers\NotificacionController::class, 'destroyLeidas']);
     });
 });
 

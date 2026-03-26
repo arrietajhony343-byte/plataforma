@@ -1,6 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import jsPDF from 'jspdf';
 import { profesorMenuItems } from '@/Config/profesorMenu';
 
 interface EstudianteBack {
@@ -26,6 +27,71 @@ interface CursoMateriaMap {
     materia_id: number;
 }
 
+interface PeriodoItem {
+    id: number;
+    nombre: string;
+    numero: number;
+    fecha_inicio: string;
+    fecha_fin: string;
+    estado: string;
+}
+
+interface DirectorCursoItem {
+    id: number;
+    nombre: string;
+}
+
+interface DirectorEstudianteItem {
+    estudiante_id: number;
+    estudiante: string;
+    documento?: string;
+    fecha_nacimiento?: string;
+    direccion?: string;
+    telefono?: string;
+    foto?: string | null;
+    acudiente?: string;
+    telefono_acudiente?: string;
+    curso_id: number;
+    curso: string;
+    grado?: string;
+    grupo?: string;
+    director_grupo?: string;
+    periodo_id: number;
+    periodo: string;
+}
+
+interface ObservadorDirectorItem {
+    id: number;
+    estudiante_id: number;
+    estudiante: string;
+    curso_id: number;
+    curso: string;
+    periodo_id: number;
+    periodo: string;
+    fecha_realizacion: string;
+    fortalezas: string;
+    dificultades: string;
+    compromisos: string;
+    resumen_general: string;
+    ficha?: {
+        social_afectivo?: string;
+        comunicacion_norma?: string;
+        conductual_academico?: string;
+        afinidad_plan_mejora?: string;
+        compromiso_detalle?: string;
+    } | null;
+    estado: 'borrador' | 'completo';
+    updated_at: string;
+}
+
+interface BoletinObservacionItem {
+    id: number;
+    estudiante_id: number;
+    curso_id: number;
+    periodo_id: number;
+    observacion: string | null;
+}
+
 interface Props {
     profesor: {
         nombre: string;
@@ -34,9 +100,14 @@ interface Props {
     estudiantes: EstudianteBack[];
     observaciones: ObservacionBack[];
     cursoMaterias: CursoMateriaMap[];
+    periodos: PeriodoItem[];
+    directorCursos: DirectorCursoItem[];
+    directorEstudiantes: DirectorEstudianteItem[];
+    observadorDirector: ObservadorDirectorItem[];
+    boletinObservaciones: BoletinObservacionItem[];
 }
 
-type TipoObservacion = 'positiva' | 'negativa' | 'neutral';
+type TipoObservacion = 'positiva' | 'negativa';
 
 interface Etiqueta {
     id: string;
@@ -44,14 +115,45 @@ interface Etiqueta {
     tipo: TipoObservacion;
 }
 
-export default function Observador({ profesor, cursos, estudiantes, observaciones, cursoMaterias }: Props) {
+export default function Observador({ profesor, cursos, estudiantes, observaciones, cursoMaterias, periodos, directorCursos, directorEstudiantes, observadorDirector, boletinObservaciones }: Props) {
     const [busqueda, setBusqueda] = useState('');
     const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoObservacion>('positiva');
     const [etiquetasSeleccionadas, setEtiquetasSeleccionadas] = useState<string[]>([]);
     const [descripcion, setDescripcion] = useState('');
     const [estudianteSeleccionado, setEstudianteSeleccionado] = useState('');
     const [cursoFiltro, setCursoFiltro] = useState('');
-    const [tab, setTab] = useState<'nuevo' | 'historial'>('nuevo');
+    const [tab, setTab] = useState<'nuevo' | 'director' | 'historial'>('nuevo');
+
+    const [directorCursoId, setDirectorCursoId] = useState<string>('');
+    const [directorPeriodoId, setDirectorPeriodoId] = useState<string>('');
+    const [directorEstudianteId, setDirectorEstudianteId] = useState<string>('');
+    const [resumenDirector, setResumenDirector] = useState('');
+    const [observacionBoletin, setObservacionBoletin] = useState('');
+    const [fortalezas, setFortalezas] = useState('');
+    const [dificultades, setDificultades] = useState('');
+    const [compromisos, setCompromisos] = useState('');
+    const [ficha, setFicha] = useState({
+        social_afectivo: '',
+        comunicacion_norma: '',
+        conductual_academico: '',
+        afinidad_plan_mejora: '',
+        compromiso_detalle: '',
+    });
+    const [comentariosConsolidados, setComentariosConsolidados] = useState<Array<{ id: string; origen: string; tipo: string; categoria: string; descripcion: string; fecha: string }>>([]);
+    const [cargandoConsolidados, setCargandoConsolidados] = useState(false);
+    const [guardandoBoletin, setGuardandoBoletin] = useState(false);
+    const [guardandoObservador, setGuardandoObservador] = useState(false);
+    const [feedbackDirector, setFeedbackDirector] = useState<{ tipo: 'success' | 'error' | 'info'; mensaje: string } | null>(null);
+    const [boletinGuardado, setBoletinGuardado] = useState('');
+    const [directorGuardado, setDirectorGuardado] = useState({
+        resumen: '',
+        fortalezas: '',
+        dificultades: '',
+        compromisos: '',
+        ficha: '',
+    });
+    const cambiosSinGuardarRef = useRef(false);
+    const omitirGuardNavegacionRef = useRef(false);
 
     const fechaActual = new Date().toLocaleDateString('es-CO', {
         day: '2-digit',
@@ -66,8 +168,8 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         { id: 'falta_respeto', nombre: 'Falta de Respeto', tipo: 'negativa' },
         { id: 'trabajo_grupo', nombre: 'Buen Trabajo en Grupo', tipo: 'positiva' },
         { id: 'mejora_academica', nombre: 'Mejora Académica', tipo: 'positiva' },
-        { id: 'inasistencia', nombre: 'Inasistencia', tipo: 'neutral' },
-        { id: 'citacion_padres', nombre: 'Citación a Padres', tipo: 'neutral' },
+        { id: 'inasistencia', nombre: 'Inasistencia', tipo: 'negativa' },
+        { id: 'citacion_padres', nombre: 'Citación a Padres', tipo: 'negativa' },
     ];
 
     const [etiquetasPersonalizadas, setEtiquetasPersonalizadas] = useState<Etiqueta[]>([]);
@@ -99,7 +201,7 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         switch (tipo) {
             case 'positiva': return 'bg-green-100 text-green-700 border-green-300';
             case 'negativa': return 'bg-red-100 text-red-700 border-red-300';
-            case 'neutral': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+            default: return 'bg-yellow-100 text-yellow-700 border-yellow-300';
         }
     };
 
@@ -107,7 +209,179 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         switch (tipo) {
             case 'positiva': return '✓';
             case 'negativa': return '✕';
-            case 'neutral': return '●';
+            default: return '•';
+        }
+    };
+
+    const directorEstudiantesFiltrados = useMemo(() => {
+        return directorEstudiantes.filter((item) => {
+            const matchCurso = !directorCursoId || item.curso_id === Number(directorCursoId);
+            const matchPeriodo = !directorPeriodoId || item.periodo_id === Number(directorPeriodoId);
+            return matchCurso && matchPeriodo;
+        });
+    }, [directorCursoId, directorPeriodoId, directorEstudiantes]);
+
+    const registroDirectorActual = useMemo(() => {
+        if (!directorCursoId || !directorPeriodoId || !directorEstudianteId) return null;
+        return observadorDirector.find((r) =>
+            r.curso_id === Number(directorCursoId)
+            && r.periodo_id === Number(directorPeriodoId)
+            && r.estudiante_id === Number(directorEstudianteId)
+        ) ?? null;
+    }, [directorCursoId, directorPeriodoId, directorEstudianteId, observadorDirector]);
+
+    const registroBoletinActual = useMemo(() => {
+        if (!directorCursoId || !directorPeriodoId || !directorEstudianteId) return null;
+        return boletinObservaciones.find((r) =>
+            r.curso_id === Number(directorCursoId)
+            && r.periodo_id === Number(directorPeriodoId)
+            && r.estudiante_id === Number(directorEstudianteId)
+        ) ?? null;
+    }, [directorCursoId, directorPeriodoId, directorEstudianteId, boletinObservaciones]);
+
+    const estudianteDirectorActual = useMemo(() => {
+        if (!directorCursoId || !directorPeriodoId || !directorEstudianteId) return null;
+        return directorEstudiantes.find((r) =>
+            r.curso_id === Number(directorCursoId)
+            && r.periodo_id === Number(directorPeriodoId)
+            && r.estudiante_id === Number(directorEstudianteId)
+        ) ?? null;
+    }, [directorCursoId, directorPeriodoId, directorEstudianteId, directorEstudiantes]);
+
+    const serializeFicha = (value: typeof ficha) => JSON.stringify({
+        social_afectivo: (value.social_afectivo ?? '').trim(),
+        comunicacion_norma: (value.comunicacion_norma ?? '').trim(),
+        conductual_academico: (value.conductual_academico ?? '').trim(),
+        afinidad_plan_mejora: (value.afinidad_plan_mejora ?? '').trim(),
+        compromiso_detalle: (value.compromiso_detalle ?? '').trim(),
+    });
+
+    const boletinDirty = !!directorEstudianteId && observacionBoletin.trim() !== boletinGuardado;
+    const directorDirty = !!directorEstudianteId && (
+        resumenDirector.trim() !== directorGuardado.resumen
+        || fortalezas.trim() !== directorGuardado.fortalezas
+        || dificultades.trim() !== directorGuardado.dificultades
+        || compromisos.trim() !== directorGuardado.compromisos
+        || serializeFicha(ficha) !== directorGuardado.ficha
+    );
+    const hasUnsavedChanges = tab === 'director' && (boletinDirty || directorDirty);
+
+    useEffect(() => {
+        cambiosSinGuardarRef.current = hasUnsavedChanges;
+    }, [hasUnsavedChanges]);
+
+    useEffect(() => {
+        const handler = (e: BeforeUnloadEvent) => {
+            if (!cambiosSinGuardarRef.current) return;
+            e.preventDefault();
+            e.returnValue = '';
+        };
+
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, []);
+
+    useEffect(() => {
+        const unsubscribe = router.on('before', () => {
+            if (omitirGuardNavegacionRef.current) return;
+            if (!cambiosSinGuardarRef.current) return;
+            return window.confirm('Tienes cambios sin guardar en el observador/boletín. ¿Seguro que quieres salir?');
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    const confirmarDescartar = (contexto: string): boolean => {
+        if (!hasUnsavedChanges) return true;
+        return window.confirm(`Tienes cambios sin guardar. ¿Deseas descartarlos para ${contexto}?`);
+    };
+
+    const cambiarConGuard = (contexto: string, action: () => void) => {
+        if (!confirmarDescartar(contexto)) return;
+        setFeedbackDirector(null);
+        action();
+    };
+
+    const cambiarTab = (next: 'nuevo' | 'director' | 'historial') => {
+        if (next === tab) return;
+        cambiarConGuard(`ir a la pestaña ${next}`, () => setTab(next));
+    };
+
+    useEffect(() => {
+        if (registroDirectorActual) {
+            setResumenDirector(registroDirectorActual.resumen_general ?? '');
+            setFortalezas(registroDirectorActual.fortalezas ?? '');
+            setDificultades(registroDirectorActual.dificultades ?? '');
+            setCompromisos(registroDirectorActual.compromisos ?? '');
+            setFicha({
+                social_afectivo: registroDirectorActual.ficha?.social_afectivo ?? '',
+                comunicacion_norma: registroDirectorActual.ficha?.comunicacion_norma ?? '',
+                conductual_academico: registroDirectorActual.ficha?.conductual_academico ?? '',
+                afinidad_plan_mejora: registroDirectorActual.ficha?.afinidad_plan_mejora ?? '',
+                compromiso_detalle: registroDirectorActual.ficha?.compromiso_detalle ?? '',
+            });
+            setDirectorGuardado({
+                resumen: (registroDirectorActual.resumen_general ?? '').trim(),
+                fortalezas: (registroDirectorActual.fortalezas ?? '').trim(),
+                dificultades: (registroDirectorActual.dificultades ?? '').trim(),
+                compromisos: (registroDirectorActual.compromisos ?? '').trim(),
+                ficha: serializeFicha({
+                    social_afectivo: registroDirectorActual.ficha?.social_afectivo ?? '',
+                    comunicacion_norma: registroDirectorActual.ficha?.comunicacion_norma ?? '',
+                    conductual_academico: registroDirectorActual.ficha?.conductual_academico ?? '',
+                    afinidad_plan_mejora: registroDirectorActual.ficha?.afinidad_plan_mejora ?? '',
+                    compromiso_detalle: registroDirectorActual.ficha?.compromiso_detalle ?? '',
+                }),
+            });
+            return;
+        }
+
+        setResumenDirector('');
+        setFortalezas('');
+        setDificultades('');
+        setCompromisos('');
+        setFicha({
+            social_afectivo: '',
+            comunicacion_norma: '',
+            conductual_academico: '',
+            afinidad_plan_mejora: '',
+            compromiso_detalle: '',
+        });
+        setDirectorGuardado({
+            resumen: '',
+            fortalezas: '',
+            dificultades: '',
+            compromisos: '',
+            ficha: serializeFicha({
+                social_afectivo: '',
+                comunicacion_norma: '',
+                conductual_academico: '',
+                afinidad_plan_mejora: '',
+                compromiso_detalle: '',
+            }),
+        });
+    }, [registroDirectorActual]);
+
+    useEffect(() => {
+        const texto = (registroBoletinActual?.observacion ?? '').trim();
+        setObservacionBoletin(texto);
+        setBoletinGuardado(texto);
+    }, [registroBoletinActual]);
+
+    const cargarComentariosConsolidados = async () => {
+        if (!directorEstudianteId || !directorCursoId || !directorPeriodoId) return;
+        setCargandoConsolidados(true);
+        try {
+            const r = await fetch(`/profesor/observador/comentarios-consolidados?estudiante_id=${directorEstudianteId}&curso_id=${directorCursoId}&periodo_id=${directorPeriodoId}`);
+            const data = await r.json();
+            const docentes = (data.comentarios_docentes ?? []) as Array<{ id: string; origen: string; tipo: string; categoria: string; descripcion: string; fecha: string }>;
+            const asistencia = (data.comentarios_asistencia ?? []) as Array<{ id: string; origen: string; tipo: string; categoria: string; descripcion: string; fecha: string }>;
+            const merged = [...docentes, ...asistencia].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+            setComentariosConsolidados(merged);
+        } catch {
+            setComentariosConsolidados([]);
+        } finally {
+            setCargandoConsolidados(false);
         }
     };
 
@@ -136,6 +410,7 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
             estudiante_id: Number(estudianteSeleccionado),
             curso_materia_id: cm.id,
             tipo: tipoSeleccionado,
+            categoria: etiquetasTexto || 'General',
             descripcion: etiquetasTexto ? `[${etiquetasTexto}] ${descripcion}` : descripcion,
         }, {
             onSuccess: () => {
@@ -144,6 +419,208 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
                 setEstudianteSeleccionado('');
             },
         });
+    };
+
+    const guardarObservadorDirector = () => {
+        if (!directorCursoId || !directorPeriodoId || !directorEstudianteId) return;
+        if (!directorDirty) {
+            setFeedbackDirector({ tipo: 'info', mensaje: 'No hay cambios por guardar en el observador general.' });
+            return;
+        }
+
+        omitirGuardNavegacionRef.current = true;
+        setGuardandoObservador(true);
+        setFeedbackDirector(null);
+
+        router.post('/profesor/observador/director-reporte', {
+            curso_id: Number(directorCursoId),
+            periodo_id: Number(directorPeriodoId),
+            estudiante_id: Number(directorEstudianteId),
+            resumen_general: resumenDirector,
+            fortalezas,
+            dificultades,
+            compromisos,
+            ficha,
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                setDirectorGuardado({
+                    resumen: resumenDirector.trim(),
+                    fortalezas: fortalezas.trim(),
+                    dificultades: dificultades.trim(),
+                    compromisos: compromisos.trim(),
+                    ficha: serializeFicha(ficha),
+                });
+                setFeedbackDirector({ tipo: 'success', mensaje: 'Observador general guardado correctamente.' });
+                router.reload({ only: ['observadorDirector'] });
+            },
+            onError: () => {
+                setFeedbackDirector({ tipo: 'error', mensaje: 'No se pudo guardar el observador general. Revisa los datos e inténtalo de nuevo.' });
+            },
+            onFinish: () => {
+                setGuardandoObservador(false);
+                omitirGuardNavegacionRef.current = false;
+            },
+        });
+    };
+
+    const guardarObservacionBoletin = () => {
+        if (!directorCursoId || !directorPeriodoId || !directorEstudianteId) return;
+        if (observacionBoletin.trim().length < 8) {
+            alert('La observación del boletín debe tener al menos 8 caracteres.');
+            return;
+        }
+
+        if (!boletinDirty) {
+            setFeedbackDirector({ tipo: 'info', mensaje: 'No hay cambios por guardar en la observación del boletín.' });
+            return;
+        }
+
+        omitirGuardNavegacionRef.current = true;
+        setGuardandoBoletin(true);
+        setFeedbackDirector(null);
+
+        router.post('/profesor/observador/boletin-observacion', {
+            curso_id: Number(directorCursoId),
+            periodo_id: Number(directorPeriodoId),
+            estudiante_id: Number(directorEstudianteId),
+            observacion_general: observacionBoletin.trim(),
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                const limpio = observacionBoletin.trim();
+                setObservacionBoletin(limpio);
+                setBoletinGuardado(limpio);
+                setFeedbackDirector({ tipo: 'success', mensaje: 'Observación del boletín guardada correctamente.' });
+                router.reload({ only: ['boletinObservaciones'] });
+            },
+            onError: () => {
+                setFeedbackDirector({ tipo: 'error', mensaje: 'No se pudo guardar la observación del boletín. Revisa los datos e inténtalo de nuevo.' });
+            },
+            onFinish: () => {
+                setGuardandoBoletin(false);
+                omitirGuardNavegacionRef.current = false;
+            },
+        });
+    };
+
+    const cargarImagen = async (src?: string | null): Promise<string | null> => {
+        if (!src) return null;
+        try {
+            const r = await fetch(src);
+            if (!r.ok) return null;
+            const blob = await r.blob();
+            return await new Promise((resolve) => {
+                const fr = new FileReader();
+                fr.onloadend = () => resolve(typeof fr.result === 'string' ? fr.result : null);
+                fr.onerror = () => resolve(null);
+                fr.readAsDataURL(blob);
+            });
+        } catch {
+            return null;
+        }
+    };
+
+    const exportarObservadorPdf = async () => {
+        if (!estudianteDirectorActual || !directorPeriodoId) {
+            alert('Selecciona curso, período y estudiante para generar el observador.');
+            return;
+        }
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const foto = await cargarImagen(estudianteDirectorActual.foto);
+
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('INFORMACIÓN DEL ESTUDIANTE', 12, 12);
+        doc.text(`AÑO LECTIVO - ${new Date().getFullYear()}`, 140, 12);
+
+        if (foto) {
+            doc.addImage(foto, 'JPEG', 12, 16, 36, 44);
+        } else {
+            doc.rect(12, 16, 36, 44);
+            doc.setFontSize(8);
+            doc.text('Sin foto', 24, 40);
+        }
+
+        doc.setFont('times', 'normal');
+        doc.setFontSize(10);
+        let y = 72;
+        const fila = (label: string, value?: string | null) => {
+            doc.setFont('times', 'bold');
+            doc.text(`${label}:`, 12, y);
+            doc.setFont('times', 'normal');
+            doc.text(value && value.trim() !== '' ? value : '____________________', 58, y);
+            y += 7;
+        };
+
+        fila('NOMBRE Y APELLIDOS', estudianteDirectorActual.estudiante);
+        fila('FECHA DE NACIMIENTO', estudianteDirectorActual.fecha_nacimiento);
+        fila('DOCUMENTO', estudianteDirectorActual.documento);
+        fila('DIRECCIÓN', estudianteDirectorActual.direccion);
+        fila('TELÉFONO', estudianteDirectorActual.telefono);
+        fila('ACUDIENTE', estudianteDirectorActual.acudiente);
+        fila('TELÉFONO ACUDIENTE', estudianteDirectorActual.telefono_acudiente);
+        fila('GRADO EN CURSO', `${estudianteDirectorActual.grado ?? ''} ${estudianteDirectorActual.grupo ?? ''}`.trim());
+        fila('DIRECTOR DE GRUPO', estudianteDirectorActual.director_grupo);
+
+        y += 3;
+        doc.setFont('times', 'bold');
+        doc.setFontSize(11);
+        doc.text('VALORACIÓN INTEGRAL DEL ESTUDIANTE', 12, y);
+        y += 5;
+
+        const drawBox = (titulo: string, contenido: string, h = 20) => {
+            doc.rect(12, y, 186, h);
+            doc.setFont('times', 'bold');
+            doc.setFontSize(9);
+            doc.text(titulo, 14, y + 5);
+            doc.setFont('times', 'normal');
+            const lines = doc.splitTextToSize(contenido || '-', 180);
+            doc.text(lines, 14, y + 10);
+            y += h + 2;
+        };
+
+        drawBox('Social y Afectivo', ficha.social_afectivo, 24);
+        drawBox('Comunicación y Seguimiento a la norma', ficha.comunicacion_norma, 24);
+        drawBox('Conductual y Académico', ficha.conductual_academico, 24);
+        drawBox('Asignaturas con Afinidad y Plan de mejora', ficha.afinidad_plan_mejora, 24);
+        drawBox('Compromiso', ficha.compromiso_detalle, 20);
+
+        doc.addPage();
+        doc.setFont('times', 'bold');
+        doc.setFontSize(13);
+        doc.text(`${periodos.find(p => p.id === Number(directorPeriodoId))?.nombre || 'PERÍODO'} ACADÉMICO`, 105, 16, { align: 'center' });
+
+        doc.setFont('times', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Nombre completo del estudiante: ${estudianteDirectorActual.estudiante}`, 12, 28);
+        doc.text(`Director de grupo: ${estudianteDirectorActual.director_grupo ?? ''}`, 12, 34);
+        doc.text(`Fecha de realización: ${new Date().toLocaleDateString('es-CO')}`, 12, 40);
+        doc.text(`Grado: ${(estudianteDirectorActual.grado ?? '') + ' ' + (estudianteDirectorActual.grupo ?? '')}`, 12, 46);
+
+        doc.setFont('times', 'bold');
+        doc.rect(12, 52, 62, 8); doc.text('FORTALEZAS', 43, 57, { align: 'center' });
+        doc.rect(74, 52, 62, 8); doc.text('DIFICULTADES', 105, 57, { align: 'center' });
+        doc.rect(136, 52, 62, 8); doc.text('COMPROMISOS', 167, 57, { align: 'center' });
+
+        const linesF = doc.splitTextToSize(fortalezas || '-', 58);
+        const linesD = doc.splitTextToSize(dificultades || '-', 58);
+        const linesC = doc.splitTextToSize(compromisos || '-', 58);
+        const maxLines = Math.max(linesF.length, linesD.length, linesC.length, 8);
+        const boxH = Math.max(70, maxLines * 4 + 10);
+
+        doc.rect(12, 60, 62, boxH);
+        doc.rect(74, 60, 62, boxH);
+        doc.rect(136, 60, 62, boxH);
+        doc.setFont('times', 'normal');
+        doc.text(linesF, 14, 66);
+        doc.text(linesD, 76, 66);
+        doc.text(linesC, 138, 66);
+
+        doc.save(`Observador_${estudianteDirectorActual.estudiante.replace(/\s+/g, '_')}.pdf`);
     };
 
     return (
@@ -159,10 +636,13 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6">
-                <button onClick={() => setTab('nuevo')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'nuevo' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    Nuevo Registro
+                <button onClick={() => cambiarTab('nuevo')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'nuevo' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    Nuevo comentario
                 </button>
-                <button onClick={() => setTab('historial')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'historial' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                <button onClick={() => cambiarTab('director')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'director' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    Director de Grupo ({observadorDirector.length})
+                </button>
+                <button onClick={() => cambiarTab('historial')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${tab === 'historial' ? 'bg-[#293577] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                     Historial ({observaciones.length})
                 </button>
             </div>
@@ -228,17 +708,6 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
                         <span className="w-5 h-5 rounded-full bg-red-200 flex items-center justify-center text-red-700 text-sm">✕</span>
                         <span className="hidden sm:inline">Disciplinaria/</span>Negativa
                     </button>
-                    <button
-                        onClick={() => setTipoSeleccionado('neutral')}
-                        className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border-2 transition-all text-sm sm:text-base ${
-                            tipoSeleccionado === 'neutral' 
-                                ? 'bg-yellow-500 text-white border-yellow-500' 
-                                : 'bg-white text-yellow-600 border-yellow-300 hover:bg-yellow-50'
-                        }`}
-                    >
-                        <span className="w-5 h-5 rounded-full bg-yellow-200 flex items-center justify-center text-yellow-700 text-sm">●</span>
-                        <span className="hidden sm:inline">Comportamiento/</span>Neutral
-                    </button>
                 </div>
 
                 {/* Etiquetas rápidas */}
@@ -284,8 +753,187 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
 
                 {/* Botón de registro */}
                 <button onClick={registrarObservacion} disabled={!estudianteSeleccionado || !descripcion.trim()} className="bg-[#293577] text-white px-6 py-3 rounded-lg hover:bg-[#181b49] transition-colors font-semibold disabled:opacity-50">
-                    Registrar Observación
+                    Registrar comentario
                 </button>
+            </div>
+            ) : tab === 'director' ? (
+            <div className="space-y-5">
+                {directorCursos.length === 0 && (
+                    <div className="bg-white rounded-xl border border-amber-200 p-5">
+                        <h3 className="text-sm font-bold text-amber-800">No tienes cursos como director de grupo</h3>
+                        <p className="text-sm text-amber-700 mt-1">Este panel es exclusivo para profesores que son directores de grupo en el año lectivo actual.</p>
+                    </div>
+                )}
+
+                <div className="bg-white rounded-xl shadow p-6 border border-gray-100">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800">Observador general por período</h2>
+                            <p className="text-sm text-gray-500 mt-1">Módulo del profesor director: completa fortalezas, dificultades y compromisos del estudiante por período.</p>
+                        </div>
+                        <span className="inline-flex items-center rounded-full bg-[#293577]/10 px-3 py-1 text-xs font-semibold text-[#293577]">
+                            Comentarios docentes y asistencia unificados
+                        </span>
+                    </div>
+
+                    {feedbackDirector && (
+                        <div className={`mt-4 rounded-lg border px-3 py-2 text-sm ${feedbackDirector.tipo === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : feedbackDirector.tipo === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
+                            {feedbackDirector.mensaje}
+                        </div>
+                    )}
+
+                    {hasUnsavedChanges && (
+                        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Tienes cambios sin guardar. Guarda antes de cambiar estudiante, período o salir del módulo.
+                        </div>
+                    )}
+
+                    {registroDirectorActual && (
+                        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                            Estás editando un observador ya registrado. Última actualización: {registroDirectorActual.updated_at}.
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5">
+                        <select value={directorCursoId} onChange={(e) => cambiarConGuard('cambiar de curso', () => { setDirectorCursoId(e.target.value); setDirectorEstudianteId(''); })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="">Selecciona curso (director)</option>
+                            {directorCursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                        <select value={directorPeriodoId} onChange={(e) => cambiarConGuard('cambiar de período', () => { setDirectorPeriodoId(e.target.value); setDirectorEstudianteId(''); })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="">Selecciona período</option>
+                            {periodos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        </select>
+                        <select value={directorEstudianteId} onChange={(e) => cambiarConGuard('cambiar de estudiante', () => setDirectorEstudianteId(e.target.value))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="">Selecciona estudiante</option>
+                            {directorEstudiantesFiltrados.map(e => (
+                                <option key={`${e.estudiante_id}-${e.periodo_id}`} value={e.estudiante_id}>{e.estudiante}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-[#293577]/20 bg-[#293577]/5 p-4">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div>
+                                <h3 className="text-sm font-bold text-[#293577]">Observación del boletín (separada)</h3>
+                                <p className="text-xs text-gray-600 mt-0.5">Este texto es el que aparece en el boletín del período y lo diligencia el director de grupo.</p>
+                            </div>
+                            {registroBoletinActual ? (
+                                <span className="text-[11px] rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">Boletín con observación</span>
+                            ) : (
+                                <span className="text-[11px] rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Sin observación en boletín</span>
+                            )}
+                        </div>
+                        <textarea
+                            value={observacionBoletin}
+                            onChange={(e) => setObservacionBoletin(e.target.value)}
+                            rows={4}
+                            className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            placeholder="Escribe aquí la observación del director para el boletín..."
+                        />
+                        <button
+                            onClick={guardarObservacionBoletin}
+                            disabled={!directorCursoId || !directorPeriodoId || !directorEstudianteId || guardandoBoletin || !boletinDirty}
+                            className="mt-3 rounded-lg bg-[#293577] px-4 py-2 text-sm font-semibold text-white hover:bg-[#181b49] disabled:opacity-40"
+                        >
+                            {guardandoBoletin ? 'Guardando observación...' : boletinDirty ? 'Guardar observación de boletín' : 'Sin cambios por guardar'}
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Resumen general</label>
+                            <textarea value={resumenDirector} onChange={(e) => setResumenDirector(e.target.value)} rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Síntesis integral del período..." />
+                        </div>
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-sm font-semibold text-gray-700">Comentarios consolidados</p>
+                                <button onClick={cargarComentariosConsolidados} disabled={!directorEstudianteId || !directorCursoId || !directorPeriodoId || cargandoConsolidados} className="text-xs px-2.5 py-1 rounded bg-[#293577] text-white disabled:opacity-40">
+                                    {cargandoConsolidados ? 'Cargando...' : 'Actualizar'}
+                                </button>
+                            </div>
+                            <div className="max-h-40 overflow-auto space-y-2 pr-1">
+                                {comentariosConsolidados.length === 0 ? (
+                                    <p className="text-xs text-gray-400">Sin comentarios cargados para la selección actual.</p>
+                                ) : comentariosConsolidados.map(item => (
+                                    <div key={item.id} className="rounded border border-gray-200 bg-white p-2">
+                                        <p className="text-[11px] font-semibold text-gray-600 uppercase">{item.origen} · {item.fecha}</p>
+                                        <p className="text-xs text-gray-700 mt-0.5">{item.descripcion}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                        <h3 className="text-sm font-bold text-gray-800">Ficha del observador general (formato integral)</h3>
+                        <p className="text-xs text-gray-500 mt-1">Este bloque corresponde al observador PDF (distinto al boletín).</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Social y Afectivo</label>
+                                <textarea value={ficha.social_afectivo} onChange={(e) => setFicha({ ...ficha, social_afectivo: e.target.value })} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Comunicación y norma</label>
+                                <textarea value={ficha.comunicacion_norma} onChange={(e) => setFicha({ ...ficha, comunicacion_norma: e.target.value })} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Conductual y Académico</label>
+                                <textarea value={ficha.conductual_academico} onChange={(e) => setFicha({ ...ficha, conductual_academico: e.target.value })} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Afinidad y plan de mejora</label>
+                                <textarea value={ficha.afinidad_plan_mejora} onChange={(e) => setFicha({ ...ficha, afinidad_plan_mejora: e.target.value })} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Compromiso (detalle)</label>
+                                <textarea value={ficha.compromiso_detalle} onChange={(e) => setFicha({ ...ficha, compromiso_detalle: e.target.value })} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fortalezas</label>
+                            <textarea value={fortalezas} onChange={(e) => setFortalezas(e.target.value)} rows={5} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Logros y avances observados" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Dificultades</label>
+                            <textarea value={dificultades} onChange={(e) => setDificultades(e.target.value)} rows={5} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Aspectos a mejorar" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Compromisos</label>
+                            <textarea value={compromisos} onChange={(e) => setCompromisos(e.target.value)} rows={5} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Compromisos del estudiante y familia" />
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <button onClick={guardarObservadorDirector} disabled={!directorCursoId || !directorPeriodoId || !directorEstudianteId || directorCursos.length === 0 || guardandoObservador || !directorDirty} className="bg-[#293577] text-white px-6 py-2.5 rounded-lg hover:bg-[#181b49] transition-colors font-semibold disabled:opacity-40">
+                            {guardandoObservador ? 'Guardando observador...' : directorDirty ? 'Guardar observador general' : 'Observador sin cambios'}
+                        </button>
+                        <button onClick={exportarObservadorPdf} disabled={!directorCursoId || !directorPeriodoId || !directorEstudianteId} className="bg-white border border-[#293577] text-[#293577] px-5 py-2.5 rounded-lg hover:bg-[#293577]/5 transition-colors font-semibold disabled:opacity-40">
+                            Generar PDF del observador
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-100">
+                        <h3 className="font-semibold text-gray-800">Historial del director</h3>
+                    </div>
+                    <div className="divide-y divide-gray-100 max-h-80 overflow-auto">
+                        {observadorDirector.length === 0 ? (
+                            <div className="p-6 text-sm text-gray-500">No hay registros de observador por período.</div>
+                        ) : observadorDirector.map(reg => (
+                            <div key={reg.id} className="p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-semibold text-gray-800">{reg.estudiante} · {reg.curso} · {reg.periodo}</p>
+                                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${reg.estado === 'completo' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{reg.estado}</span>
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">Actualizado: {reg.updated_at}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
             ) : (
             /* Historial de observaciones */

@@ -29,7 +29,25 @@ class User extends Authenticatable
         'telefono',
         'direccion',
         'fecha_nacimiento',
+        'lugar_nacimiento',
         'genero',
+        'grupo_sanguineo',
+        'eps',
+        'dificultad_aprendizaje',
+        'dificultad_aprendizaje_desc',
+        'diagnostico_salud',
+        'diagnostico_salud_desc',
+        'alergias',
+        'alergias_desc',
+        'nombre_madre',
+        'telefono_madre',
+        'ocupacion_madre',
+        'nombre_padre',
+        'telefono_padre',
+        'ocupacion_padre',
+        'convive_con',
+        'numero_hermanos',
+        'lugar_que_ocupa_familia',
         'foto',
         'activo',
         'login_attempts',
@@ -62,6 +80,10 @@ class User extends Authenticatable
             'activo'               => 'boolean',
             'last_login_at'        => 'datetime',
             'must_change_password' => 'boolean',
+            'dificultad_aprendizaje' => 'boolean',
+            'diagnostico_salud'    => 'boolean',
+            'alergias'             => 'boolean',
+            'numero_hermanos'      => 'integer',
         ];
     }
 
@@ -145,6 +167,12 @@ class User extends Authenticatable
     public function observacionesEscritas(): HasMany
     {
         return $this->hasMany(Observacion::class, 'profesor_id');
+    }
+
+    /** Observadores de período escritos como director de grupo */
+    public function observadoresPeriodoDirigidos(): HasMany
+    {
+        return $this->hasMany(ObservadorPeriodo::class, 'director_id');
     }
 
     /** Cursos donde es director de grupo */

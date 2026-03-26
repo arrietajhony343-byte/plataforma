@@ -12,12 +12,48 @@ use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class UsuarioController extends Controller
 {
+    private function emptyToNull(mixed $value): mixed
+    {
+        return $value === '' ? null : $value;
+    }
+
+    private function normalizeTipoDocumento(mixed $value): string
+    {
+        $raw = Str::upper(trim((string) ($value ?? '')));
+        $compact = preg_replace('/\s+/', '', str_replace('.', '', $raw)) ?? $raw;
+
+        if (Str::startsWith($compact, 'PPT')) {
+            return 'PP';
+        }
+        if (Str::startsWith($compact, 'PERUCE')) {
+            return 'CE';
+        }
+        if (Str::startsWith($compact, 'TI')) {
+            return 'TI';
+        }
+        if (Str::startsWith($compact, 'RC')) {
+            return 'RC';
+        }
+        if (Str::startsWith($compact, 'CC')) {
+            return 'CC';
+        }
+        if (Str::startsWith($compact, 'CE')) {
+            return 'CE';
+        }
+        if (Str::startsWith($compact, 'PP')) {
+            return 'PP';
+        }
+
+        return 'CC';
+    }
+
     public function index(): Response
     {
         $users = User::with(['roles', 'sede'])
@@ -127,6 +163,18 @@ class UsuarioController extends Controller
 
     public function store(Request $request)
     {
+        $request->merge([
+            'phone'            => $this->emptyToNull($request->input('phone')),
+            'documento'        => $this->emptyToNull($request->input('documento')),
+            'tipo_documento'   => $this->normalizeTipoDocumento($request->input('tipo_documento')),
+            'direccion'        => $this->emptyToNull($request->input('direccion')),
+            'fecha_nacimiento' => $this->emptyToNull($request->input('fecha_nacimiento')),
+            'genero'           => $this->emptyToNull($request->input('genero')),
+            'curso_id'         => $this->emptyToNull($request->input('curso_id')),
+            'acudiente_id'     => $this->emptyToNull($request->input('acudiente_id')),
+            'sede_id'          => $this->emptyToNull($request->input('sede_id')),
+        ]);
+
         $data = $request->validate([
             'name'             => 'required|string|max:255',
             'email'            => 'required|email|unique:users,email',
@@ -200,6 +248,18 @@ class UsuarioController extends Controller
 
     public function update(Request $request, User $user)
     {
+        $request->merge([
+            'phone'            => $this->emptyToNull($request->input('phone')),
+            'documento'        => $this->emptyToNull($request->input('documento')),
+            'tipo_documento'   => $this->normalizeTipoDocumento($request->input('tipo_documento')),
+            'direccion'        => $this->emptyToNull($request->input('direccion')),
+            'fecha_nacimiento' => $this->emptyToNull($request->input('fecha_nacimiento')),
+            'genero'           => $this->emptyToNull($request->input('genero')),
+            'curso_id'         => $this->emptyToNull($request->input('curso_id')),
+            'acudiente_id'     => $this->emptyToNull($request->input('acudiente_id')),
+            'sede_id'          => $this->emptyToNull($request->input('sede_id')),
+        ]);
+
         $data = $request->validate([
             'name'             => 'required|string|max:255',
             'email'            => ['required', 'email', Rule::unique('users')->ignore($user->id)],

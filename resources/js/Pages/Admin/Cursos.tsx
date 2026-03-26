@@ -26,6 +26,7 @@ interface Sede {
 interface Profesor {
     id: number;
     name: string;
+    documento?: string | null;
     sede_id?: number | null;
 }
 
@@ -54,6 +55,7 @@ interface Curso {
     activo: boolean;
     sede_id?: number;
     sede_nombre?: string;
+    imagen?: string;
 }
 
 interface Materia {
@@ -65,6 +67,7 @@ interface Materia {
     profesores: Profesor[];
     horasSemanales: number;
     activa: boolean;
+    imagen?: string;
 }
 
 interface MateriaAsignada {
@@ -206,8 +209,21 @@ function ProfSearchSelect({ options, value, onChange }: {
 }
 
 /* ─── Form defaults ─── */
-const EMPTY_CURSO = { nombre: '', nivel: '', grado: '', grupo: '', jornada: 'Mañana', cupo_maximo: '35', director_grupo_id: '', sede_id: '' };
-const EMPTY_MATERIA = { nombre: '', area: '', codigo: '', horas_semanales: '4' };
+const CURSO_IMAGE_PRESETS = [
+    { label: 'Curso (Clásico)', value: '/images/presets/curso-default.svg' },
+    { label: 'Curso Primaria', value: '/images/presets/curso-primaria.svg' },
+    { label: 'Curso Bachillerato', value: '/images/presets/curso-bachillerato.svg' },
+];
+
+const MATERIA_IMAGE_PRESETS = [
+    { label: 'Materia (Clásico)', value: '/images/presets/materia-default.svg' },
+    { label: 'Ciencias', value: '/images/presets/materia-ciencias.svg' },
+    { label: 'Humanidades', value: '/images/presets/materia-humanidades.svg' },
+    { label: 'Tecnología', value: '/images/presets/materia-tecnologia.svg' },
+];
+
+const EMPTY_CURSO = { nombre: '', nivel: '', grado: '', grupo: '', jornada: 'Mañana', cupo_maximo: '35', director_grupo_id: '', sede_id: '', imagen_preset: '/images/presets/curso-default.svg' };
+const EMPTY_MATERIA = { nombre: '', area: '', codigo: '', horas_semanales: '4', imagen_preset: '/images/presets/materia-default.svg' };
 
 /* ═══════════════════════════════════════════════════════ */
 export default function Cursos({ cursos, materias, profesores: listaProfesores, materiasProfesores, totalEstudiantes, anio, sedes }: Props) {
@@ -234,8 +250,12 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
     const [deletingItem, setDeletingItem] = useState<{ type: 'curso' | 'materia'; id: number; nombre: string } | null>(null);
     const [cursoForm, setCursoForm] = useState({ ...EMPTY_CURSO });
     const [materiaForm, setMateriaForm] = useState({ ...EMPTY_MATERIA });
+    const [cursoImageFile, setCursoImageFile] = useState<File | null>(null);
+    const [cursoImagePreview, setCursoImagePreview] = useState<string | null>(null);
+    const [materiaImageFile, setMateriaImageFile] = useState<File | null>(null);
     const [materiasAsignadas, setMateriasAsignadas] = useState<MateriaAsignada[]>([]);
     const [profesoresSeleccionados, setProfesoresSeleccionados] = useState<number[]>([]);
+    const [profesorSearchTerm, setProfesorSearchTerm] = useState('');
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [cursoModalStep, setCursoModalStep] = useState<1 | 2>(1);
@@ -279,6 +299,17 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
         return listaProfesores.filter(p => !p.sede_id || String(p.sede_id) === cursoForm.sede_id);
     }, [listaProfesores, cursoForm.sede_id]);
 
+    const filteredProfesoresModal = useMemo(() => {
+        const q = profesorSearchTerm.trim().toLowerCase();
+        if (!q) return listaProfesores;
+
+        return listaProfesores.filter((p) => {
+            const name = (p.name ?? '').toLowerCase();
+            const doc = String(p.documento ?? '').toLowerCase();
+            return name.includes(q) || doc.includes(q);
+        });
+    }, [listaProfesores, profesorSearchTerm]);
+
     const openDetalle = (curso: Curso) => { setDetalleTab('materias'); setCursoDetalle(curso); };
 
     const stats = useMemo(() => ({
@@ -299,10 +330,29 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
         return agrupados;
     }, [filteredCursos]);
 
+    useEffect(() => {
+        if (!cursoImageFile) {
+            setCursoImagePreview(null);
+            return;
+        }
+
+        const url = URL.createObjectURL(cursoImageFile);
+        setCursoImagePreview(url);
+
+        return () => URL.revokeObjectURL(url);
+    }, [cursoImageFile]);
+
+    const cursoPreviewNombre = cursoForm.nombre.trim() || 'Curso';
+    const cursoPreviewDetalle = [
+        cursoForm.grado.trim() ? `Grado ${cursoForm.grado.trim()}` : '',
+        cursoForm.grupo.trim() ? `Grupo ${cursoForm.grupo.trim()}` : '',
+    ].filter(Boolean).join(' · ');
+
     /* ─── Curso CRUD ─── */
     const openCreateCurso = () => {
         setEditingCurso(null);
         setCursoForm({ ...EMPTY_CURSO });
+        setCursoImageFile(null);
         setMateriasAsignadas([]);
         setFormErrors({});
         setCursoModalStep(1);
@@ -321,7 +371,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             cupo_maximo: curso.cupo_maximo?.toString() || '35',
             director_grupo_id: curso.director_grupo_id?.toString() || '',
             sede_id: curso.sede_id?.toString() || '',
+            imagen_preset: curso.imagen || '/images/presets/curso-default.svg',
         });
+        setCursoImageFile(null);
         // Cargar materias existentes del curso con sus profesor_id reales
         setMateriasAsignadas(
             curso.materias
@@ -377,21 +429,28 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
         }
 
         setProcessing(true);
-        const payload: Record<string, any> = {
-            nombre: cursoForm.nombre,
-            nivel: cursoForm.nivel,
-            grado: cursoForm.grado,
-            grupo: cursoForm.grupo,
-            jornada: cursoForm.jornada,
-            cupo_maximo: cursoForm.cupo_maximo ? parseInt(cursoForm.cupo_maximo) : null,
-            director_grupo_id: cursoForm.director_grupo_id ? parseInt(cursoForm.director_grupo_id) : null,
-            sede_id: cursoForm.sede_id ? parseInt(cursoForm.sede_id) : null,
-            materias_asignadas: validMaterias.map(m => ({ materia_id: m.materia_id, profesor_id: m.profesor_id })),
-        };
+        const formData = new FormData();
+        formData.append('nombre', cursoForm.nombre);
+        formData.append('nivel', cursoForm.nivel);
+        formData.append('grado', cursoForm.grado);
+        formData.append('grupo', cursoForm.grupo);
+        formData.append('jornada', cursoForm.jornada);
+        if (cursoForm.cupo_maximo) formData.append('cupo_maximo', cursoForm.cupo_maximo);
+        if (cursoForm.director_grupo_id) formData.append('director_grupo_id', cursoForm.director_grupo_id);
+        if (cursoForm.sede_id) formData.append('sede_id', cursoForm.sede_id);
+        formData.append('imagen_preset', cursoForm.imagen_preset || '/images/presets/curso-default.svg');
+        if (cursoImageFile) formData.append('imagen_file', cursoImageFile);
+
+        validMaterias.forEach((m, idx) => {
+            formData.append(`materias_asignadas[${idx}][materia_id]`, String(m.materia_id));
+            if (m.profesor_id) formData.append(`materias_asignadas[${idx}][profesor_id]`, String(m.profesor_id));
+        });
 
         if (editingCurso) {
-            router.put(`/admin/cursos/${editingCurso.id}`, payload, {
+            formData.append('_method', 'put');
+            router.post(`/admin/cursos/${editingCurso.id}`, formData, {
                 preserveScroll: true,
+                forceFormData: true,
                 onSuccess: () => { setShowCursoModal(false); setProcessing(false); },
                 onError: (errs) => {
                     setFormErrors(errs as Record<string, string>);
@@ -401,8 +460,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                 },
             });
         } else {
-            router.post('/admin/cursos', payload, {
+            router.post('/admin/cursos', formData, {
                 preserveScroll: true,
+                forceFormData: true,
                 onSuccess: () => { setShowCursoModal(false); setProcessing(false); },
                 onError: (errs) => {
                     setFormErrors(errs as Record<string, string>);
@@ -418,6 +478,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
     const openCreateMateria = () => {
         setEditingMateria(null);
         setMateriaForm({ ...EMPTY_MATERIA });
+        setMateriaImageFile(null);
         setFormErrors({});
         setShowMateriaModal(true);
     };
@@ -429,7 +490,9 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             area: materia.area,
             codigo: materia.codigo || '',
             horas_semanales: materia.horasSemanales?.toString() || '4',
+            imagen_preset: materia.imagen || '/images/presets/materia-default.svg',
         });
+        setMateriaImageFile(null);
         setFormErrors({});
         setShowMateriaModal(true);
     };
@@ -444,22 +507,26 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
         if (Object.keys(errors).length > 0) { setFormErrors(errors); return; }
 
         setProcessing(true);
-        const payload = {
-            nombre: materiaForm.nombre,
-            area: materiaForm.area,
-            codigo: materiaForm.codigo,
-            horas_semanales: parseInt(materiaForm.horas_semanales),
-        };
+        const formData = new FormData();
+        formData.append('nombre', materiaForm.nombre);
+        formData.append('area', materiaForm.area);
+        formData.append('codigo', materiaForm.codigo);
+        formData.append('horas_semanales', materiaForm.horas_semanales);
+        formData.append('imagen_preset', materiaForm.imagen_preset || '/images/presets/materia-default.svg');
+        if (materiaImageFile) formData.append('imagen_file', materiaImageFile);
 
         if (editingMateria) {
-            router.put(`/admin/materias/${editingMateria.id}`, payload, {
+            formData.append('_method', 'put');
+            router.post(`/admin/materias/${editingMateria.id}`, formData, {
                 preserveScroll: true,
+                forceFormData: true,
                 onSuccess: () => { setShowMateriaModal(false); setProcessing(false); },
                 onError: (errs) => { setFormErrors(errs as Record<string, string>); setProcessing(false); },
             });
         } else {
-            router.post('/admin/materias', payload, {
+            router.post('/admin/materias', formData, {
                 preserveScroll: true,
+                forceFormData: true,
                 onSuccess: () => { setShowMateriaModal(false); setProcessing(false); },
                 onError: (errs) => { setFormErrors(errs as Record<string, string>); setProcessing(false); },
             });
@@ -470,7 +537,14 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
     const openProfesoresModal = (materia: Materia) => {
         setManagingProfesoresMateria(materia);
         setProfesoresSeleccionados(materia.profesores.map(p => p.id));
+        setProfesorSearchTerm('');
         setShowProfesoresModal(true);
+    };
+
+    const closeProfesoresModal = () => {
+        setShowProfesoresModal(false);
+        setManagingProfesoresMateria(null);
+        setProfesorSearchTerm('');
     };
 
     const handleProfesoresSubmit = (e: React.FormEvent) => {
@@ -481,7 +555,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
             profesores_ids: profesoresSeleccionados,
         }, {
             preserveScroll: true,
-            onSuccess: () => { setShowProfesoresModal(false); setManagingProfesoresMateria(null); setProcessing(false); },
+            onSuccess: () => { closeProfesoresModal(); setProcessing(false); },
             onError: () => setProcessing(false),
         });
     };
@@ -805,7 +879,11 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                         <div key={materia.id} className={`bg-white rounded-xl shadow-sm border ${style.colorBorder} hover:shadow-lg transition-all overflow-hidden flex flex-col`}>
                                             <div className={`${style.colorBg} p-4 border-b ${style.colorBorder}`}>
                                                 <div className="flex items-center gap-3">
-                                                    <span className={`${style.colorText} w-9 h-9 flex items-center justify-center rounded-xl bg-white/70 shadow-sm flex-shrink-0`}>{style.icono}</span>
+                                                    <span className={`${style.colorText} w-10 h-10 overflow-hidden flex items-center justify-center rounded-xl bg-white/70 shadow-sm flex-shrink-0`}>
+                                                        {materia.imagen ? (
+                                                            <img src={materia.imagen} alt={materia.nombre} className="w-full h-full object-cover" />
+                                                        ) : style.icono}
+                                                    </span>
                                                     <div className="min-w-0 flex-1">
                                                         <h3 className={`font-bold text-base ${style.colorText} truncate`}>{materia.nombre}</h3>
                                                         <div className="flex items-center gap-2">
@@ -966,6 +1044,48 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                                 </select>
                                             </div>
                                         )}
+
+                                        <div className="rounded-xl border border-gray-200 p-3 bg-gray-50/60">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Imagen del curso</label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Predeterminada</label>
+                                                    <select
+                                                        value={cursoForm.imagen_preset}
+                                                        onChange={e => setCursoForm({ ...cursoForm, imagen_preset: e.target.value })}
+                                                        className={inputClass('imagen_preset')}
+                                                    >
+                                                        {!CURSO_IMAGE_PRESETS.some(opt => opt.value === cursoForm.imagen_preset) && (
+                                                            <option value={cursoForm.imagen_preset}>Imagen actual</option>
+                                                        )}
+                                                        {CURSO_IMAGE_PRESETS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">Subir personalizada (opcional)</label>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={e => setCursoImageFile(e.target.files?.[0] ?? null)}
+                                                        className="w-full text-xs text-gray-600 file:mr-2 file:rounded-lg file:border-0 file:bg-[#293577] file:px-3 file:py-1.5 file:text-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 h-24 rounded-lg overflow-hidden border border-gray-200 bg-white relative">
+                                                <img
+                                                    src={cursoImagePreview || cursoForm.imagen_preset}
+                                                    alt="Vista previa de curso"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                                <div className="absolute inset-0 bg-gradient-to-r from-[#0f1438]/65 via-[#0f1438]/35 to-transparent" />
+                                                <div className="absolute inset-x-0 bottom-0 px-3 py-2 bg-gradient-to-t from-black/50 to-transparent">
+                                                    <p className="text-white text-sm font-extrabold leading-tight truncate">{cursoPreviewNombre}</p>
+                                                    <p className="text-white/90 text-[10px] font-medium truncate">
+                                                        {cursoPreviewDetalle || 'Completa grado y grupo para generar el subtitulo'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </>
                                 )}
 
@@ -1130,6 +1250,46 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                     {formErrors.horas_semanales && <p className="text-xs text-red-500 mt-1">{formErrors.horas_semanales}</p>}
                                 </div>
                             </div>
+                            <div className="rounded-xl border border-gray-200 p-3 bg-gray-50/60">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Imagen de la materia</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Predeterminada</label>
+                                        <select
+                                            value={materiaForm.imagen_preset}
+                                            onChange={e => setMateriaForm({ ...materiaForm, imagen_preset: e.target.value })}
+                                            className={inputClass('imagen_preset')}
+                                        >
+                                            {!MATERIA_IMAGE_PRESETS.some(opt => opt.value === materiaForm.imagen_preset) && (
+                                                <option value={materiaForm.imagen_preset}>Imagen actual</option>
+                                            )}
+                                            {MATERIA_IMAGE_PRESETS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Subir personalizada (opcional)</label>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={e => setMateriaImageFile(e.target.files?.[0] ?? null)}
+                                            className="w-full text-xs text-gray-600 file:mr-2 file:rounded-lg file:border-0 file:bg-[#293577] file:px-3 file:py-1.5 file:text-white"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="mt-3 h-24 rounded-lg overflow-hidden border border-gray-200 bg-white">
+                                    {materiaImageFile ? (
+                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-600 px-3 text-center bg-white">
+                                            Archivo seleccionado: {materiaImageFile.name}
+                                        </div>
+                                    ) : (
+                                        <img
+                                            src={materiaForm.imagen_preset}
+                                            alt="Vista previa de materia"
+                                            className="w-full h-full object-cover"
+                                        />
+                                    )}
+                                </div>
+                            </div>
                             <div className="flex gap-3 pt-2">
                                 <button type="button" onClick={() => setShowMateriaModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
                                     Cancelar
@@ -1278,7 +1438,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
 
             {/* ─── Modal Gestionar Profesores de Materia ─── */}
             {showProfesoresModal && managingProfesoresMateria && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowProfesoresModal(false)}>
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closeProfesoresModal}>
                     <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
                         <div className="bg-gradient-to-r from-[#181b49] to-[#293577] rounded-t-2xl px-6 py-4 flex-shrink-0">
                             <div className="flex items-start gap-3">
@@ -1298,13 +1458,27 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                         </div>
                         <form onSubmit={handleProfesoresSubmit} className="flex flex-col flex-1 overflow-hidden">
                             <div className="p-4 overflow-y-auto flex-1">
+                                <div className="mb-3 relative">
+                                    <SearchIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input
+                                        type="text"
+                                        value={profesorSearchTerm}
+                                        onChange={(e) => setProfesorSearchTerm(e.target.value)}
+                                        placeholder="Buscar profesor por nombre o documento..."
+                                        className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                    />
+                                </div>
                                 <div className="mb-3 flex items-center justify-between">
                                     <p className="text-sm font-semibold text-gray-700">
                                         <span className="text-[#293577]">{profesoresSeleccionados.length}</span>
                                         <span className="text-gray-400"> / {listaProfesores.length} profesores seleccionados</span>
                                     </p>
                                     <div className="flex gap-2">
-                                        <button type="button" onClick={() => setProfesoresSeleccionados(listaProfesores.map(p => p.id))} className="text-xs text-[#293577] font-medium hover:underline">
+                                        <button
+                                            type="button"
+                                            onClick={() => setProfesoresSeleccionados(prev => Array.from(new Set([...prev, ...filteredProfesoresModal.map(p => p.id)])))}
+                                            className="text-xs text-[#293577] font-medium hover:underline"
+                                        >
                                             Seleccionar todos
                                         </button>
                                         <span className="text-gray-300">|</span>
@@ -1314,7 +1488,7 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    {listaProfesores.map(profesor => {
+                                    {filteredProfesoresModal.map(profesor => {
                                         const selected = profesoresSeleccionados.includes(profesor.id);
                                         const initials = profesor.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
                                         return (
@@ -1346,9 +1520,14 @@ export default function Cursos({ cursos, materias, profesores: listaProfesores, 
                                         <p className="text-sm text-gray-500">No hay profesores registrados</p>
                                     </div>
                                 )}
+                                {listaProfesores.length > 0 && filteredProfesoresModal.length === 0 && (
+                                    <div className="text-center py-8">
+                                        <p className="text-sm text-gray-500">No se encontraron profesores con ese criterio</p>
+                                    </div>
+                                )}
                             </div>
                             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
-                                <button type="button" onClick={() => setShowProfesoresModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
+                                <button type="button" onClick={closeProfesoresModal} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
                                     Cancelar
                                 </button>
                                 <button type="submit" disabled={processing} className="flex-1 bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-[#293577]/25 text-sm font-medium disabled:opacity-50">

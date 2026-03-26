@@ -27,6 +27,7 @@ interface Materia {
     id: number;
     nombre: string;
     profesor: string;
+    imagen?: string;
     icono: string;
     color: string;
     colorBg: string;
@@ -40,106 +41,18 @@ interface Materia {
     promedioCortes: { corte: string; nota: number }[];
 }
 
-export default function Materias() {
-    const nombre = 'Andrés Felipe Muñoz';
+interface Props {
+    estudiante: {
+        nombre: string;
+    };
+    materias: Materia[];
+}
+
+export default function Materias({ estudiante, materias }: Props) {
+    const nombre = estudiante?.nombre || 'Estudiante';
     const [materiaActiva, setMateriaActiva] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filtroActividad, setFiltroActividad] = useState('todas');
-
-
-    const materias: Materia[] = [
-        {
-            id: 1, nombre: 'Matemáticas', profesor: 'María García', icono: 'Ma',
-            color: 'from-blue-500 to-blue-600', colorBg: 'bg-blue-50', colorText: 'text-blue-700', colorBorder: 'border-blue-200',
-            promedio: 4.5, horasSemanales: 5, salon: 'Aula 301',
-            descripcion: 'Álgebra, geometría analítica y trigonometría para grado 8°.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 4.5 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 1, titulo: 'Taller de ecuaciones cuadráticas', descripcion: 'Resolver los 20 ejercicios del capítulo 5. Mostrar procedimiento completo.', tipo: 'Taller', fechaAsignada: '20 Feb 2026', fechaEntrega: '26 Feb 2026', estado: 'pendiente', peso: 15 },
-                { id: 2, titulo: 'Quiz factorización', descripcion: 'Evaluación presencial sobre factorización de polinomios.', tipo: 'Evaluación', fechaAsignada: '22 Feb 2026', fechaEntrega: '02 Mar 2026', estado: 'pendiente', peso: 20 },
-                { id: 3, titulo: 'Tarea: Funciones lineales', descripcion: 'Graficar 10 funciones lineales e identificar pendiente e intercepto.', tipo: 'Tarea', fechaAsignada: '10 Feb 2026', fechaEntrega: '17 Feb 2026', estado: 'calificada', nota: 4.8, peso: 10, retroalimentacion: 'Excelente trabajo, gráficas muy precisas.' },
-                { id: 4, titulo: 'Examen parcial - Álgebra', descripcion: 'Examen del primer corte cubriendo todos los temas vistos.', tipo: 'Examen', fechaAsignada: '05 Feb 2026', fechaEntrega: '05 Feb 2026', estado: 'calificada', nota: 4.2, peso: 30, retroalimentacion: 'Buen desempeño. Mejorar en factorización de trinomios.' },
-            ]
-        },
-        {
-            id: 2, nombre: 'Español', profesor: 'Juan Pérez', icono: 'Es',
-            color: 'from-amber-500 to-amber-600', colorBg: 'bg-amber-50', colorText: 'text-amber-700', colorBorder: 'border-amber-200',
-            promedio: 3.8, horasSemanales: 5, salon: 'Aula 301',
-            descripcion: 'Comprensión lectora, literatura colombiana y producción textual.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 3.8 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 5, titulo: 'Ensayo: Cien Años de Soledad', descripcion: 'Escribir un ensayo argumentativo de 3 páginas sobre el realismo mágico en la obra.', tipo: 'Ensayo', fechaAsignada: '18 Feb 2026', fechaEntrega: '27 Feb 2026', estado: 'pendiente', peso: 20 },
-                { id: 6, titulo: 'Exposición: Poesía colombiana', descripcion: 'Preparar presentación de 10 min sobre un poeta colombiano.', tipo: 'Exposición', fechaAsignada: '22 Feb 2026', fechaEntrega: '05 Mar 2026', estado: 'pendiente', peso: 15 },
-                { id: 7, titulo: 'Control de lectura Cap. 1-5', descripcion: 'Cuestionario sobre los primeros 5 capítulos.', tipo: 'Evaluación', fechaAsignada: '08 Feb 2026', fechaEntrega: '08 Feb 2026', estado: 'calificada', nota: 3.5, peso: 15, retroalimentacion: 'Faltó profundidad en las respuestas de análisis.' },
-            ]
-        },
-        {
-            id: 3, nombre: 'Ciencias Naturales', profesor: 'Pedro Sánchez', icono: 'CN',
-            color: 'from-green-500 to-green-600', colorBg: 'bg-green-50', colorText: 'text-green-700', colorBorder: 'border-green-200',
-            promedio: 4.2, horasSemanales: 4, salon: 'Lab. 1',
-            descripcion: 'Biología celular, ecosistemas y método científico.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 4.2 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 8, titulo: 'Informe de laboratorio #3', descripcion: 'Redactar informe sobre el experimento de osmosis en células vegetales.', tipo: 'Informe', fechaAsignada: '19 Feb 2026', fechaEntrega: '01 Mar 2026', estado: 'pendiente', peso: 15 },
-                { id: 9, titulo: 'Maqueta del sistema digestivo', descripcion: 'Construir maqueta a escala con materiales reciclables.', tipo: 'Proyecto', fechaAsignada: '10 Feb 2026', fechaEntrega: '15 Feb 2026', estado: 'calificada', nota: 4.5, peso: 20, retroalimentacion: 'Muy creativo y bien explicado.' },
-            ]
-        },
-        {
-            id: 4, nombre: 'Historia', profesor: 'Carlos López', icono: 'Hi',
-            color: 'from-purple-500 to-purple-600', colorBg: 'bg-purple-50', colorText: 'text-purple-700', colorBorder: 'border-purple-200',
-            promedio: 3.5, horasSemanales: 3, salon: 'Aula 301',
-            descripcion: 'Historia de Colombia desde la independencia hasta la actualidad.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 3.5 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 10, titulo: 'Línea de tiempo: Independencia', descripcion: 'Crear línea de tiempo ilustrada del proceso de independencia 1810-1819.', tipo: 'Proyecto', fechaAsignada: '12 Feb 2026', fechaEntrega: '20 Feb 2026', estado: 'vencida', peso: 15 },
-                { id: 11, titulo: 'Ensayo: Constitución de 1991', descripcion: 'Analizar los cambios más importantes de la constitución.', tipo: 'Ensayo', fechaAsignada: '22 Feb 2026', fechaEntrega: '08 Mar 2026', estado: 'pendiente', peso: 20 },
-            ]
-        },
-        {
-            id: 5, nombre: 'Inglés', profesor: 'Ana Martínez', icono: 'In',
-            color: 'from-indigo-500 to-indigo-600', colorBg: 'bg-indigo-50', colorText: 'text-indigo-700', colorBorder: 'border-indigo-200',
-            promedio: 4.7, horasSemanales: 4, salon: 'Aula 305',
-            descripcion: 'English B1 level: grammar, reading comprehension, and speaking.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 4.7 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 12, titulo: 'Present Perfect Worksheet', descripcion: 'Complete exercises 1-20 from the workbook, page 45-47.', tipo: 'Tarea', fechaAsignada: '19 Feb 2026', fechaEntrega: '28 Feb 2026', estado: 'pendiente', peso: 10 },
-                { id: 13, titulo: 'Reading: Short Story', descripcion: 'Read "The Gift of the Magi" and answer comprehension questions.', tipo: 'Tarea', fechaAsignada: '21 Feb 2026', fechaEntrega: '03 Mar 2026', estado: 'pendiente', peso: 10 },
-                { id: 14, titulo: 'Speaking Test', descripcion: 'Oral presentation about environmental issues (3 min).', tipo: 'Evaluación', fechaAsignada: '05 Feb 2026', fechaEntrega: '05 Feb 2026', estado: 'calificada', nota: 4.9, peso: 25, retroalimentacion: 'Excellent pronunciation and fluency!' },
-            ]
-        },
-        {
-            id: 6, nombre: 'Química', profesor: 'Roberto Gómez', icono: 'Qu',
-            color: 'from-cyan-500 to-cyan-600', colorBg: 'bg-cyan-50', colorText: 'text-cyan-700', colorBorder: 'border-cyan-200',
-            promedio: 3.2, horasSemanales: 4, salon: 'Lab. 2',
-            descripcion: 'Tabla periódica, enlaces químicos y estequiometría básica.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 3.2 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 15, titulo: 'Práctica: Reacciones químicas', descripcion: 'Realizar 5 reacciones en laboratorio y documentar resultados.', tipo: 'Laboratorio', fechaAsignada: '20 Feb 2026', fechaEntrega: '27 Feb 2026', estado: 'pendiente', peso: 20 },
-                { id: 16, titulo: 'Taller: Balanceo de ecuaciones', descripcion: 'Balancear 15 ecuaciones químicas por método de tanteo.', tipo: 'Taller', fechaAsignada: '05 Feb 2026', fechaEntrega: '12 Feb 2026', estado: 'calificada', nota: 2.8, peso: 15, retroalimentacion: 'Muchos errores en el balanceo. Necesita refuerzo.' },
-            ]
-        },
-        {
-            id: 7, nombre: 'Ed. Física', profesor: 'Pedro Sánchez', icono: 'EF',
-            color: 'from-orange-500 to-orange-600', colorBg: 'bg-orange-50', colorText: 'text-orange-700', colorBorder: 'border-orange-200',
-            promedio: 4.8, horasSemanales: 2, salon: 'Cancha Principal',
-            descripcion: 'Desarrollo de habilidades motrices, deportes y acondicionamiento.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 4.8 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 17, titulo: 'Test de resistencia', descripcion: 'Prueba de resistencia física: carrera de 1km.', tipo: 'Evaluación', fechaAsignada: '18 Feb 2026', fechaEntrega: '18 Feb 2026', estado: 'calificada', nota: 5.0, peso: 25, retroalimentacion: 'Excelente estado físico. Mejor tiempo de la clase.' },
-            ]
-        },
-        {
-            id: 8, nombre: 'Artes', profesor: 'Sandra Vega', icono: 'Ar',
-            color: 'from-pink-500 to-pink-600', colorBg: 'bg-pink-50', colorText: 'text-pink-700', colorBorder: 'border-pink-200',
-            promedio: 4.6, horasSemanales: 2, salon: 'Taller de Artes',
-            descripcion: 'Dibujo, pintura y expresión artística. Técnicas mixtas.',
-            promedioCortes: [{ corte: '1er Corte (30%)', nota: 4.6 }, { corte: '2do Corte (30%)', nota: 0 }, { corte: '3er Corte (40%)', nota: 0 }],
-            actividades: [
-                { id: 18, titulo: 'Proyecto: Autorretrato', descripcion: 'Crear un autorretrato usando técnica de acuarela.', tipo: 'Proyecto', fechaAsignada: '17 Feb 2026', fechaEntrega: '03 Mar 2026', estado: 'pendiente', peso: 30 },
-                { id: 19, titulo: 'Bocetos semanales', descripcion: '5 bocetos de objetos cotidianos con grafito.', tipo: 'Tarea', fechaAsignada: '10 Feb 2026', fechaEntrega: '14 Feb 2026', estado: 'calificada', nota: 4.5, peso: 10, retroalimentacion: 'Buenos trazos, buen manejo de sombras.' },
-            ]
-        },
-    ];
 
     const materiaDetalle = materias.find(m => m.id === materiaActiva);
 
@@ -242,11 +155,17 @@ export default function Materias() {
                                 <button
                                     key={m.id}
                                     onClick={() => setMateriaActiva(m.id)}
-                                    className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-lg transition-all text-left"
+                                    className="group relative overflow-hidden rounded-2xl border border-[#293577]/20 bg-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all text-left"
                                 >
                                     {/* Header con gradiente */}
-                                    <div className={`h-24 sm:h-28 bg-gradient-to-br ${m.color} flex items-center justify-center relative`}>
-                                        <span className="text-4xl sm:text-5xl drop-shadow-lg group-hover:scale-110 transition-transform">{m.icono}</span>
+                                    <div className="h-24 sm:h-28 bg-gradient-to-br from-[#293577] to-[#181b49] flex items-center justify-center relative overflow-hidden">
+                                        {m.imagen ? (
+                                            <>
+                                                <img src={m.imagen} alt={m.nombre} className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-300" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-[#181b49]/80 to-transparent" />
+                                            </>
+                                        ) : null}
+                                        <span className="text-4xl sm:text-5xl drop-shadow-lg text-white relative z-10">{m.icono}</span>
                                         {pendientes > 0 && (
                                             <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shadow-lg animate-pulse">
                                                 {pendientes}
@@ -278,9 +197,12 @@ export default function Materias() {
                 <div className="space-y-5">
                     {/* Info de la materia */}
                     <div className={`rounded-2xl overflow-hidden border ${materiaDetalle.colorBorder}`}>
-                        <div className={`bg-gradient-to-r ${materiaDetalle.color} p-5 text-white`}>
+                        <div className="bg-gradient-to-r from-[#293577] to-[#181b49] p-5 text-white relative overflow-hidden">
+                            {materiaDetalle.imagen && (
+                                <img src={materiaDetalle.imagen} alt={materiaDetalle.nombre} className="absolute inset-0 w-full h-full object-cover opacity-20" />
+                            )}
                             <div className="flex items-center gap-4">
-                                <span className="text-4xl drop-shadow-lg">{materiaDetalle.icono}</span>
+                                <span className="text-4xl drop-shadow-lg relative z-10">{materiaDetalle.icono}</span>
                                 <div>
                                     <h2 className="text-xl font-extrabold">{materiaDetalle.nombre}</h2>
                                     <p className="text-white/80 text-sm">{materiaDetalle.descripcion}</p>

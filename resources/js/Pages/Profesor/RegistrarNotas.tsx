@@ -73,6 +73,17 @@ const tipoIcon: Record<string, string> = {
     tarea: '📝', examen: '📋', quiz: '❓', proyecto: '🔬', taller: '🛠️',
 };
 
+const csrfToken = () => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+    if (meta) return meta;
+
+    const cookie = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('XSRF-TOKEN='));
+
+    return cookie ? decodeURIComponent(cookie.split('=')[1] || '') : '';
+};
+
 /* ══════════════════ Component ══════════════════ */
 
 export default function RegistrarNotas({ profesor, cursos, materias, periodos, cursoMaterias }: Props) {
@@ -236,14 +247,19 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
         fetch('/profesor/notas', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '',
+                'X-CSRF-TOKEN': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
             body: JSON.stringify({ notas }),
         })
             .then(r => {
+                if (r.status === 419) {
+                    throw new Error('Tu sesión expiró o el token CSRF no es válido. Recarga la página e inténtalo de nuevo.');
+                }
                 if (!r.ok) return r.json().then(d => { throw new Error(d.message || 'Error al guardar'); });
                 return r.json();
             })
@@ -316,9 +332,11 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
         fetch('/profesor/notas/conceptos', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '',
+                'X-CSRF-TOKEN': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
             body: JSON.stringify({
@@ -334,6 +352,9 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
             }),
         })
             .then(r => {
+                if (r.status === 419) {
+                    throw new Error('Tu sesión expiró o el token CSRF no es válido. Recarga la página e inténtalo de nuevo.');
+                }
                 if (!r.ok) return r.json().then(d => { throw new Error(d.message || 'Error'); });
                 return r.json();
             })

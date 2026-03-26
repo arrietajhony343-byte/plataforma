@@ -27,7 +27,7 @@ class PeriodoController extends Controller
         $periodos = Periodo::where('anio', $anioActual)
             ->orderBy('numero')
             ->withCount(['notas', 'boletines'])
-            ->with('excepciones')
+            ->with(['excepciones', 'eventos' => fn($q) => $q->orderBy('fecha')])
             ->get()
             ->map(fn(Periodo $p) => [
                 'id'              => $p->id,
@@ -51,6 +51,13 @@ class PeriodoController extends Controller
                     'nombre_referencia' => $e->nombre_referencia,
                     'motivo'            => $e->motivo,
                     'activa'            => (bool) $e->activa,
+                ])->toArray(),
+                'eventos'         => $p->eventos->map(fn($ev) => [
+                    'id'          => $ev->id,
+                    'fecha'       => $ev->fecha?->format('Y-m-d'),
+                    'tipo'        => $ev->tipo,
+                    'titulo'      => $ev->titulo,
+                    'descripcion' => $ev->descripcion,
                 ])->toArray(),
             ]);
 
@@ -324,6 +331,41 @@ class PeriodoController extends Controller
 
         $estado = $ex->activa ? 'activada' : 'desactivada';
         return redirect()->back()->with('success', "Excepción {$estado}.");
+    }
+
+    /**
+     * Agregar un día especial (evento) al periodo.
+     */
+    public function storeEvento(Request $request, Periodo $periodo)
+    {
+        $data = $request->validate([
+            'fecha'       => 'required|date',
+            'tipo'        => 'required|in:evento,reunion_padres,institucional,academico,otro',
+            'titulo'      => 'required|string|max:150',
+            'descripcion' => 'nullable|string|max:300',
+        ]);
+
+        $fecha = \Carbon\Carbon::parse($data['fecha'])->startOfDay();
+        if ($fecha->lt($periodo->fecha_inicio) || $fecha->gt($periodo->fecha_fin)) {
+            return redirect()->back()->withErrors([
+                'evento' => 'La fecha del evento debe estar dentro del rango del periodo.',
+            ]);
+        }
+
+        $periodo->eventos()->create($data);
+
+        return redirect()->back()->with('success', 'Día especial agregado correctamente.');
+    }
+
+    /**
+     * Eliminar un evento del periodo.
+     */
+    public function destroyEvento(Periodo $periodo, int $evento)
+    {
+        $ev = $periodo->eventos()->findOrFail($evento);
+        $ev->delete();
+
+        return redirect()->back()->with('success', 'Día especial eliminado.');
     }
 
     /**

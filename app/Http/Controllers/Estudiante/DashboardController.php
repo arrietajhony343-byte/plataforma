@@ -13,6 +13,22 @@ class DashboardController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
+        $user->loadMissing('padres:id,name,telefono');
+
+        $matriculaActiva = Matricula::with('curso')
+            ->where('estudiante_id', $user->id)
+            ->where('estado', 'activa')
+            ->latest('id')
+            ->first();
+
+        $grado = 'Sin asignar';
+        if ($matriculaActiva?->curso) {
+            $curso = $matriculaActiva->curso;
+            $grado = trim(($curso->grado ?? '') . ' ' . ($curso->grupo ?? ''));
+            if ($grado === '') {
+                $grado = $curso->nombre ?? 'Sin asignar';
+            }
+        }
 
         // Obtener IDs de cursos donde el estudiante está matriculado
         $cursoIds = Matricula::where('estudiante_id', $user->id)
@@ -35,7 +51,6 @@ class DashboardController extends Controller
         $actividades = $entregas->map(function ($entrega) {
             $actividad = $entrega->actividad;
             $estado = $this->estadoConsolidado($actividad, $entrega);
-            $limite = $entrega->fechaLimiteEfectiva();
 
             return [
                 'id'               => $actividad->id,
@@ -67,7 +82,17 @@ class DashboardController extends Controller
         return Inertia::render('Estudiante/Dashboard', [
             'estudiante' => [
                 'nombre'  => $user->name,
-                'grado'   => $user->grado ?? 'Sin asignar',
+                'grado'   => $grado,
+                'foto'    => $this->resolveFotoUrl($user->foto),
+                'tipo_documento' => $user->tipo_documento,
+                'documento' => $user->documento,
+                'telefono' => $user->telefono,
+                'direccion' => $user->direccion,
+                'fecha_nacimiento' => $user->fecha_nacimiento?->format('Y-m-d'),
+                'grupo_sanguineo' => $user->grupo_sanguineo,
+                'eps' => $user->eps,
+                'acudiente' => $user->padres->first()?->name,
+                'telefono_acudiente' => $user->padres->first()?->telefono,
             ],
             'pendientes' => $pendientes,
             'vencidas'   => $vencidas,
@@ -114,6 +139,19 @@ class DashboardController extends Controller
             return 'media';
         }
         return 'baja';
+    }
+
+    private function resolveFotoUrl(?string $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        if (str_starts_with($value, '/storage/') || str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+
+        return Storage::url($value);
     }
 }
 

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{User, Matricula, Nota, Pago, Observacion, Curso, Periodo, Mensaje, UserActivityLog, Sede};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{DB, Hash, Response};
+use Illuminate\Support\Facades\{DB, Hash, Response, Storage};
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
@@ -23,9 +23,18 @@ class EstudianteController extends Controller
             ->orderBy('nivel')->orderBy('grado')->get();
 
         $padres = User::role('padre')
-            ->select('id', 'name', 'documento')
+            ->select('id', 'name', 'documento', 'tipo_documento', 'telefono', 'email', 'direccion', 'genero')
             ->orderBy('name')->get()
-            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'documento' => $p->documento]);
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'documento' => $p->documento,
+                'tipo_documento' => $p->tipo_documento,
+                'telefono' => $p->telefono,
+                'email' => $p->email,
+                'direccion' => $p->direccion,
+                'genero' => $p->genero,
+            ]);
 
         $sedes = Sede::orderBy('nombre')
             ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
@@ -51,7 +60,26 @@ class EstudianteController extends Controller
             'tipo_documento'   => 'required|in:CC,TI,CE,RC,PP',
             'direccion'        => 'nullable|string|max:255',
             'fecha_nacimiento' => 'nullable|date|before:today',
+            'lugar_nacimiento' => 'nullable|string|max:255',
             'genero'           => 'nullable|in:M,F,otro',
+            'grupo_sanguineo'  => 'nullable|string|max:5',
+            'eps'              => 'nullable|string|max:255',
+            'dificultad_aprendizaje' => 'nullable|boolean',
+            'dificultad_aprendizaje_desc' => 'nullable|string|max:1500',
+            'diagnostico_salud' => 'nullable|boolean',
+            'diagnostico_salud_desc' => 'nullable|string|max:1500',
+            'alergias'         => 'nullable|boolean',
+            'alergias_desc'    => 'nullable|string|max:1500',
+            'nombre_madre'     => 'nullable|string|max:255',
+            'telefono_madre'   => ['nullable', 'string', 'regex:/^[0-9]{7,10}$/'],
+            'ocupacion_madre'  => 'nullable|string|max:255',
+            'nombre_padre'     => 'nullable|string|max:255',
+            'telefono_padre'   => ['nullable', 'string', 'regex:/^[0-9]{7,10}$/'],
+            'ocupacion_padre'  => 'nullable|string|max:255',
+            'convive_con'      => 'nullable|string|max:255',
+            'numero_hermanos'  => 'nullable|integer|min:0|max:20',
+            'lugar_que_ocupa_familia' => 'nullable|string|max:255',
+            'foto'             => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'curso_id'         => 'nullable|exists:cursos,id',
             'acudiente_id'     => 'nullable|integer',
             'sede_id'          => 'nullable|exists:sedes,id',
@@ -59,7 +87,18 @@ class EstudianteController extends Controller
             'documento.regex'  => 'El documento solo debe contener números (5–15 dígitos).',
             'documento.unique' => 'Este número de documento ya está registrado.',
             'phone.regex'      => 'El teléfono solo debe contener números (7–10 dígitos).',
+            'telefono_madre.regex' => 'El teléfono de la madre debe tener entre 7 y 10 dígitos.',
+            'telefono_padre.regex' => 'El teléfono del padre debe tener entre 7 y 10 dígitos.',
+            'foto.max'         => 'La foto no puede superar 2MB.',
         ]);
+
+        if ($request->hasFile('foto')) {
+            if ($estudiante->foto && !str_starts_with($estudiante->foto, '/storage/') && !str_starts_with($estudiante->foto, 'http://') && !str_starts_with($estudiante->foto, 'https://')) {
+                Storage::disk('public')->delete($estudiante->foto);
+            }
+
+            $data['foto'] = $request->file('foto')->store('perfiles/estudiantes', 'public');
+        }
 
         $estudiante->update([
             'name'             => $data['name'],
@@ -69,7 +108,26 @@ class EstudianteController extends Controller
             'tipo_documento'   => $data['tipo_documento'],
             'direccion'        => $data['direccion'] ?? $estudiante->direccion,
             'fecha_nacimiento' => $data['fecha_nacimiento'] ?? $estudiante->fecha_nacimiento,
+            'lugar_nacimiento' => $data['lugar_nacimiento'] ?? null,
             'genero'           => $data['genero'] ?? $estudiante->genero,
+            'grupo_sanguineo'  => $data['grupo_sanguineo'] ?? null,
+            'eps'              => $data['eps'] ?? null,
+            'dificultad_aprendizaje' => (bool) ($data['dificultad_aprendizaje'] ?? false),
+            'dificultad_aprendizaje_desc' => $data['dificultad_aprendizaje_desc'] ?? null,
+            'diagnostico_salud' => (bool) ($data['diagnostico_salud'] ?? false),
+            'diagnostico_salud_desc' => $data['diagnostico_salud_desc'] ?? null,
+            'alergias'         => (bool) ($data['alergias'] ?? false),
+            'alergias_desc'    => $data['alergias_desc'] ?? null,
+            'nombre_madre'     => $data['nombre_madre'] ?? null,
+            'telefono_madre'   => $data['telefono_madre'] ?? null,
+            'ocupacion_madre'  => $data['ocupacion_madre'] ?? null,
+            'nombre_padre'     => $data['nombre_padre'] ?? null,
+            'telefono_padre'   => $data['telefono_padre'] ?? null,
+            'ocupacion_padre'  => $data['ocupacion_padre'] ?? null,
+            'convive_con'      => $data['convive_con'] ?? null,
+            'numero_hermanos'  => $data['numero_hermanos'] ?? null,
+            'lugar_que_ocupa_familia' => $data['lugar_que_ocupa_familia'] ?? null,
+            'foto'             => $data['foto'] ?? $estudiante->foto,
             'sede_id'          => array_key_exists('sede_id', $data) ? $data['sede_id'] : $estudiante->sede_id,
         ]);
 
@@ -330,11 +388,39 @@ class EstudianteController extends Controller
                     'seccion'          => $curso?->grupo ?? '',
                     'acudiente'        => $padre?->name ?? 'Sin acudiente',
                     'acudiente_id'     => $padre?->id,
+                    'acudiente_tipo_documento' => $padre?->tipo_documento ?? '',
+                    'acudiente_documento' => $padre?->documento ?? '',
+                    'acudiente_telefono' => $padre?->telefono ?? '',
+                    'acudiente_email' => $padre?->email ?? '',
+                    'acudiente_direccion' => $padre?->direccion ?? '',
+                    'acudiente_fecha_nacimiento' => $padre?->fecha_nacimiento?->format('Y-m-d') ?? '',
+                    'acudiente_genero' => $padre?->genero ?? '',
+                    'acudiente_grupo_sanguineo' => $padre?->grupo_sanguineo ?? '',
+                    'acudiente_eps' => $padre?->eps ?? '',
                     'telefono'         => $est->telefono ?? '',
                     'email'            => $est->email,
                     'direccion'        => $est->direccion ?? '',
                     'fecha_nacimiento' => $est->fecha_nacimiento?->format('Y-m-d') ?? '',
+                    'lugar_nacimiento' => $est->lugar_nacimiento ?? '',
                     'genero'           => $est->genero ?? '',
+                    'grupo_sanguineo'  => $est->grupo_sanguineo ?? '',
+                    'eps'              => $est->eps ?? '',
+                    'dificultad_aprendizaje' => (bool) ($est->dificultad_aprendizaje ?? false),
+                    'dificultad_aprendizaje_desc' => $est->dificultad_aprendizaje_desc ?? '',
+                    'diagnostico_salud' => (bool) ($est->diagnostico_salud ?? false),
+                    'diagnostico_salud_desc' => $est->diagnostico_salud_desc ?? '',
+                    'alergias'         => (bool) ($est->alergias ?? false),
+                    'alergias_desc'    => $est->alergias_desc ?? '',
+                    'nombre_madre'     => $est->nombre_madre ?? '',
+                    'telefono_madre'   => $est->telefono_madre ?? '',
+                    'ocupacion_madre'  => $est->ocupacion_madre ?? '',
+                    'nombre_padre'     => $est->nombre_padre ?? '',
+                    'telefono_padre'   => $est->telefono_padre ?? '',
+                    'ocupacion_padre'  => $est->ocupacion_padre ?? '',
+                    'convive_con'      => $est->convive_con ?? '',
+                    'numero_hermanos'  => $est->numero_hermanos,
+                    'lugar_que_ocupa_familia' => $est->lugar_que_ocupa_familia ?? '',
+                    'foto'             => $this->resolveFotoUrl($est->foto),
                     'estado'           => $est->activo ? 'activo' : 'inactivo',
                     'promedio'         => $promedio ? round($promedio, 1) : 0,
                     'pagos'            => $estadoPagos,
@@ -343,6 +429,19 @@ class EstudianteController extends Controller
                     'sede_nombre'      => $est->sede?->nombre ?? 'Sin sede',
                 ];
             });
+    }
+
+    private function resolveFotoUrl(?string $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        if (str_starts_with($value, '/storage/') || str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+
+        return Storage::url($value);
     }
 
     private function logActivity(int $userId, string $action, ?string $reason = null): void

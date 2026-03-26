@@ -58,6 +58,7 @@ class CalendarioController extends Controller
             ->values();
 
         $periodos = Periodo::where('anio', $anio)
+            ->with('eventos')
             ->orderBy('numero')
             ->get();
 
@@ -110,6 +111,21 @@ class CalendarioController extends Controller
 
                 return $hitos;
             })
+            ->merge(
+                $periodos->flatMap(function ($periodo) {
+                    return $periodo->eventos->map(function ($evento) use ($periodo) {
+                        return [
+                            'id' => 'periodo-' . $periodo->id . '-evento-' . $evento->id,
+                            'titulo' => $evento->titulo,
+                            'descripcion' => $evento->descripcion,
+                            'fecha' => $evento->fecha?->format('Y-m-d'),
+                            'hora' => null,
+                            'tipo' => $evento->tipo,
+                            'periodo' => $periodo->nombre,
+                        ];
+                    });
+                })
+            )
             ->filter(fn($hito) => !empty($hito['fecha']))
             ->sortBy(['fecha', 'hora'])
             ->values();

@@ -166,6 +166,21 @@ const EMPTY_FORM = {
     nivel_educativo: '', curso_id: '', acudiente_id: '', sede_id: '',
 };
 
+const normalizeTipoDocumento = (value?: string) => {
+    const raw = (value || '').trim().toUpperCase();
+    const compact = raw.replace(/\./g, '').replace(/\s+/g, '');
+
+    if (compact.startsWith('PPT')) return 'PP';
+    if (compact.startsWith('PERUCE')) return 'CE';
+    if (compact.startsWith('TI')) return 'TI';
+    if (compact.startsWith('RC')) return 'RC';
+    if (compact.startsWith('CC')) return 'CC';
+    if (compact.startsWith('CE')) return 'CE';
+    if (compact.startsWith('PP')) return 'PP';
+
+    return ['CC', 'TI', 'CE', 'RC', 'PP'].includes(compact) ? compact : 'CC';
+};
+
 export default function Usuarios({ users: initialUsers, actionLogs, cursos, padres, sedes }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('todos');
@@ -282,7 +297,7 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
         setFormData({
             name: user.name, email: user.email, phone: user.phone || '', role: user.role,
             password: '', status: user.status, documento: user.documento || '',
-            tipo_documento: user.tipo_documento || 'CC', direccion: user.direccion || '',
+            tipo_documento: normalizeTipoDocumento(user.tipo_documento), direccion: user.direccion || '',
             fecha_nacimiento: user.fecha_nacimiento || '', genero: user.genero || '',
             nivel_educativo: user.nivel_educativo || '',
             curso_id: user.curso_id?.toString() || '',
@@ -317,12 +332,41 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
         return Object.keys(errors).length === 0;
     };
 
+    const normalizePayload = (raw: typeof formData) => {
+        const role = raw.role;
+        const base = {
+            ...raw,
+            name: raw.name.trim(),
+            email: raw.email.trim(),
+            tipo_documento: normalizeTipoDocumento(raw.tipo_documento),
+            phone: raw.phone.trim() === '' ? null : raw.phone.trim(),
+            documento: raw.documento.trim() === '' ? null : raw.documento.trim(),
+            direccion: raw.direccion.trim() === '' ? null : raw.direccion.trim(),
+            fecha_nacimiento: raw.fecha_nacimiento === '' ? null : raw.fecha_nacimiento,
+            genero: raw.genero === '' ? null : raw.genero,
+            curso_id: raw.curso_id === '' ? null : raw.curso_id,
+            acudiente_id: raw.acudiente_id === '' ? null : raw.acudiente_id,
+            sede_id: raw.sede_id === '' ? null : raw.sede_id,
+        };
+
+        if (role !== 'estudiante') {
+            return {
+                ...base,
+                curso_id: null,
+                acudiente_id: null,
+                nivel_educativo: null,
+            };
+        }
+
+        return base;
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!validateForm()) return;
         setProcessing(true);
 
-        const payload = { ...formData };
+        const payload = normalizePayload(formData);
         // No enviar password vacío en edición
         if (editingUser && !payload.password) {
             const { password, ...rest } = payload;

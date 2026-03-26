@@ -1,11 +1,12 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head } from '@inertiajs/react';
+import axios from 'axios';
 import { useState } from 'react';
 import { padreMenuItems } from '@/Config/padreMenu';
 
 interface Notificacion {
     id: number;
-    tipo: 'nota' | 'actividad' | 'pago' | 'mensaje' | 'alerta' | 'sistema';
+    tipo: string;
     titulo: string;
     descripcion: string;
     detalle?: string;
@@ -17,70 +18,16 @@ interface Notificacion {
     enlace?: string;
 }
 
-export default function Notificaciones() {
+interface Props {
+    padre: {
+        nombre: string;
+    };
+    notificaciones: Notificacion[];
+}
+
+export default function Notificaciones({ padre, notificaciones: initialNotificaciones }: Props) {
     const [filtro, setFiltro] = useState('todas');
-    const [notificaciones, setNotificaciones] = useState<Notificacion[]>([
-        {
-            id: 1, tipo: 'alerta', titulo: 'Actividad no entregada',
-            descripcion: 'Carlos no entregó "Taller de Ecuaciones" en Matemáticas',
-            detalle: 'La fecha límite de entrega fue el 10 de Febrero de 2026. Contacte al profesor si necesita una extensión.',
-            fecha: '2026-02-13', hora: '10:30 AM', leida: false, materia: 'Matemáticas', profesor: 'María García',
-        },
-        {
-            id: 2, tipo: 'alerta', titulo: 'Actividad no entregada',
-            descripcion: 'Carlos no entregó "Ensayo literario" en Español',
-            detalle: 'La fecha límite es el 20 de Febrero. Aún tiene tiempo para entregar.',
-            fecha: '2026-02-13', hora: '9:00 AM', leida: false, materia: 'Español', profesor: 'Juan Pérez',
-        },
-        {
-            id: 3, tipo: 'nota', titulo: 'Nueva nota registrada',
-            descripcion: 'Ciencias Naturales - Quiz Ecosistemas: 4.5/5.0',
-            detalle: 'Excelente desempeño en el quiz. Carlos demostró buen dominio del tema de ecosistemas.',
-            fecha: '2026-02-12', hora: '3:45 PM', leida: false, materia: 'Ciencias Naturales', profesor: 'Ana Martínez',
-        },
-        {
-            id: 4, tipo: 'actividad', titulo: 'Nueva actividad asignada',
-            descripcion: 'Exposición: Revolución Industrial - Historia',
-            detalle: 'Exposición en grupo (3 personas). Fecha de presentación: 25 de Febrero. Preparar material visual.',
-            fecha: '2026-02-12', hora: '11:00 AM', leida: false, materia: 'Historia', profesor: 'Carlos Mendoza',
-        },
-        {
-            id: 5, tipo: 'nota', titulo: 'Nota actualizada',
-            descripcion: 'Matemáticas - Parcial 1: 3.8/5.0',
-            detalle: 'El parcial cubrió ecuaciones lineales y cuadráticas. Necesita reforzar factorización.',
-            fecha: '2026-02-10', hora: '2:00 PM', leida: true, materia: 'Matemáticas', profesor: 'María García',
-        },
-        {
-            id: 6, tipo: 'pago', titulo: 'Recordatorio de pago',
-            descripcion: 'La mensualidad de Febrero 2026 vence el 15/02/2026',
-            detalle: 'Monto: $250.000 COP. Puede pagar desde la plataforma en la sección de Pagos.',
-            fecha: '2026-02-10', hora: '8:00 AM', leida: true,
-        },
-        {
-            id: 7, tipo: 'actividad', titulo: 'Examen programado',
-            descripcion: 'Examen parcial de Álgebra - 18 de Febrero',
-            detalle: 'Temas: Ecuaciones de primer y segundo grado. Traer calculadora científica. Duración: 90 minutos.',
-            fecha: '2026-02-08', hora: '9:00 AM', leida: true, materia: 'Matemáticas', profesor: 'María García',
-        },
-        {
-            id: 8, tipo: 'mensaje', titulo: 'Nuevo mensaje del profesor',
-            descripcion: 'Prof. Laura Stevens le envió un mensaje sobre el rendimiento de Carlos en Inglés',
-            detalle: 'Sugiero que Carlos practique listening en casa al menos 20 minutos diarios. Puede usar la app Duolingo.',
-            fecha: '2026-02-07', hora: '4:30 PM', leida: true, materia: 'Inglés', profesor: 'Laura Stevens',
-        },
-        {
-            id: 9, tipo: 'sistema', titulo: 'Boletín Periodo 1 disponible',
-            descripcion: 'El boletín del Primer Periodo ya está disponible para descarga',
-            detalle: 'Puede descargar el boletín en formato PDF desde la sección Boletín & Notas.',
-            fecha: '2026-02-05', hora: '6:00 PM', leida: true,
-        },
-        {
-            id: 10, tipo: 'nota', titulo: 'Nota baja registrada',
-            descripcion: 'Inglés - Listening Test: 3.2/5.0',
-            detalle: 'Carlos tuvo dificultades en la comprensión auditiva. Se recomienda práctica adicional en casa.',
-            fecha: '2026-02-03', hora: '1:00 PM', leida: true, materia: 'Inglés', profesor: 'Laura Stevens',
-        },
-    ]);
+    const [notificaciones, setNotificaciones] = useState<Notificacion[]>(initialNotificaciones);
 
     const [selectedNotif, setSelectedNotif] = useState<Notificacion | null>(null);
 
@@ -90,21 +37,33 @@ export default function Notificaciones() {
         ? notificaciones.filter(n => !n.leida)
         : notificaciones.filter(n => n.tipo === filtro);
 
-    const marcarLeida = (id: number) => {
+    const marcarLeida = async (id: number) => {
         setNotificaciones(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n));
+        try {
+            await axios.post(`/api/notificaciones/${id}/marcar-leida`);
+        } catch (_) {
+            // silencioso
+        }
     };
 
-    const marcarTodasLeidas = () => {
+    const marcarTodasLeidas = async () => {
         setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })));
+        try {
+            await axios.post('/api/notificaciones/marcar-todas-leidas');
+        } catch (_) {
+            // silencioso
+        }
     };
 
     const noLeidas = notificaciones.filter(n => !n.leida).length;
 
     const getNotifStyle = (tipo: string) => {
         switch (tipo) {
-            case 'alerta': return { bg: 'bg-red-50', border: 'border-red-400', iconBg: 'bg-red-100 text-red-600', icon: '!' };
+            case 'alerta':
+            case 'warning': return { bg: 'bg-red-50', border: 'border-red-400', iconBg: 'bg-red-100 text-red-600', icon: '!' };
             case 'nota': return { bg: 'bg-blue-50', border: 'border-blue-400', iconBg: 'bg-blue-100 text-blue-600', icon: 'N' };
-            case 'actividad': return { bg: 'bg-green-50', border: 'border-green-400', iconBg: 'bg-green-100 text-green-600', icon: 'A' };
+            case 'actividad':
+            case 'academica': return { bg: 'bg-green-50', border: 'border-green-400', iconBg: 'bg-green-100 text-green-600', icon: 'A' };
             case 'pago': return { bg: 'bg-yellow-50', border: 'border-yellow-400', iconBg: 'bg-yellow-100 text-yellow-600', icon: '$' };
             case 'mensaje': return { bg: 'bg-purple-50', border: 'border-purple-400', iconBg: 'bg-purple-100 text-purple-600', icon: 'M' };
             case 'sistema': return { bg: 'bg-gray-50', border: 'border-gray-400', iconBg: 'bg-gray-100 text-gray-600', icon: 'S' };
@@ -113,7 +72,7 @@ export default function Notificaciones() {
     };
 
     return (
-        <SidebarLayout menuItems={padreMenuItems} title="Notificaciones">
+        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
             <Head title="Notificaciones" />
 
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>

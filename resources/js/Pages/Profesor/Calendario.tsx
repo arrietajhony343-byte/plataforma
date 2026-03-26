@@ -1,6 +1,6 @@
 import { profesorMenuItems } from '@/Config/profesorMenu';
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
 interface Resumen {
@@ -37,17 +37,17 @@ interface HitoInstitucional {
     descripcion: string;
     fecha: string;
     hora: string | null;
-    tipo: 'periodo_inicio' | 'periodo_fin' | 'apertura_notas' | 'cierre_notas';
+    tipo:
+        | 'periodo_inicio'
+        | 'periodo_fin'
+        | 'apertura_notas'
+        | 'cierre_notas'
+        | 'evento'
+        | 'reunion_padres'
+        | 'institucional'
+        | 'academico'
+        | 'otro';
     periodo: string;
-}
-
-interface VentanaNota {
-    id: number;
-    nombre: string;
-    numero: number;
-    notasAbiertas: boolean;
-    ventanaInicio: string | null;
-    ventanaFin: string | null;
 }
 
 interface EventoCalendario {
@@ -71,7 +71,6 @@ interface Props {
     clasesSemanales: ClaseSemanal[];
     actividades: ActividadCalendario[];
     hitosInstitucionales: HitoInstitucional[];
-    ventanasNotas: VentanaNota[];
 }
 
 const DAY_ORDER: Record<string, number> = {
@@ -100,6 +99,11 @@ const HITO_META: Record<HitoInstitucional['tipo'], { label: string; icon: string
     periodo_fin: { label: 'Cierre de periodo', icon: 'PF' },
     apertura_notas: { label: 'Apertura de notas', icon: 'AN' },
     cierre_notas: { label: 'Cierre de notas', icon: 'CN' },
+    evento: { label: 'Evento especial', icon: 'EV' },
+    reunion_padres: { label: 'Reunion de padres', icon: 'RP' },
+    institucional: { label: 'Actividad institucional', icon: 'IN' },
+    academico: { label: 'Actividad academica', icon: 'AC' },
+    otro: { label: 'Otro evento', icon: 'OE' },
 };
 
 function pad(value: number) {
@@ -247,6 +251,24 @@ function getEventTone(event: EventoCalendario) {
         };
     }
 
+    if (event.tipo === 'reunion_padres') {
+        return {
+            dot: 'bg-cyan-600',
+            chip: 'bg-cyan-100 text-cyan-700',
+            soft: 'border-cyan-100 bg-cyan-50',
+            badge: 'bg-cyan-600 text-white',
+        };
+    }
+
+    if (event.tipo === 'academico') {
+        return {
+            dot: 'bg-indigo-600',
+            chip: 'bg-indigo-100 text-indigo-700',
+            soft: 'border-indigo-100 bg-indigo-50',
+            badge: 'bg-indigo-600 text-white',
+        };
+    }
+
     return {
         dot: 'bg-slate-500',
         chip: 'bg-slate-100 text-slate-700',
@@ -267,7 +289,7 @@ function getEventIcon(event: EventoCalendario) {
     return HITO_META[event.tipo as HitoInstitucional['tipo']]?.icon ?? 'HI';
 }
 
-export default function Calendario({ profesor, resumen, clasesSemanales, actividades, hitosInstitucionales, ventanasNotas }: Props) {
+export default function Calendario({ profesor, resumen, clasesSemanales, actividades, hitosInstitucionales }: Props) {
     const today = new Date();
     const todayIso = toIsoDate(today);
     const nowTime = `${pad(today.getHours())}:${pad(today.getMinutes())}`;
@@ -427,12 +449,6 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
         todayEvents.find((event) => event.categoria === 'clase') ??
         null;
 
-    const monthMilestones = hitosInstitucionales.filter(
-        (hito) => hito.fecha >= monthStartIso && hito.fecha <= monthEndIso,
-    );
-
-    const scheduledWindows = ventanasNotas.filter((ventana) => !ventana.notasAbiertas && !!ventana.ventanaInicio).length;
-
     const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const firstDayIndex = (new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() + 6) % 7;
 
@@ -468,34 +484,19 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                             <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100/90">
                                 Consulta en una sola vista tus clases recurrentes, las entregas activas y los hitos que define administracion, como apertura y cierre de notas por periodo.
                             </p>
-                            <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-                                <span className="rounded-full bg-white/12 px-3 py-1">Sin creacion manual de eventos</span>
-                                <span className="rounded-full bg-white/12 px-3 py-1">Fuente unica: horarios, actividades y periodos</span>
-                            </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 xl:w-[360px]">
+                        <div className="grid gap-3 sm:grid-cols-1 xl:w-[220px]">
                             <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Hoy</p>
                                 <p className="mt-2 text-3xl font-black">{todayEvents.length}</p>
                                 <p className="mt-1 text-xs text-blue-100/80">eventos programados para {formatShortDate(todayIso)}</p>
                             </div>
-                            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">Ventanas</p>
-                                <p className="mt-2 text-3xl font-black">{resumen.ventanasAbiertas}</p>
-                                <p className="mt-1 text-xs text-blue-100/80">periodos con notas abiertas en este momento</p>
-                            </div>
                         </div>
                     </div>
                 </section>
 
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Cursos</p>
-                        <p className="mt-2 text-3xl font-black text-gray-900">{resumen.totalCursos}</p>
-                        <p className="mt-2 text-sm text-gray-500">{resumen.totalClasesSemanales} bloques semanales asociados a tu carga.</p>
-                    </div>
-
+                <section className="grid gap-4 md:grid-cols-2">
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Proxima clase</p>
                         <p className="mt-2 text-lg font-black text-[#293577]">
@@ -508,12 +509,6 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Entregas</p>
                         <p className="mt-2 text-3xl font-black text-amber-600">{resumen.actividadesPendientes}</p>
                         <p className="mt-2 text-sm text-gray-500">Actividades activas con vencimiento pendiente durante el ano.</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Hitos del mes</p>
-                        <p className="mt-2 text-3xl font-black text-slate-700">{monthMilestones.length}</p>
-                        <p className="mt-2 text-sm text-gray-500">Incluye periodos, aperturas y cierres definidos por administracion.</p>
                     </div>
                 </section>
 
@@ -701,42 +696,10 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                         <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm">
                             <div className="border-b border-gray-100 px-5 py-4">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Control institucional</p>
-                                <h2 className="mt-1 text-xl font-black text-gray-900">Ventanas y proximos hitos</h2>
+                                <h2 className="mt-1 text-xl font-black text-gray-900">Proximos hitos</h2>
                             </div>
 
                             <div className="space-y-4 p-4">
-                                <div className="rounded-2xl bg-gray-50 p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-black text-gray-900">Ventanas de notas</p>
-                                            <p className="text-xs text-gray-500">{resumen.ventanasAbiertas} abiertas · {scheduledWindows} programadas</p>
-                                        </div>
-                                        <div className="rounded-xl bg-[#293577]/10 px-3 py-1 text-xs font-bold text-[#293577]">
-                                            Admin
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3 space-y-2">
-                                        {ventanasNotas.map((ventana) => (
-                                            <div key={ventana.id} className="rounded-xl border border-white bg-white px-3 py-2.5">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <p className="text-sm font-bold text-gray-800">{ventana.nombre}</p>
-                                                        <p className="text-xs text-gray-500">
-                                                            {ventana.ventanaInicio
-                                                                ? `${formatDateTimeLabel(ventana.ventanaInicio)}${ventana.ventanaFin ? ` - ${formatDateTimeLabel(ventana.ventanaFin)}` : ''}`
-                                                                : 'Aun no se ha programado una ventana automatica.'}
-                                                        </p>
-                                                    </div>
-                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] ${ventana.notasAbiertas ? 'bg-emerald-100 text-emerald-700' : ventana.ventanaInicio ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                                                        {ventana.notasAbiertas ? 'Abierta' : ventana.ventanaInicio ? 'Programada' : 'Sin fecha'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
                                 <div>
                                     <div className="mb-3 flex items-center justify-between">
                                         <p className="text-sm font-black text-gray-900">Proximos hitos</p>
@@ -771,39 +734,6 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                                         </div>
                                     )}
                                 </div>
-                            </div>
-                        </div>
-
-                        <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm">
-                            <div className="border-b border-gray-100 px-5 py-4">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Acciones utiles</p>
-                                <h2 className="mt-1 text-xl font-black text-gray-900">Siguiente paso</h2>
-                            </div>
-
-                            <div className="grid gap-3 p-4">
-                                <Link href="/profesor/asistencias" className="group rounded-2xl bg-[#293577]/6 px-4 py-3 transition hover:bg-[#293577]/10">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div>
-                                            <p className="text-sm font-black text-[#293577]">Registrar asistencia</p>
-                                            <p className="mt-1 text-xs text-gray-500">Ubica tu jornada en el calendario y continua con el registro del dia.</p>
-                                        </div>
-                                        <svg className="h-4 w-4 flex-shrink-0 text-[#293577] transition group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </div>
-                                </Link>
-
-                                <Link href="/profesor/actividades" className="group rounded-2xl bg-amber-50 px-4 py-3 transition hover:bg-amber-100/70">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div>
-                                            <p className="text-sm font-black text-amber-700">Revisar actividades</p>
-                                            <p className="mt-1 text-xs text-gray-500">Consulta entregas vigentes y valida que las fechas publicadas coincidan con el plan del periodo.</p>
-                                        </div>
-                                        <svg className="h-4 w-4 flex-shrink-0 text-amber-700 transition group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </div>
-                                </Link>
                             </div>
                         </div>
                     </aside>

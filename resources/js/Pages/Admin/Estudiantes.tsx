@@ -19,11 +19,39 @@ interface Estudiante {
     seccion: string;
     acudiente: string;
     acudiente_id?: number;
+    acudiente_tipo_documento?: string;
+    acudiente_documento?: string;
+    acudiente_telefono?: string;
+    acudiente_email?: string;
+    acudiente_direccion?: string;
+    acudiente_fecha_nacimiento?: string;
+    acudiente_genero?: string;
+    acudiente_grupo_sanguineo?: string;
+    acudiente_eps?: string;
     telefono: string;
     email: string;
     direccion: string;
     fecha_nacimiento: string;
+    lugar_nacimiento: string;
     genero: string;
+    grupo_sanguineo: string;
+    eps: string;
+    dificultad_aprendizaje: boolean;
+    dificultad_aprendizaje_desc: string;
+    diagnostico_salud: boolean;
+    diagnostico_salud_desc: string;
+    alergias: boolean;
+    alergias_desc: string;
+    nombre_madre: string;
+    telefono_madre: string;
+    ocupacion_madre: string;
+    nombre_padre: string;
+    telefono_padre: string;
+    ocupacion_padre: string;
+    convive_con: string;
+    numero_hermanos?: number | null;
+    lugar_que_ocupa_familia: string;
+    foto?: string | null;
     estado: 'activo' | 'inactivo';
     promedio: number;
     pagos: 'al_dia' | 'pendiente' | 'deudor';
@@ -33,7 +61,16 @@ interface Estudiante {
 }
 
 interface Curso { id: number; nombre: string; nivel: string; grado: number | null; grupo: string; }
-interface Padre { id: number; name: string; documento?: string; }
+interface Padre {
+    id: number;
+    name: string;
+    documento?: string;
+    tipo_documento?: string;
+    telefono?: string;
+    email?: string;
+    direccion?: string;
+    genero?: string;
+}
 interface NotaItem { id: number; materia: string; periodo: string; tipo: string; valor: number; desc?: string; }
 interface ObsItem { id: number; tipo: string; categoria: string; desc: string; fecha: string; profesor: string; }
 interface PagoItem { id: number; concepto: string; monto: number; estado: string; metodo?: string; vence: string; pagado?: string; ref?: string; }
@@ -43,6 +80,39 @@ interface Props {
     cursos: Curso[];
     padres: Padre[];
     sedes: Sede[];
+}
+
+interface EditFormData {
+    name: string;
+    email: string;
+    phone: string;
+    documento: string;
+    tipo_documento: string;
+    direccion: string;
+    fecha_nacimiento: string;
+    lugar_nacimiento: string;
+    genero: string;
+    grupo_sanguineo: string;
+    eps: string;
+    dificultad_aprendizaje: boolean;
+    dificultad_aprendizaje_desc: string;
+    diagnostico_salud: boolean;
+    diagnostico_salud_desc: string;
+    alergias: boolean;
+    alergias_desc: string;
+    nombre_madre: string;
+    telefono_madre: string;
+    ocupacion_madre: string;
+    nombre_padre: string;
+    telefono_padre: string;
+    ocupacion_padre: string;
+    convive_con: string;
+    numero_hermanos: string;
+    lugar_que_ocupa_familia: string;
+    nivel_educativo: string;
+    curso_id: string;
+    acudiente_id: string;
+    sede_id: string;
 }
 
 const NIVELES: Record<string, { label: string; color: string; activeBg: string; chipBg: string; chipText: string }> = {
@@ -80,7 +150,19 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
 
     /* ─── Edit modal ─── */
     const [showEditModal, setShowEditModal] = useState(false);
-    const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', documento: '', tipo_documento: 'TI', direccion: '', fecha_nacimiento: '', genero: '', nivel_educativo: '', curso_id: '', acudiente_id: '', sede_id: '' });
+    const [editForm, setEditForm] = useState<EditFormData>({
+        name: '', email: '', phone: '', documento: '', tipo_documento: 'TI',
+        direccion: '', fecha_nacimiento: '', lugar_nacimiento: '', genero: '',
+        grupo_sanguineo: '', eps: '',
+        dificultad_aprendizaje: false, dificultad_aprendizaje_desc: '',
+        diagnostico_salud: false, diagnostico_salud_desc: '',
+        alergias: false, alergias_desc: '',
+        nombre_madre: '', telefono_madre: '', ocupacion_madre: '',
+        nombre_padre: '', telefono_padre: '', ocupacion_padre: '',
+        convive_con: '', numero_hermanos: '', lugar_que_ocupa_familia: '',
+        nivel_educativo: '', curso_id: '', acudiente_id: '', sede_id: '',
+    });
+    const [editPhoto, setEditPhoto] = useState<File | null>(null);
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [editProcessing, setEditProcessing] = useState(false);
 
@@ -101,6 +183,12 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
         if (nivelSel === 'todos') return cursos;
         return cursos.filter(c => normalizeNivel(c.nivel) === nivelSel);
     }, [cursos, nivelSel]);
+
+    const padresById = useMemo(() => {
+        const map = new Map<number, Padre>();
+        padres.forEach((p) => map.set(p.id, p));
+        return map;
+    }, [padres]);
 
     /* ─── Cursos únicos para filtro dropdown ─── */
     const cursosParaFiltro = useMemo(() => {
@@ -168,19 +256,58 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
             name: est.nombre, email: est.email, phone: est.telefono || '',
             documento: est.identificacion || '', tipo_documento: est.tipo_documento || 'TI',
             direccion: est.direccion || '', fecha_nacimiento: est.fecha_nacimiento || '',
+            lugar_nacimiento: est.lugar_nacimiento || '',
             genero: est.genero || '', nivel_educativo: est.nivel || '',
+            grupo_sanguineo: est.grupo_sanguineo || '', eps: est.eps || '',
+            dificultad_aprendizaje: !!est.dificultad_aprendizaje,
+            dificultad_aprendizaje_desc: est.dificultad_aprendizaje_desc || '',
+            diagnostico_salud: !!est.diagnostico_salud,
+            diagnostico_salud_desc: est.diagnostico_salud_desc || '',
+            alergias: !!est.alergias,
+            alergias_desc: est.alergias_desc || '',
+            nombre_madre: est.nombre_madre || '', telefono_madre: est.telefono_madre || '', ocupacion_madre: est.ocupacion_madre || '',
+            nombre_padre: est.nombre_padre || '', telefono_padre: est.telefono_padre || '', ocupacion_padre: est.ocupacion_padre || '',
+            convive_con: est.convive_con || '',
+            numero_hermanos: est.numero_hermanos !== null && est.numero_hermanos !== undefined ? String(est.numero_hermanos) : '',
+            lugar_que_ocupa_familia: est.lugar_que_ocupa_familia || '',
             curso_id: est.curso_id?.toString() || '', acudiente_id: est.acudiente_id?.toString() || '',
             sede_id: est.sede_id?.toString() || '',
         });
+        setEditPhoto(null);
         setEditErrors({});
         setShowEditModal(true);
+    };
+
+    const onAcudienteChange = (acudienteId: string) => {
+        const padre = acudienteId ? padresById.get(Number(acudienteId)) : undefined;
+
+        setEditForm((f) => ({
+            ...f,
+            acudiente_id: acudienteId,
+            // Solo sugerimos una parte de entorno familiar; no sobreescribimos datos ya diligenciados.
+            nombre_madre: f.nombre_madre || padre?.name || '',
+            telefono_madre: f.telefono_madre || padre?.telefono || '',
+            convive_con: f.convive_con || padre?.name || '',
+        }));
     };
 
     const submitEdit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selected) return;
         setEditProcessing(true);
-        router.put(`/admin/estudiantes/${selected.id}`, editForm, {
+        const payload = new FormData();
+        payload.append('_method', 'PUT');
+        Object.entries(editForm).forEach(([key, value]) => {
+            if (typeof value === 'boolean') {
+                payload.append(key, value ? '1' : '0');
+                return;
+            }
+            payload.append(key, value ?? '');
+        });
+        if (editPhoto) payload.append('foto', editPhoto);
+
+        router.post(`/admin/estudiantes/${selected.id}`, payload, {
+            forceFormData: true,
             preserveScroll: true,
             onSuccess: () => { setShowEditModal(false); setEditProcessing(false); setSelected(null); },
             onError: (errs) => { setEditErrors(errs as Record<string, string>); setEditProcessing(false); },
@@ -424,7 +551,11 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                             <div key={est.id} className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => selectStudent(est)}>
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-[#181b49] rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">{est.nombre.charAt(0)}</div>
+                                        <div className="w-12 h-12 bg-[#181b49] rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                                            {est.foto
+                                                ? <img src={est.foto} alt={est.nombre} className="w-full h-full object-cover" />
+                                                : est.nombre.charAt(0)}
+                                        </div>
                                         <div className="min-w-0">
                                             <h3 className="font-bold text-gray-800">{est.nombre}</h3>
                                             <div className="flex items-center gap-2 flex-wrap">
@@ -457,7 +588,11 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                         <div className="p-5 sm:p-6 pb-0">
                             <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-gradient-to-br from-[#181b49] to-[#293577] rounded-full flex items-center justify-center text-white font-bold text-xl">{selected.nombre.charAt(0)}</div>
+                                    <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-[#181b49] to-[#293577] flex items-center justify-center text-white font-bold text-xl">
+                                        {selected.foto
+                                            ? <img src={selected.foto} alt={selected.nombre} className="w-full h-full object-cover" />
+                                            : selected.nombre.charAt(0)}
+                                    </div>
                                     <div>
                                         <h2 className="text-lg font-bold text-gray-800">{selected.nombre}</h2>
                                         <p className="text-sm text-gray-500">ID: {selected.identificacion}</p>
@@ -494,13 +629,36 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                                         <InfoCard label="Email" value={selected.email} small />
                                         <InfoCard label="Dirección" value={selected.direccion || 'No registrada'} />
                                         <InfoCard label="Fecha Nacimiento" value={selected.fecha_nacimiento || 'No registrada'} />
+                                        <InfoCard label="Lugar Nacimiento" value={selected.lugar_nacimiento || 'No registrado'} />
                                         <InfoCard label="Documento" value={`${selected.tipo_documento} ${selected.identificacion}`} />
                                         <InfoCard label="Género" value={selected.genero === 'M' ? 'Masculino' : selected.genero === 'F' ? 'Femenino' : selected.genero || 'No especificado'} />
+                                        <InfoCard label="Grupo Sanguíneo" value={selected.grupo_sanguineo || 'No registrado'} />
+                                        <InfoCard label="EPS" value={selected.eps || 'No registrada'} />
+                                        <InfoCard label="Convive Con" value={selected.convive_con || 'No registrado'} />
+                                        <InfoCard label="N° Hermanos" value={selected.numero_hermanos != null ? String(selected.numero_hermanos) : 'No registrado'} />
                                     </div>
                                     <div className="p-3 bg-gray-50 rounded-lg">
                                         <p className="text-xs text-gray-500">Promedio Actual</p>
                                         <p className={`text-2xl font-bold ${promedioColor(selected.promedio)}`}>{selected.promedio.toFixed(1)}</p>
                                     </div>
+
+                                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                                            <p className="text-xs font-bold text-[#293577] uppercase tracking-widest">Datos del Acudiente</p>
+                                        </div>
+                                        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <InfoCard label="Nombre" value={selected.acudiente || 'Sin acudiente'} />
+                                            <InfoCard label="Documento" value={selected.acudiente_documento ? `${selected.acudiente_tipo_documento || ''} ${selected.acudiente_documento}`.trim() : 'No registrado'} />
+                                            <InfoCard label="Teléfono" value={selected.acudiente_telefono || 'No registrado'} />
+                                            <InfoCard label="Email" value={selected.acudiente_email || 'No registrado'} small />
+                                            <InfoCard label="Dirección" value={selected.acudiente_direccion || 'No registrada'} />
+                                            <InfoCard label="Fecha Nacimiento" value={selected.acudiente_fecha_nacimiento || 'No registrada'} />
+                                            <InfoCard label="Género" value={selected.acudiente_genero === 'M' ? 'Masculino' : selected.acudiente_genero === 'F' ? 'Femenino' : selected.acudiente_genero || 'No especificado'} />
+                                            <InfoCard label="Grupo Sanguíneo" value={selected.acudiente_grupo_sanguineo || 'No registrado'} />
+                                            <InfoCard label="EPS" value={selected.acudiente_eps || 'No registrada'} />
+                                        </div>
+                                    </div>
+
                                     {/* Pago status */}
                                     <div className={`p-4 rounded-lg ${selected.pagos === 'al_dia' ? 'bg-green-50' : selected.pagos === 'pendiente' ? 'bg-yellow-50' : 'bg-red-50'}`}>
                                         <div className="flex items-center justify-between">
@@ -726,7 +884,7 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
             {/* ══════════════════ MODAL EDITAR ══════════════════ */}
             {showEditModal && selected && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                    <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
                         <div className="p-5 sm:p-6 pb-3" style={{ background: 'linear-gradient(135deg, #181b49, #293577)' }}>
                             <h2 className="text-lg font-bold text-white">Editar Estudiante</h2>
                             <p className="text-sm text-white/70">{selected.nombre}</p>
@@ -741,6 +899,28 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nombre completo <span className="text-red-400">*</span></label>
                                 <input type="text" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className={`w-full px-4 py-2.5 border rounded-lg text-sm ${editErrors.name ? 'border-red-300' : 'border-gray-200'}`} required />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Foto de perfil</label>
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        onChange={e => setEditPhoto(e.target.files?.[0] ?? null)}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                                    />
+                                    <p className="text-[11px] text-gray-400 mt-1">JPG, PNG o WEBP. Máximo 2MB.</p>
+                                </div>
+                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                    <div className="w-12 h-12 rounded-full overflow-hidden bg-[#181b49] flex items-center justify-center text-white font-semibold">
+                                        {editPhoto
+                                            ? <img src={URL.createObjectURL(editPhoto)} alt="Previsualización" className="w-full h-full object-cover" />
+                                            : selected.foto
+                                                ? <img src={selected.foto} alt={selected.nombre} className="w-full h-full object-cover" />
+                                                : selected.nombre.charAt(0)}
+                                    </div>
+                                    <p className="text-sm text-gray-600">Vista previa de foto</p>
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email <span className="text-red-400">*</span></label>
@@ -787,6 +967,62 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                                     <input type="text" value={editForm.direccion} onChange={e => setEditForm(f => ({ ...f, direccion: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" />
                                 </div>
                             </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Lugar Nacimiento</label>
+                                    <input type="text" value={editForm.lugar_nacimiento} onChange={e => setEditForm(f => ({ ...f, lugar_nacimiento: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Grupo Sanguíneo</label>
+                                    <input type="text" value={editForm.grupo_sanguineo} onChange={e => setEditForm(f => ({ ...f, grupo_sanguineo: e.target.value.toUpperCase() }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Ej: O+" maxLength={5} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">EPS</label>
+                                    <input type="text" value={editForm.eps} onChange={e => setEditForm(f => ({ ...f, eps: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-2 border-t border-gray-100">
+                                <p className="text-xs font-bold text-[#293577] uppercase tracking-widest">Perfil de Salud y Aprendizaje</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg text-sm text-gray-700">
+                                        <input type="checkbox" checked={editForm.dificultad_aprendizaje} onChange={e => setEditForm(f => ({ ...f, dificultad_aprendizaje: e.target.checked }))} />
+                                        Dificultad de aprendizaje
+                                    </label>
+                                    <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg text-sm text-gray-700">
+                                        <input type="checkbox" checked={editForm.diagnostico_salud} onChange={e => setEditForm(f => ({ ...f, diagnostico_salud: e.target.checked }))} />
+                                        Diagnóstico de salud
+                                    </label>
+                                    <label className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg text-sm text-gray-700">
+                                        <input type="checkbox" checked={editForm.alergias} onChange={e => setEditForm(f => ({ ...f, alergias: e.target.checked }))} />
+                                        Presenta alergias
+                                    </label>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    <textarea value={editForm.dificultad_aprendizaje_desc} onChange={e => setEditForm(f => ({ ...f, dificultad_aprendizaje_desc: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm resize-none" rows={2} placeholder="Detalle de dificultad de aprendizaje" />
+                                    <textarea value={editForm.diagnostico_salud_desc} onChange={e => setEditForm(f => ({ ...f, diagnostico_salud_desc: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm resize-none" rows={2} placeholder="Detalle de diagnóstico de salud" />
+                                    <textarea value={editForm.alergias_desc} onChange={e => setEditForm(f => ({ ...f, alergias_desc: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm resize-none" rows={2} placeholder="Detalle de alergias" />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-2 border-t border-gray-100">
+                                <p className="text-xs font-bold text-[#293577] uppercase tracking-widest">Entorno Familiar</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input type="text" value={editForm.nombre_madre} onChange={e => setEditForm(f => ({ ...f, nombre_madre: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Nombre madre" />
+                                    <input type="text" inputMode="numeric" value={editForm.telefono_madre} onChange={e => setEditForm(f => ({ ...f, telefono_madre: onlyNumbers(e.target.value) }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Teléfono madre" />
+                                    <input type="text" value={editForm.ocupacion_madre} onChange={e => setEditForm(f => ({ ...f, ocupacion_madre: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Ocupación madre" />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input type="text" value={editForm.nombre_padre} onChange={e => setEditForm(f => ({ ...f, nombre_padre: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Nombre padre" />
+                                    <input type="text" inputMode="numeric" value={editForm.telefono_padre} onChange={e => setEditForm(f => ({ ...f, telefono_padre: onlyNumbers(e.target.value) }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Teléfono padre" />
+                                    <input type="text" value={editForm.ocupacion_padre} onChange={e => setEditForm(f => ({ ...f, ocupacion_padre: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Ocupación padre" />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input type="text" value={editForm.convive_con} onChange={e => setEditForm(f => ({ ...f, convive_con: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Convive con" />
+                                    <input type="text" inputMode="numeric" value={editForm.numero_hermanos} onChange={e => setEditForm(f => ({ ...f, numero_hermanos: onlyNumbers(e.target.value) }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Número de hermanos" />
+                                    <input type="text" value={editForm.lugar_que_ocupa_familia} onChange={e => setEditForm(f => ({ ...f, lugar_que_ocupa_familia: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" placeholder="Lugar que ocupa en la familia" />
+                                </div>
+                            </div>
 
                             {/* Académicos */}
                             <div className="space-y-4 pt-2 border-t border-gray-100">
@@ -812,10 +1048,23 @@ export default function Estudiantes({ estudiantes, cursos, padres, sedes }: Prop
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Acudiente</label>
-                                    <select value={editForm.acudiente_id} onChange={e => setEditForm(f => ({ ...f, acudiente_id: e.target.value }))} className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg text-sm bg-white appearance-none">
+                                    <select value={editForm.acudiente_id} onChange={e => onAcudienteChange(e.target.value)} className="w-full pl-4 pr-8 py-2.5 border border-gray-200 rounded-lg text-sm bg-white appearance-none">
                                         <option value="">— Sin asignar —</option>
                                         {padres.map(p => <option key={p.id} value={p.id}>{p.name}{p.documento ? ` — ${p.documento}` : ''}</option>)}
                                     </select>
+                                    {editForm.acudiente_id && (() => {
+                                        const padreSel = padresById.get(Number(editForm.acudiente_id));
+                                        if (!padreSel) return null;
+
+                                        return (
+                                            <div className="mt-2 p-2.5 rounded-lg bg-indigo-50 border border-indigo-100 text-xs text-indigo-800 space-y-0.5">
+                                                <p className="font-semibold">Datos sugeridos del acudiente</p>
+                                                <p>Nombre: {padreSel.name}</p>
+                                                <p>Teléfono: {padreSel.telefono || 'No registrado'}</p>
+                                                <p>Email: {padreSel.email || 'No registrado'}</p>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sede</label>

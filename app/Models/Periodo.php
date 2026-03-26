@@ -46,9 +46,19 @@ class Periodo extends Model
         return $this->hasMany(Boletin::class);
     }
 
+    public function observadoresPeriodo(): HasMany
+    {
+        return $this->hasMany(ObservadorPeriodo::class);
+    }
+
     public function excepciones(): HasMany
     {
         return $this->hasMany(VentanaExcepcion::class);
+    }
+
+    public function eventos(): HasMany
+    {
+        return $this->hasMany(PeriodoEvento::class);
     }
 
     /* ── Scopes ── */

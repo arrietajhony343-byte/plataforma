@@ -52,10 +52,12 @@ export default function SidebarLayout({
 
     const [notifsPos,   setNotifsPos]   = useState<{ top: number; right: number } | null>(null);
     const [userMenuPos, setUserMenuPos] = useState<{ top: number; right: number } | null>(null);
+    const [logoSrc, setLogoSrc]         = useState('/storage/logo.png');
 
     const page = usePage();
     const { url } = page;
     const user = page.props.auth.user;
+    const userName = (userInfo?.name?.trim() || (user as any)?.name || 'Usuario') as string;
 
     // Si el usuario es coordinador, ignorar el menú recibido y usar el menú de coordinador
     const effectiveMenuItems = (user as any)?.rol === 'coordinador' ? coordinadorMenuItems : menuItems;
@@ -171,9 +173,19 @@ export default function SidebarLayout({
                 {/* Logo */}
                 <div className="flex flex-col items-center px-6 py-6 border-b border-white/10">
                     <img
-                        src="/storage/logo.png"
+                        src={logoSrc}
                         alt="I.P. Emprendedores del Saber"
                         className="w-32 h-32 object-contain drop-shadow-lg"
+                        onError={() => {
+                            if (logoSrc === '/storage/logo.png') {
+                                setLogoSrc('/storage/logo-certificados.png');
+                                return;
+                            }
+
+                            if (logoSrc === '/storage/logo-certificados.png') {
+                                setLogoSrc('/logo-certificados.png');
+                            }
+                        }}
                     />
                 </div>
 
@@ -182,15 +194,15 @@ export default function SidebarLayout({
                     <div className="px-6 py-4 border-b border-white/10">
                         <div className="flex items-center gap-3">
                             {userInfo.avatar ? (
-                                <img src={userInfo.avatar} alt={userInfo.name} className="w-12 h-12 rounded-full object-cover" />
+                                <img src={userInfo.avatar} alt={userName} className="w-12 h-12 rounded-full object-cover" />
                             ) : (
                                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
-                                    {userInfo.name.charAt(0)}
+                                    {userName.charAt(0).toUpperCase()}
                                 </div>
                             )}
                             <div>
                                 <p className="font-medium text-sm text-white/70">{userInfo.role || 'Usuario'}</p>
-                                <p className="text-white font-semibold">{userInfo.name}</p>
+                                <p className="text-white font-semibold">{userName}</p>
                             </div>
                         </div>
                     </div>

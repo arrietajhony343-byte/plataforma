@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\{CursoMateria, Matricula, Mensaje, Notificacion, User};
+use App\Models\{Curso, CursoMateria, Matricula, Mensaje, Notificacion, User};
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -156,6 +156,7 @@ class MessageCenterService
             ->with([
                 'roles:id,name',
                 'cursoMaterias.materia:id,nombre',
+                'cursosDirector:id,nombre,director_grupo_id',
                 'hijos:id,name',
                 'matriculas' => fn ($q) => $q->activa()->with('curso:id,nombre')->latest('id'),
             ])
@@ -238,9 +239,20 @@ class MessageCenterService
                 ->whereNotNull('profesor_id')
                 ->pluck('profesor_id');
 
+            $directorIds = Curso::query()
+                ->whereIn('id', $cursoIds)
+                ->whereNotNull('director_grupo_id')
+                ->pluck('director_grupo_id');
+
+            $docenteYDirectoresIds = $profesorIds
+                ->merge($directorIds)
+                ->filter()
+                ->unique()
+                ->values();
+
             return $query
-                ->where(function ($q) use ($profesorIds) {
-                    $q->whereIn('id', $profesorIds)
+                ->where(function ($q) use ($docenteYDirectoresIds) {
+                    $q->whereIn('id', $docenteYDirectoresIds)
                         ->orWhereHas('roles', fn ($roleQ) => $roleQ->where('name', 'admin'));
                 })
                 ->orderBy('name')
@@ -339,6 +351,20 @@ class MessageCenterService
 
     private function contactSubtitle(User $contact): string
     {
+        if ($contact->cursosDirector->isNotEmpty()) {
+            $cursos = $contact->cursosDirector
+                ->pluck('nombre')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($cursos->isNotEmpty()) {
+                return 'Director de grupo · ' . $cursos->take(2)->implode(' · ');
+            }
+
+            return 'Director de grupo';
+        }
+
         if ($contact->hasRole('profesor')) {
             $materias = $contact->cursoMaterias
                 ->pluck('materia.nombre')

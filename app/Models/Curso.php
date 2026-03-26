@@ -11,7 +11,7 @@ class Curso extends Model
 {
     protected $fillable = [
         'nombre', 'nivel', 'grado', 'grupo', 'jornada', 'anio',
-        'cupo_maximo', 'director_grupo_id', 'activo', 'sede_id',
+        'cupo_maximo', 'director_grupo_id', 'activo', 'sede_id', 'imagen',
     ];
 
     protected function casts(): array
@@ -53,6 +53,11 @@ class Curso extends Model
     public function boletines(): HasMany
     {
         return $this->hasMany(Boletin::class);
+    }
+
+    public function observadoresPeriodo(): HasMany
+    {
+        return $this->hasMany(ObservadorPeriodo::class);
     }
 
     /** Estudiantes matriculados (a través de matrículas activas) */

@@ -32,5 +32,20 @@ class DatabaseSeeder extends Seeder
 
         // 3. Todos los datos del colegio (profesores, estudiantes, padres, cursos, notas, etc.)
         $this->call(DatosColegioSeeder::class);
+
+        // 4. Importaciones de cohortes externas
+        $this->call(ImportPreescolarPrincipalSeeder::class);
+        $this->call(ImportTransicionPrincipalSeeder::class);
+        $this->call(ImportPrimeroPrincipalSeeder::class);
+        $this->call(ImportSegundoPrincipalSeeder::class);
+        $this->call(ImportTerceroPrincipalSeeder::class);
+        $this->call(ImportCuartoPrincipalSeeder::class);
+        $this->call(ImportQuintoPrincipalSeeder::class);
+        $this->call(ImportSextoPrincipalSeeder::class);
+        $this->call(ImportSeptimoPrincipalSeeder::class);
+        $this->call(ImportOctavoPrincipalSeeder::class);
+        $this->call(ImportNovenoPrincipalSeeder::class);
+        $this->call(ImportDecimoPrincipalSeeder::class);
+        $this->call(ImportOncePrincipalSeeder::class);
     }
 }

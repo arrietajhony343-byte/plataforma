@@ -1,7 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, Link } from '@inertiajs/react';
 import { estudianteMenuItems } from '@/Config/estudianteMenu';
-import { useState } from 'react';
 
 interface ActividadDash {
     id: number;
@@ -22,6 +21,16 @@ interface Props {
     estudiante: {
         nombre: string;
         grado?: string;
+        foto?: string | null;
+        tipo_documento?: string | null;
+        documento?: string | null;
+        telefono?: string | null;
+        direccion?: string | null;
+        fecha_nacimiento?: string | null;
+        grupo_sanguineo?: string | null;
+        eps?: string | null;
+        acudiente?: string | null;
+        telefono_acudiente?: string | null;
     };
     pendientes: ActividadDash[];
     vencidas: ActividadDash[];
@@ -73,10 +82,14 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
                 {/* Perfil */}
                 <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center">
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#181b49] to-[#293577] flex items-center justify-center mb-3 shadow-lg">
-                        <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                        </svg>
+                    <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-[#181b49] to-[#293577] flex items-center justify-center mb-3 shadow-lg">
+                        {estudiante?.foto ? (
+                            <img src={estudiante.foto} alt={nombre} className="w-full h-full object-cover" />
+                        ) : (
+                            <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                            </svg>
+                        )}
                     </div>
                     <h2 className="font-bold text-gray-900 text-lg">{nombre}</h2>
                     <p className="text-sm text-gray-500 mt-0.5">Grado {grado}</p>
@@ -94,7 +107,7 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                         <p className="text-2xl font-extrabold text-gray-900">{totalActividades}</p>
                         <p className="text-xs text-gray-400 mt-0.5">actividades</p>
                     </Link>
-                    <Link href="/estudiante/actividades" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all group">
+                    <Link href="/estudiante/materias" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all group">
                         <div className="flex items-center gap-2 mb-2">
                             <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
@@ -104,7 +117,7 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                         <p className="text-2xl font-extrabold text-gray-900">{pendientes.length}</p>
                         <p className="text-xs text-gray-400 mt-0.5">por entregar</p>
                     </Link>
-                    <Link href="/estudiante/actividades" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all group">
+                    <Link href="/estudiante/materias" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all group">
                         <div className="flex items-center gap-2 mb-2">
                             <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A9.003 9.003 0 1020.25 12M12 2.25v10.5" /></svg>
@@ -114,6 +127,24 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                         <p className="text-2xl font-extrabold text-gray-900">{vencidas.length}</p>
                         <p className="text-xs text-gray-400 mt-0.5">entregas tardías</p>
                     </Link>
+                </div>
+            </div>
+
+            {/* Datos importantes del estudiante */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-gray-800">Información del estudiante</h3>
+                    <Link href="/profile" className="text-xs text-[#293577] hover:underline font-semibold">Editar perfil →</Link>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Documento:</span> <p className="font-semibold text-gray-800">{(estudiante?.tipo_documento || '') + ' ' + (estudiante?.documento || 'No registrado')}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Teléfono:</span> <p className="font-semibold text-gray-800">{estudiante?.telefono || 'No registrado'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Fecha de nacimiento:</span> <p className="font-semibold text-gray-800">{estudiante?.fecha_nacimiento || 'No registrada'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Dirección:</span> <p className="font-semibold text-gray-800">{estudiante?.direccion || 'No registrada'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Grupo sanguíneo:</span> <p className="font-semibold text-gray-800">{estudiante?.grupo_sanguineo || 'No registrado'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">EPS:</span> <p className="font-semibold text-gray-800">{estudiante?.eps || 'No registrada'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Acudiente:</span> <p className="font-semibold text-gray-800">{estudiante?.acudiente || 'No registrado'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Tel. acudiente:</span> <p className="font-semibold text-gray-800">{estudiante?.telefono_acudiente || 'No registrado'}</p></div>
                 </div>
             </div>
 
@@ -132,7 +163,7 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                             <span className="ml-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">{vencidas.length} vencidas</span>
                         )}
                     </h3>
-                    <Link href="/estudiante/actividades" className="text-xs text-[#293577] hover:underline font-semibold">Ver todas →</Link>
+                    <Link href="/estudiante/materias" className="text-xs text-[#293577] hover:underline font-semibold">Ver en materias →</Link>
                 </div>
 
                 {/* Pendientes */}
@@ -193,6 +224,18 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                             ))}
                         </div>
                     </>
+                )}
+
+                {pendientes.length === 0 && vencidas.length === 0 && (
+                    <div className="px-5 py-12 text-center">
+                        <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700">No hay actividades pendientes ni vencidas</p>
+                        <p className="text-xs text-gray-400 mt-1">Cuando tus profesores publiquen nuevas actividades apareceran aqui.</p>
+                    </div>
                 )}
             </div>
 

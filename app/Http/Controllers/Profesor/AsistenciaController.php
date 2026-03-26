@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Profesor;
 
 use App\Http\Controllers\Controller;
 use App\Models\{Asistencia, CursoMateria, HorarioBloque, Matricula, Periodo};
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -183,6 +184,13 @@ class AsistenciaController extends Controller
         $user = auth()->user();
         $cmId = $request->curso_materia_id;
         $fecha = $request->fecha;
+
+        if (Carbon::parse($fecha)->toDateString() !== now()->toDateString()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Solo puedes registrar o editar asistencias del día actual.',
+            ], 422);
+        }
 
         // Verify ownership
         CursoMateria::where('id', $cmId)

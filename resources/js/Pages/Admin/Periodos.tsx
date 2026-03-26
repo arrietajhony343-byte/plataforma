@@ -13,6 +13,14 @@ interface Excepcion {
     activa: boolean;
 }
 
+interface EventoPeriodo {
+    id: number;
+    fecha: string;
+    tipo: 'evento' | 'reunion_padres' | 'institucional' | 'academico' | 'otro';
+    titulo: string;
+    descripcion: string | null;
+}
+
 interface Periodo {
     id: number;
     nombre: string;
@@ -29,6 +37,7 @@ interface Periodo {
     ventana_inicio: string | null;
     ventana_fin: string | null;
     excepciones: Excepcion[];
+    eventos: EventoPeriodo[];
 }
 
 interface ProfesorItem { id: number; name: string; email: string; }
@@ -82,7 +91,7 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     // ── Estado ventana de calificación ──
     const [showVentanaModal, setShowVentanaModal] = useState(false);
     const [ventanaPeriodo, setVentanaPeriodo] = useState<Periodo | null>(null);
-    const [vtab, setVtab] = useState<'config' | 'excepciones' | 'notificar'>('config');
+    const [vtab, setVtab] = useState<'config' | 'excepciones' | 'eventos' | 'notificar'>('config');
     // Tab config
     const [ventanaForm, setVentanaForm] = useState({ ventana_inicio: '', ventana_fin: '' });
     const [confirmToggle, setConfirmToggle] = useState<false | 'abrir' | 'cerrar'>(false);
@@ -97,6 +106,12 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     const [exBusq, setExBusq] = useState('');
     const [exMotivo, setExMotivo] = useState('');
     const [exProc, setExProc] = useState(false);
+    // Tab eventos
+    const [evFecha, setEvFecha] = useState('');
+    const [evTipo, setEvTipo] = useState<EventoPeriodo['tipo']>('evento');
+    const [evTitulo, setEvTitulo] = useState('');
+    const [evDescripcion, setEvDescripcion] = useState('');
+    const [evProc, setEvProc] = useState(false);
     // Tab notificaciones
     const [ntitulo, setNtitulo] = useState('');
     const [nmensaje, setNmensaje] = useState('');
@@ -246,6 +261,10 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
         setExRefId('');
         setExBusq('');
         setExMotivo('');
+        setEvFecha('');
+        setEvTipo('evento');
+        setEvTitulo('');
+        setEvDescripcion('');
         setNtitulo('');
         setNmensaje('');
         setNSolo(false);
@@ -316,6 +335,34 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
     const handleToggleExcepcion = (exId: number) => {
         if (!ventanaPeriodo) return;
         router.patch(`/admin/periodos/${ventanaPeriodo.id}/excepciones/${exId}/toggle`, {}, { preserveScroll: true });
+    };
+
+    const handleAddEvento = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!ventanaPeriodo || !evFecha || !evTitulo.trim()) return;
+
+        setEvProc(true);
+        router.post(`/admin/periodos/${ventanaPeriodo.id}/eventos`, {
+            fecha: evFecha,
+            tipo: evTipo,
+            titulo: evTitulo,
+            descripcion: evDescripcion,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setEvProc(false);
+                setEvFecha('');
+                setEvTipo('evento');
+                setEvTitulo('');
+                setEvDescripcion('');
+            },
+            onError: () => setEvProc(false),
+        });
+    };
+
+    const handleDeleteEvento = (id: number) => {
+        if (!ventanaPeriodo) return;
+        router.delete(`/admin/periodos/${ventanaPeriodo.id}/eventos/${id}`, { preserveScroll: true });
     };
 
     const handleNotificar = (e: React.FormEvent) => {
@@ -885,6 +932,7 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                 {([
                                     { key: 'config' as const, label: 'Configuración' },
                                     { key: 'excepciones' as const, label: `Excepciones${ventanaPeriodo.excepciones.length > 0 ? ` (${ventanaPeriodo.excepciones.length})` : ''}` },
+                                    { key: 'eventos' as const, label: `Eventos${ventanaPeriodo.eventos.length > 0 ? ` (${ventanaPeriodo.eventos.length})` : ''}` },
                                     { key: 'notificar' as const, label: 'Notificaciones' },
                                 ]).map(tab => (
                                     <button
@@ -1158,6 +1206,115 @@ export default function Periodos({ periodos, anio, aniosDisponibles, sumaPorcent
                                             className="w-full bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:shadow-lg disabled:opacity-40 transition-all"
                                         >
                                             {exProc ? 'Agregando...' : 'Agregar excepción'}
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+
+                            {/* ── TAB: Eventos del periodo ── */}
+                            {vtab === 'eventos' && (
+                                <div className="space-y-5">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
+                                        <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25M3 18.75A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75M3 11.25h18" /></svg>
+                                        <div>
+                                            <p className="text-sm font-semibold text-blue-800">Días especiales del periodo</p>
+                                            <p className="text-xs text-blue-700 mt-0.5">Registra reuniones de padres, eventos institucionales, actividades académicas u otros días importantes.</p>
+                                        </div>
+                                    </div>
+
+                                    {ventanaPeriodo.eventos.length > 0 ? (
+                                        <div className="overflow-hidden rounded-xl border border-gray-100">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600">Fecha</th>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600">Tipo</th>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600">Título</th>
+                                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 hidden sm:table-cell">Detalle</th>
+                                                        <th className="px-4 py-2.5 text-xs font-semibold text-gray-600"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {ventanaPeriodo.eventos.map(ev => (
+                                                        <tr key={ev.id} className="hover:bg-gray-50/80">
+                                                            <td className="px-4 py-3 text-xs font-medium text-gray-700">{formatDate(ev.fecha)}</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#293577]/10 text-[#293577] border border-[#293577]/20">
+                                                                    {ev.tipo === 'reunion_padres' ? 'Reunión padres' : ev.tipo === 'institucional' ? 'Institucional' : ev.tipo === 'academico' ? 'Académico' : ev.tipo === 'otro' ? 'Otro' : 'Evento'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 font-medium text-gray-800 text-sm">{ev.titulo}</td>
+                                                            <td className="px-4 py-3 text-gray-400 text-xs hidden sm:table-cell">{ev.descripcion || '—'}</td>
+                                                            <td className="px-4 py-3">
+                                                                <button onClick={() => handleDeleteEvento(ev.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-gray-400">
+                                            <svg className="w-10 h-10 mx-auto mb-2 text-gray-200" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25M3 11.25h18" /></svg>
+                                            <p className="text-sm">Sin días especiales registrados</p>
+                                        </div>
+                                    )}
+
+                                    <form onSubmit={handleAddEvento} className="border-t pt-5 space-y-3">
+                                        <h3 className="text-sm font-bold text-gray-800">Agregar día especial</h3>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Fecha</label>
+                                                <input
+                                                    type="date"
+                                                    value={evFecha}
+                                                    onChange={e => setEvFecha(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Tipo</label>
+                                                <select
+                                                    value={evTipo}
+                                                    onChange={e => setEvTipo(e.target.value as EventoPeriodo['tipo'])}
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                                >
+                                                    <option value="evento">Evento general</option>
+                                                    <option value="reunion_padres">Reunión de padres</option>
+                                                    <option value="institucional">Actividad institucional</option>
+                                                    <option value="academico">Actividad académica</option>
+                                                    <option value="otro">Otro</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Título</label>
+                                            <input
+                                                type="text"
+                                                value={evTitulo}
+                                                onChange={e => setEvTitulo(e.target.value)}
+                                                placeholder="Ej: Reunión general de padres"
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Descripción (opcional)</label>
+                                            <textarea
+                                                value={evDescripcion}
+                                                onChange={e => setEvDescripcion(e.target.value)}
+                                                rows={2}
+                                                placeholder="Hora, lugar o notas importantes"
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-[#293577]/30"
+                                            />
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!evFecha || !evTitulo.trim() || evProc}
+                                            className="w-full bg-gradient-to-r from-[#293577] to-[#181b49] text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:shadow-lg disabled:opacity-40 transition-all"
+                                        >
+                                            {evProc ? 'Guardando...' : 'Agregar día especial'}
                                         </button>
                                     </form>
                                 </div>

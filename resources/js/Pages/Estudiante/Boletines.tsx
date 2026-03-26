@@ -2,25 +2,35 @@ import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head } from '@inertiajs/react';
 import { estudianteMenuItems } from '@/Config/estudianteMenu';
 
-export default function Boletines() {
-    const nombre = 'Andrés Felipe Muñoz';
+interface BoletinItem {
+    id: number;
+    periodo: string;
+    anio: number | null;
+    promedio: number | null;
+    puesto: number | null;
+    observacion: string | null;
+    estado: string;
+    archivo_url: string | null;
+}
 
-    const periodos = [
-        {
-            periodo: '1er Periodo',
-            estado: 'En curso',
-            fechaInicio: '20 Ene 2026',
-            fechaFin: '15 Abr 2026',
-            promedio: 4.1,
-            disponible: false,
-        },
-    ];
+interface Props {
+    estudiante: {
+        nombre: string;
+    };
+    periodoActual: {
+        id: number;
+        nombre: string;
+        estado: string;
+        fecha_inicio: string | null;
+        fecha_fin: string | null;
+        promedio_parcial: number | null;
+        boletin_generado: boolean;
+    } | null;
+    boletines: BoletinItem[];
+}
 
-    const boletinesAnteriores = [
-        { año: '2025', periodo: '3er Periodo', promedio: 4.3, puesto: 5, observacion: 'Excelente desempeño general. Mantener el ritmo.', descargable: true },
-        { año: '2025', periodo: '2do Periodo', promedio: 3.9, puesto: 8, observacion: 'Buen rendimiento. Mejorar en ciencias exactas.', descargable: true },
-        { año: '2025', periodo: '1er Periodo', promedio: 4.0, puesto: 7, observacion: 'Buen inicio de año. Participación activa.', descargable: true },
-    ];
+export default function Boletines({ estudiante, periodoActual, boletines }: Props) {
+    const nombre = estudiante?.nombre || 'Estudiante';
 
     const getNotaColor = (n: number) => {
         if (n >= 4.0) return 'text-green-600';
@@ -41,56 +51,79 @@ export default function Boletines() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="font-bold text-gray-900">Periodo Actual</h3>
-                    <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-semibold">En curso</span>
+                    <span className={`text-xs px-3 py-1 rounded-full font-semibold ${periodoActual?.boletin_generado ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {periodoActual?.boletin_generado ? 'Generado' : 'En curso'}
+                    </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div>
                         <p className="text-xs text-gray-400">Periodo</p>
-                        <p className="text-sm font-bold text-gray-800">1er Periodo 2026</p>
+                        <p className="text-sm font-bold text-gray-800">{periodoActual?.nombre || 'Sin periodo activo'}</p>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400">Fecha Inicio</p>
-                        <p className="text-sm font-bold text-gray-800">20 Ene 2026</p>
+                        <p className="text-sm font-bold text-gray-800">{periodoActual?.fecha_inicio || '—'}</p>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400">Fecha Fin</p>
-                        <p className="text-sm font-bold text-gray-800">15 Abr 2026</p>
+                        <p className="text-sm font-bold text-gray-800">{periodoActual?.fecha_fin || '—'}</p>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400">Promedio Parcial</p>
-                        <p className={`text-xl font-extrabold ${getNotaColor(4.1)}`}>4.1</p>
+                        <p className={`text-xl font-extrabold ${periodoActual?.promedio_parcial !== null && periodoActual?.promedio_parcial !== undefined ? getNotaColor(periodoActual.promedio_parcial) : 'text-gray-300'}`}>
+                            {periodoActual?.promedio_parcial !== null && periodoActual?.promedio_parcial !== undefined ? periodoActual.promedio_parcial.toFixed(1) : '—'}
+                        </p>
                     </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-3 italic">El boletín estará disponible al finalizar el periodo.</p>
+                {!periodoActual?.boletin_generado && (
+                    <p className="text-xs text-gray-400 mt-3 italic">El boletin estara disponible cuando sea generado por administracion.</p>
+                )}
             </div>
 
             {/* Boletines anteriores */}
-            <h3 className="font-bold text-gray-900 mb-3">Boletines Anteriores</h3>
-            <div className="space-y-3">
-                {boletinesAnteriores.map((b, i) => (
-                    <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
+            <h3 className="font-bold text-gray-900 mb-3">Boletines Generados</h3>
+            {boletines.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
+                    <p className="text-gray-700 font-semibold">Aun no tienes boletines generados.</p>
+                    <p className="text-gray-400 text-sm mt-1">Apareceran aqui en cuanto se publiquen oficialmente.</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                {boletines.map((b) => (
+                    <div key={b.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#181b49] to-[#293577] flex items-center justify-center text-white flex-shrink-0">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                             </svg>
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-gray-900 text-sm">{b.periodo} — {b.año}</h4>
-                            <p className="text-xs text-gray-400">Puesto: #{b.puesto} • {b.observacion}</p>
+                            <h4 className="font-bold text-gray-900 text-sm">{b.periodo} — {b.anio || ''}</h4>
+                            <p className="text-xs text-gray-400">
+                                Puesto: {b.puesto ? `#${b.puesto}` : '—'} • {b.observacion || 'Sin observacion general'}
+                            </p>
                         </div>
                         <div className="text-center flex-shrink-0">
-                            <p className={`text-xl font-extrabold ${getNotaColor(b.promedio)}`}>{b.promedio}</p>
+                            <p className={`text-xl font-extrabold ${b.promedio !== null ? getNotaColor(b.promedio) : 'text-gray-300'}`}>
+                                {b.promedio !== null ? b.promedio.toFixed(1) : '—'}
+                            </p>
                             <p className="text-[10px] text-gray-400">Promedio</p>
                         </div>
-                        <button className="flex-shrink-0 px-4 py-2 bg-[#293577] text-white rounded-lg text-xs font-semibold hover:bg-[#181b49] transition flex items-center gap-1.5">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                            </svg>
-                            PDF
-                        </button>
+                        {b.archivo_url ? (
+                            <a href={b.archivo_url} target="_blank" rel="noreferrer" className="flex-shrink-0 px-4 py-2 bg-[#293577] text-white rounded-lg text-xs font-semibold hover:bg-[#181b49] transition flex items-center gap-1.5">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                </svg>
+                                PDF
+                            </a>
+                        ) : (
+                            <span className="flex-shrink-0 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-xs font-semibold">
+                                Sin archivo
+                            </span>
+                        )}
                     </div>
                 ))}
             </div>
+            )}
         </SidebarLayout>
     );
 }

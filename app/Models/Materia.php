@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Materia extends Model
 {
     protected $fillable = [
-        'nombre', 'area', 'codigo', 'horas_semanales', 'activa',
+        'nombre', 'area', 'codigo', 'horas_semanales', 'activa', 'imagen',
     ];
 
     protected function casts(): array

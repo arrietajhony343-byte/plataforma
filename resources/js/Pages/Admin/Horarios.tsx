@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router } from '@inertiajs/react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 
 /* ═══════════════════════════ INTERFACES ═══════════════════════════ */
@@ -540,9 +540,34 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
 
     const selectedCM = cursoMaterias.find(cm => cm.id === parseInt(form.curso_materia_id));
 
+    // Bloques disponibles del formulario según el nivel del curso seleccionado.
+    const formSlots = useMemo<TimeSlot[]>(() => {
+        if (!formFilterCurso) return jornadasByNivel.general;
+        const curso = cursos.find(c => String(c.id) === formFilterCurso);
+        const nivelKey = normalizeNivel(curso?.nivel);
+        return jornadasByNivel[nivelKey] ?? jornadasByNivel.general;
+    }, [formFilterCurso, cursos, jornadasByNivel]);
+
+    // Si cambia el curso (y por tanto la jornada), mantener un bloque válido en el formulario.
+    useEffect(() => {
+        if (!showModal) return;
+        const bloques = formSlots.filter(s => !s.esDescanso);
+        if (bloques.length === 0) return;
+
+        const vigente = bloques.find(s => s.hora === form.hora_inicio);
+        if (!vigente) {
+            setForm(f => ({ ...f, hora_inicio: bloques[0].hora, hora_fin: bloques[0].horaFin }));
+            return;
+        }
+
+        if (form.hora_fin !== vigente.horaFin) {
+            setForm(f => ({ ...f, hora_fin: vigente.horaFin }));
+        }
+    }, [formSlots, form.hora_inicio, form.hora_fin, showModal]);
+
     /* ── Auto-update hora_fin al cambiar hora_inicio ── */
     const handleHoraChange = (hora: string) => {
-        const slot = customSlots.find(s => s.hora === hora);
+        const slot = formSlots.find(s => s.hora === hora);
         setForm(f => ({ ...f, hora_inicio: hora, hora_fin: slot?.horaFin ?? f.hora_fin }));
     };
 
@@ -1835,7 +1860,20 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                 ) : (
                                     <select
                                         value={formFilterCurso}
-                                        onChange={e => { setFormFilterCurso(e.target.value); setForm(f => ({ ...f, curso_materia_id: '' })); }}
+                                        onChange={e => {
+                                            const cursoId = e.target.value;
+                                            const curso = cursos.find(c => String(c.id) === cursoId);
+                                            const nivelKey = normalizeNivel(curso?.nivel);
+                                            const bloques = (jornadasByNivel[nivelKey] ?? jornadasByNivel.general).filter(s => !s.esDescanso);
+
+                                            setFormFilterCurso(cursoId);
+                                            setForm(f => ({
+                                                ...f,
+                                                curso_materia_id: '',
+                                                hora_inicio: bloques[0]?.hora ?? f.hora_inicio,
+                                                hora_fin: bloques[0]?.horaFin ?? f.hora_fin,
+                                            }));
+                                        }}
                                         className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-all ${!formFilterCurso && formErrors.curso_materia_id ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
                                     >
                                         <option value="">
@@ -1967,7 +2005,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                             onChange={e => handleHoraChange(e.target.value)}
                                             className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-all ${formErrors.hora_inicio ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
                                         >
-                                            {customSlots.filter(s => !s.esDescanso).map(s => (
+                                            {formSlots.filter(s => !s.esDescanso).map(s => (
                                                 <option key={s.hora} value={s.hora}>{s.hora} — {s.horaFin}</option>
                                             ))}
                                         </select>

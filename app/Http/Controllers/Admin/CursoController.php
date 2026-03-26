@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{Curso, Materia, CursoMateria, User, Matricula, Sede};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -61,6 +62,7 @@ class CursoController extends Controller
                     'activo'           => $c->activo,
                     'sede_id'          => $c->sede_id,
                     'sede_nombre'      => $c->sede?->nombre ?? null,
+                    'imagen'           => $this->resolveImageUrl($c->imagen, '/images/presets/curso-default.svg'),
                 ];
             });
 
@@ -78,6 +80,7 @@ class CursoController extends Controller
                 'profesores'     => $m->profesores->map(fn($p) => ['id' => $p->id, 'name' => $p->name])->toArray(),
                 'horasSemanales' => $m->horas_semanales,
                 'activa'         => $m->activa,
+                'imagen'         => $this->resolveImageUrl($m->imagen, '/images/presets/materia-default.svg'),
             ]);
 
         // Mapa materia_id → [{ id, name }] para filtrar el selector de profesor en el modal de curso
@@ -121,13 +124,19 @@ class CursoController extends Controller
             'materias_asignadas'              => 'nullable|array',
             'materias_asignadas.*.materia_id' => 'required|exists:materias,id',
             'materias_asignadas.*.profesor_id'=> 'required|exists:users,id',
+            'imagen_preset'      => 'nullable|string|max:255',
+            'imagen_file'        => 'nullable|image|max:4096',
         ]);
 
         $anio = Curso::max('anio') ?? now()->year;
         $materiasData = $data['materias_asignadas'] ?? [];
         unset($data['materias_asignadas']);
 
-        $curso = Curso::create(array_merge($data, ['anio' => $anio, 'activo' => true]));
+        $curso = Curso::create(array_merge($data, [
+            'anio' => $anio,
+            'activo' => true,
+            'imagen' => $this->resolveImageInput($request),
+        ]));
 
         // Sincronizar materias asignadas
         $this->syncMaterias($curso, $materiasData);
@@ -149,11 +158,14 @@ class CursoController extends Controller
             'materias_asignadas'              => 'nullable|array',
             'materias_asignadas.*.materia_id' => 'required|exists:materias,id',
             'materias_asignadas.*.profesor_id'=> 'required|exists:users,id',
+            'imagen_preset'      => 'nullable|string|max:255',
+            'imagen_file'        => 'nullable|image|max:4096',
         ]);
 
         $materiasData = $data['materias_asignadas'] ?? [];
         unset($data['materias_asignadas']);
 
+        $data['imagen'] = $this->resolveImageInput($request, $curso->imagen);
         $curso->update($data);
 
         // Sincronizar materias asignadas
@@ -190,5 +202,36 @@ class CursoController extends Controller
                 'profesor_id'=> $item['profesor_id'] ?? null,
             ]);
         }
+    }
+
+    private function resolveImageInput(Request $request, ?string $current = null): string
+    {
+        if ($request->hasFile('imagen_file')) {
+            if ($current && !str_starts_with($current, '/images/presets/')) {
+                Storage::disk('public')->delete($current);
+            }
+
+            return $request->file('imagen_file')->store('catalogo/cursos', 'public');
+        }
+
+        $preset = $request->input('imagen_preset');
+        if (is_string($preset) && $preset !== '') {
+            return $preset;
+        }
+
+        return $current ?: '/images/presets/curso-default.svg';
+    }
+
+    private function resolveImageUrl(?string $value, string $fallback): string
+    {
+        if (!$value) {
+            return $fallback;
+        }
+
+        if (str_starts_with($value, '/images/') || str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, '/storage/')) {
+            return $value;
+        }
+
+        return Storage::url($value);
     }
 }

@@ -113,8 +113,22 @@ function formatHora(hora: string): string {
     return `${hh > 12 ? hh - 12 : hh === 0 ? 12 : hh}:${m} ${ampm}`;
 }
 
-const csrfToken = () =>
-    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
+function todayLocalIso(): string {
+    const now = new Date();
+    const tzOffsetMs = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - tzOffsetMs).toISOString().slice(0, 10);
+}
+
+const csrfToken = () => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+    if (meta) return meta;
+
+    const cookie = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('XSRF-TOKEN='));
+
+    return cookie ? decodeURIComponent(cookie.split('=')[1] || '') : '';
+};
 
 /* ══════════════════ Component ══════════════════ */
 
@@ -231,6 +245,8 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
         return fechaSel >= periodoActual.fecha_inicio && fechaSel <= periodoActual.fecha_fin;
     }, [fechaSel, periodoActual]);
 
+    const esFechaEditable = fechaSel === todayLocalIso();
+
     /* ── Guard filter changes ── */
     const guardedChange = (change: () => void) => {
         if (isDirtyRef.current) {
@@ -319,11 +335,13 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
 
     /* ── Update a student's state ── */
     const setEstado = (key: string, estado: Estado) => {
+        if (!esFechaEditable) return;
         setIsDirty(true);
         setRegistros(prev => ({ ...prev, [key]: { ...prev[key], estado } }));
     };
 
     const setObservacion = (key: string, obs: string) => {
+        if (!esFechaEditable) return;
         setIsDirty(true);
         setRegistros(prev => ({ ...prev, [key]: { ...prev[key], observacion: obs } }));
     };
@@ -338,6 +356,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
 
     /* ── Bulk actions ── */
     const marcarTodos = (estado: Estado, bloqueId: number | null) => {
+        if (!esFechaEditable) return;
         setIsDirty(true);
         setRegistros(prev => {
             const copy = { ...prev };
@@ -353,6 +372,10 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
     /* ── Save attendance ── */
     const guardarAsistencia = () => {
         if (!cursoMateriaId) return;
+        if (!esFechaEditable) {
+            setErrorMsg('Solo puedes registrar o editar asistencias del día actual.');
+            return;
+        }
         setGuardando(true);
         setErrorMsg(null);
 
@@ -365,9 +388,11 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
 
         fetch('/profesor/asistencias', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
             body: JSON.stringify({
@@ -376,7 +401,15 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                 registros: regs,
             }),
         })
-            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(async (r) => {
+                if (r.status === 419) {
+                    throw new Error('Tu sesión expiró o el token CSRF no es válido. Recarga la página e inténtalo de nuevo.');
+                }
+
+                const isJson = (r.headers.get('content-type') || '').includes('application/json');
+                const data = isJson ? await r.json() : {};
+                return { ok: r.ok, data };
+            })
             .then(({ ok, data }) => {
                 if (!ok) throw new Error(data.message || data.error || 'Error al guardar');
                 setIsDirty(false);
@@ -476,7 +509,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                         {!vistaResumen && cursoMateriaId && estudiantes.length > 0 && (
                             <button
                                 onClick={guardarAsistencia}
-                                disabled={guardando}
+                                disabled={guardando || !esFechaEditable}
                                 className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm ${
                                     isDirty
                                         ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300'
@@ -505,7 +538,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                         </div>
                         <button
                             onClick={guardarAsistencia}
-                            disabled={guardando}
+                            disabled={guardando || !esFechaEditable}
                             className="flex-shrink-0 inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-40"
                         >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -595,6 +628,12 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                     {!vistaResumen && cursoMateriaId && (
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                             <span className="text-sm text-gray-600 font-medium capitalize">{formatFecha(fechaSel)}</span>
+                            {!esFechaEditable && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    Solo lectura (solo hoy se edita)
+                                </span>
+                            )}
                             {tieneRegistrosGuardados && !loading && (
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -733,6 +772,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                                         <button
                                                             key={e}
                                                             onClick={() => marcarTodos(e, bloque.id === 0 ? null : bloque.id)}
+                                                            disabled={!esFechaEditable}
                                                             className={`p-1.5 rounded-lg transition-colors ${estadoConfig[e].bg} ${estadoConfig[e].color} hover:ring-2 hover:ring-gray-300`}
                                                             title={`Marcar todos como ${estadoConfig[e].label}`}
                                                         >
@@ -794,6 +834,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                                                         <button
                                                                             key={e}
                                                                             onClick={() => setEstado(key, e)}
+                                                                            disabled={!esFechaEditable}
                                                                             className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                                                                                 active
                                                                                     ? `${c.bg} ${c.color} ${c.border} shadow-sm`
@@ -811,6 +852,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                                             {/* Observation toggle */}
                                                             <button
                                                                 onClick={() => toggleObs(key)}
+                                                                disabled={!esFechaEditable && !tieneObs}
                                                                 className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${
                                                                     obsAbierta
                                                                         ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
@@ -836,6 +878,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                                                         <textarea
                                                                             value={reg.observacion ?? ''}
                                                                             onChange={e => setObservacion(key, e.target.value)}
+                                                                            disabled={!esFechaEditable}
                                                                             placeholder="Ej: Llegó 10 minutos tarde por cita médica..."
                                                                             rows={2}
                                                                             maxLength={500}
@@ -847,6 +890,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                                                             {tieneObs && (
                                                                                 <button
                                                                                     onClick={() => { setObservacion(key, ''); }}
+                                                                                    disabled={!esFechaEditable}
                                                                                     className="text-[10px] text-red-400 hover:text-red-600 font-medium transition-colors"
                                                                                 >
                                                                                     Borrar observación
