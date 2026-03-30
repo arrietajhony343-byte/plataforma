@@ -154,7 +154,7 @@ const cargarImagenBoletin = async (src: string, opacidad = 1, maxPx = 400): Prom
                 }
                 ctx.globalAlpha = opacidad;
                 ctx.drawImage(img, 0, 0, cW, cH);
-                res(opacidad >= 1 ? canvas.toDataURL('image/jpeg', 0.85) : canvas.toDataURL('image/png'));
+                res(opacidad >= 1 ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png'));
             };
             img.onerror = () => res(null);
             img.src = base64;
@@ -182,10 +182,12 @@ const getDescriptor = (nota: number | null): string => {
 /* ─── PDF builder for one boletin page ─── */
 async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string | null, logoWatermark: string | null) {
     const W = 210;
-    const LOGO_X = 8, LOGO_Y = 3, LOGO_W = 36, LOGO_H = 40;
-    const TRIANG_MAX = 58;
-    const TEXT_RIGHT = W - TRIANG_MAX - 2;
-    const TEXT_CX = (LOGO_X + LOGO_W + TEXT_RIGHT) / 2;
+    const LOGO_X = 7.5, LOGO_Y = 2.5, LOGO_W = 38, LOGO_H = 41;
+    const TRIANG_MAX = 50;
+    const TRIANG_MID = 33;
+    const TRIANG_MIN = 16;
+    const TEXT_RIGHT = W - TRIANG_MAX - 3;
+    const TEXT_CX = W / 2;
 
     // ── Fondo blanco ──
     doc.setFillColor(255, 255, 255);
@@ -193,11 +195,11 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
 
     // ── Triángulos apilados (idénticos a Certificados) ──
     doc.setFillColor(188, 214, 242);
-    doc.triangle(W - 58, 0, W, 0, W, 58, 'F');
+    doc.triangle(W - TRIANG_MAX, 0, W, 0, W, TRIANG_MAX, 'F');
     doc.setFillColor(80, 130, 205);
-    doc.triangle(W - 38, 0, W, 0, W, 38, 'F');
+    doc.triangle(W - TRIANG_MID, 0, W, 0, W, TRIANG_MID, 'F');
     doc.setFillColor(22, 55, 148);
-    doc.triangle(W - 18, 0, W, 0, W, 18, 'F');
+    doc.triangle(W - TRIANG_MIN, 0, W, 0, W, TRIANG_MIN, 'F');
 
     // ── Logo ──
     if (logoHeader) {
@@ -227,12 +229,12 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
     doc.text('DANE 313001800093  –  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
 
     // ── Barra divisora navy ──
-    const barX = LOGO_X + LOGO_W + 2;
-    const barW = TEXT_RIGHT - barX;
+    const barX = LOGO_X + LOGO_W + 7;
+    const barW = Math.max(86, TEXT_RIGHT - barX - 1);
     doc.setFillColor(10, 35, 90);
     doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.4);
-    doc.rect(barX, 46, barW, 2.5, 'FD');
+    doc.setLineWidth(0.35);
+    doc.rect(barX, 46, barW, 2.1, 'FD');
 
     // ── Título del informe ──
     doc.setTextColor(10, 35, 90);
@@ -246,11 +248,14 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
     doc.text(b.periodo, W / 2, 72, { align: 'center' });
 
     // ── Fila estudiante / grado / jornada ──
+    const tableX = 8;
+    const tableW = 194;
+    const infoRowH = 8;
     const fY = 76;
     doc.setFillColor(10, 35, 90);
     doc.setDrawColor(10, 35, 90);
-    doc.setLineWidth(0.4);
-    doc.rect(8, fY, 194, 8, 'F');
+    doc.setLineWidth(0.35);
+    doc.rect(tableX, fY, tableW, infoRowH, 'FD');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
     doc.text(`ESTUDIANTE: ${b.estudiante.toUpperCase()}`, 11, fY + 5.3);
@@ -258,9 +263,12 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
     doc.text(`JORNADA: ${b.jornada.toUpperCase()}`, 170, fY + 5.3);
 
     // ── Fila valoración ──
-    const vY = fY + 8;
+    const vY = fY + infoRowH;
+    const valorRowH = 6.5;
     doc.setFillColor(31, 58, 131);
-    doc.rect(8, vY, 194, 6.5, 'F');
+    doc.setDrawColor(10, 35, 90);
+    doc.setLineWidth(0.35);
+    doc.rect(tableX, vY, tableW, valorRowH, 'FD');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
     doc.text('<VALORACION: LOGROS/DIFICULTADES>', W / 2, vY + 4.5, { align: 'center' });
@@ -312,11 +320,11 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
         body.push(['Sin materias', 'Sin indicadores registrados', ...Array(totalPer).fill('-'), '-', '-']);
     }
 
-    const tableStartY = vY + 6.5;
+    const tableStartY = vY + valorRowH;
 
     autoTable(doc, {
         startY: tableStartY,
-        margin: { left: 8, right: 8 },
+        margin: { left: tableX, right: tableX },
         head,
         body,
         theme: 'grid',
@@ -616,8 +624,8 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     // ── PDF individual ──
     const generarPDFIndividual = useCallback(async (boletin: Boletin) => {
         const [logoHeader, logoWatermark] = await Promise.all([
-            cargarLogoBoletin(1, 300),
-            cargarLogoBoletin(0.08, 260),
+            cargarLogoBoletin(1, 850),
+            cargarLogoBoletin(0.08, 420),
         ]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         await dibujarBoletinPagina(doc, boletin, logoHeader, logoWatermark);
@@ -629,8 +637,8 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
         const lista = boletinesFiltrados;
         if (lista.length === 0) { alert('No hay boletines para exportar.'); return; }
         const [logoHeader, logoWatermark] = await Promise.all([
-            cargarLogoBoletin(1, 300),
-            cargarLogoBoletin(0.08, 260),
+            cargarLogoBoletin(1, 850),
+            cargarLogoBoletin(0.08, 420),
         ]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         for (let idx = 0; idx < lista.length; idx++) {

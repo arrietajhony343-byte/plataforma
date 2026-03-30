@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
-use App\Models\{Certificado, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion, Nota};
-use Illuminate\Http\{Request, JsonResponse};
+use App\Models\{Certificado, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion, Nota, Pago};
+use Illuminate\Http\{Request, JsonResponse, RedirectResponse};
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,15 +21,32 @@ class CertificadoController extends Controller
         // Pre-cargar tipos por código para resolver registros legacy
         $tiposPorCodigo = TipoCertificado::all()->keyBy('codigo');
 
+        $pagosCertificados = collect();
+        Pago::query()
+            ->whereNotNull('notas')
+            ->where('notas', 'like', 'certificado:%')
+            ->orderByDesc('id')
+            ->get()
+            ->each(function (Pago $pago) use ($pagosCertificados) {
+                $certificadoId = $this->extractCertificadoIdFromNotas($pago->notas);
+                if ($certificadoId && !$pagosCertificados->has($certificadoId)) {
+                    $pagosCertificados->put($certificadoId, $pago);
+                }
+            });
+
         // Get all certificates with relationships
         $certificados = Certificado::with(['estudiante', 'tipoCertificado'])
             ->when($sedeId, fn($q) => $q->whereHas('estudiante', fn($eq) => $eq->where('sede_id', $sedeId)))
             ->orderByDesc('created_at')
             ->get()
-            ->map(function (Certificado $c) use ($tiposPorCodigo) {
+            ->map(function (Certificado $c) use ($tiposPorCodigo, $pagosCertificados) {
                 // Resolver tipo: si no tiene tipo_certificado_id, buscar por código legacy
                 $tipo = $c->tipoCertificado
                     ?? ($c->tipo ? $tiposPorCodigo->get($c->tipo) : null);
+
+                $pago = $pagosCertificados->get($c->id);
+                $requierePago = ((int) ($tipo?->precio ?? 0)) > 0;
+                $pagoConfirmado = !$requierePago || ($pago && $pago->estado === 'pagado');
 
                 // Si es legacy sin relación, auto-asignar el tipo_certificado_id
                 if (!$c->tipo_certificado_id && $tipo) {
@@ -97,6 +114,9 @@ class CertificadoController extends Controller
                     'fecha_solicitud'     => $c->fecha_solicitud?->format('Y-m-d'),
                     'fecha_entrega'       => $c->fecha_entrega?->format('Y-m-d'),
                     'estado'              => $c->estado,
+                    'pago_estado'         => $pago?->estado,
+                    'pago_confirmado'     => (bool) $pagoConfirmado,
+                    'requiere_pago'       => (bool) $requierePago,
                     'padres'              => $padres,
                     'notas'               => $notas,
                 ];
@@ -235,6 +255,40 @@ class CertificadoController extends Controller
         return Storage::download($certificado->archivo);
     }
 
+    /**
+     * Guardar certificado generado (PDF) y marcarlo como generado/enviado.
+     */
+    public function generar(Request $request, Certificado $certificado): RedirectResponse
+    {
+        $request->validate([
+            'archivo' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+        ]);
+
+        if (!$this->pagoConfirmadoParaCertificado($certificado)) {
+            return redirect()->back()->with('error', 'Debe confirmarse el pago antes de generar el certificado.');
+        }
+
+        if ($certificado->archivo && Storage::exists($certificado->archivo)) {
+            Storage::delete($certificado->archivo);
+        }
+
+        $nombreArchivo = 'certificado_' . $certificado->id . '_' . now()->format('Ymd_His') . '.pdf';
+        $rutaArchivo = $request->file('archivo')->storeAs('certificados/' . $certificado->estudiante_id, $nombreArchivo);
+
+        $certificado->update([
+            'archivo' => $rutaArchivo,
+            'estado' => 'listo',
+        ]);
+
+        $notificados = $this->notifyPadresDisponibilidad($certificado, false);
+
+        $mensaje = $notificados > 0
+            ? "Certificado generado y enviado. Se notificó a {$notificados} acudiente(s)."
+            : 'Certificado generado y enviado.';
+
+        return redirect()->back()->with('success', $mensaje);
+    }
+
     /* ════════════════════════════════════════════════════════════════════════
      * Notify parent / send message
      * ════════════════════════════════════════════════════════════════════════ */
@@ -244,43 +298,80 @@ class CertificadoController extends Controller
      */
     public function notificarPadre(Certificado $certificado)
     {
-        $estudiante = $certificado->estudiante;
-        $tipo       = $certificado->tipoCertificado?->nombre ?? $certificado->tipo ?? 'Certificado';
-        $padres     = $estudiante->padres;
-
-        if ($padres->isEmpty()) {
+        $count = $this->notifyPadresDisponibilidad($certificado, true);
+        if ($count === 0) {
             return redirect()->back()->with('error', 'El estudiante no tiene acudientes registrados.');
         }
 
-        $admin    = auth()->user();
-    $asunto   = "Certificado disponible: {$tipo}";
-    $contenido = "Estimado acudiente, le informamos que el {$tipo} de {$estudiante->name} ya fue generado en la plataforma y se encuentra disponible para gestión con la institución. Puede comunicarse por este mismo canal o acercarse a secretaría en horario de atención para continuar el trámite.";
+        return redirect()->back()->with('success', "Notificación enviada a {$count} acudiente(s) de {$certificado->estudiante->name}.");
+    }
+
+    private function notifyPadresDisponibilidad(Certificado $certificado, bool $advanceStatus): int
+    {
+        $estudiante = $certificado->estudiante;
+        $tipo = $certificado->tipoCertificado?->nombre ?? $certificado->tipo ?? 'Certificado';
+        $padres = $estudiante->padres;
+
+        if ($padres->isEmpty()) {
+            return 0;
+        }
+
+        $admin = auth()->user();
+        $asunto = "Certificado generado y enviado: {$tipo}";
+        $contenido = "Estimado acudiente, el {$tipo} de {$estudiante->name} ya fue generado y enviado en la plataforma. Desde su módulo de certificados puede descargarlo.";
 
         foreach ($padres as $padre) {
             Mensaje::create([
-                'remitente_id'    => $admin->id,
+                'remitente_id' => $admin->id,
                 'destinatario_id' => $padre->id,
-                'asunto'          => $asunto,
-                'contenido'       => $contenido,
-                'leido'           => false,
+                'asunto' => $asunto,
+                'contenido' => $contenido,
+                'leido' => false,
             ]);
 
             Notificacion::create([
                 'user_id' => $padre->id,
-                'tipo'    => 'success',
-                'titulo'  => $asunto,
+                'tipo' => 'success',
+                'titulo' => $asunto,
                 'mensaje' => $contenido,
-                'leida'   => false,
+                'leida' => false,
             ]);
         }
 
-        // Auto-advance to 'listo' if still in process
-        if (in_array($certificado->estado, ['solicitado', 'en_proceso'])) {
+        if ($advanceStatus && in_array($certificado->estado, ['solicitado', 'en_proceso'], true)) {
             $certificado->update(['estado' => 'listo']);
         }
 
-        $count = $padres->count();
-        return redirect()->back()->with('success', "Notificación enviada a {$count} acudiente(s) de {$estudiante->name}.");
+        return $padres->count();
+    }
+
+    private function extractCertificadoIdFromNotas(?string $notas): ?int
+    {
+        if (!$notas) {
+            return null;
+        }
+
+        if (!preg_match('/certificado:(\d+)/', $notas, $matches)) {
+            return null;
+        }
+
+        return (int) ($matches[1] ?? 0) ?: null;
+    }
+
+    private function pagoConfirmadoParaCertificado(Certificado $certificado): bool
+    {
+        $requierePago = ((int) ($certificado->tipoCertificado?->precio ?? 0)) > 0;
+        if (!$requierePago) {
+            return true;
+        }
+
+        $pago = Pago::query()
+            ->where('estudiante_id', $certificado->estudiante_id)
+            ->where('notas', 'like', 'certificado:' . $certificado->id . '%')
+            ->latest('id')
+            ->first();
+
+        return $pago?->estado === 'pagado';
     }
 
     /* ════════════════════════════════════════════════════════════════════════

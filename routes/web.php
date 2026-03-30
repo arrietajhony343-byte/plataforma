@@ -109,6 +109,7 @@ Route::middleware(['auth', 'verified', 'role:admin|coordinador'])->prefix('admin
     Route::get('/certificados', [CertificadoController::class, 'index'])->name('certificados');
     Route::post('/certificados', [CertificadoController::class, 'store'])->name('certificados.store');
     Route::put('/certificados/{certificado}', [CertificadoController::class, 'update'])->name('certificados.update');
+    Route::post('/certificados/{certificado}/generar', [CertificadoController::class, 'generar'])->name('certificados.generar');
     Route::delete('/certificados/{certificado}', [CertificadoController::class, 'destroy'])->name('certificados.destroy');
     Route::get('/certificados/{certificado}/download', [CertificadoController::class, 'download'])->name('certificados.download');
     Route::post('/certificados/{certificado}/notificar', [CertificadoController::class, 'notificarPadre'])->name('certificados.notificar');
@@ -274,6 +275,7 @@ Route::middleware(['auth', 'verified', 'role:padre'])->prefix('padre')->name('pa
 
     Route::get('/certificados', [PadreCertificadoController::class, 'index'])->name('certificados');
     Route::post('/certificados', [PadreCertificadoController::class, 'store'])->name('certificados.store');
+    Route::get('/certificados/{certificado}/download', [PadreCertificadoController::class, 'download'])->name('certificados.download');
 
     Route::get('/pagos', [PadrePagoController::class, 'index'])->name('pagos');
     Route::post('/pagos/{pago}/pagar', [PadrePagoController::class, 'pagar'])->name('pagos.pagar');

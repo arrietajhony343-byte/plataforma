@@ -54,6 +54,9 @@ interface Certificado {
     fecha_solicitud: string;
     fecha_entrega: string | null;
     estado: 'solicitado' | 'en_proceso' | 'listo' | 'entregado';
+    pago_estado: 'pendiente' | 'pagado' | 'vencido' | 'anulado' | null;
+    pago_confirmado: boolean;
+    requiere_pago: boolean;
     padres: { id: number; name: string }[];
     notas: { materia: string; ih: number; definitiva: number; escala: string }[];
 }
@@ -79,7 +82,7 @@ const nivelesConfig: Record<string, { label: string; color: string; chipActive: 
 const estadosConfig: Record<string, { label: string; color: string }> = {
     solicitado: { label: 'Solicitado',       color: 'bg-yellow-100 text-yellow-800' },
     en_proceso: { label: 'En Proceso',       color: 'bg-blue-100 text-blue-800' },
-    listo:      { label: 'Listo para Entrega', color: 'bg-green-100 text-green-800' },
+    listo:      { label: 'Generado y Enviado', color: 'bg-green-100 text-green-800' },
     entregado:  { label: 'Entregado',        color: 'bg-gray-100 text-gray-600' },
 };
 
@@ -316,6 +319,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     };
     const [processing, setProcessing] = useState(false);
     const [sendingNotif, setSendingNotif] = useState(false);
+    const [generatingCertId, setGeneratingCertId] = useState<number | null>(null);
 
     // ── Buscador de estudiante en modal solicitud ──
     const [busquedaEst, setBusquedaEst] = useState('');
@@ -353,7 +357,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     }, []);
 
     // ── PDF Generation ──
-    const generarPDF = useCallback(async (cert: Certificado) => {
+    const generarPDF = useCallback(async (cert: Certificado, descargar = true) => {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const W   = 210;
         const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
@@ -618,8 +622,42 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             drawFooter();
         }
 
-        doc.save(`${cert.tipo_nombre.replace(/\s+/g, '_')}_${cert.estudiante.replace(/\s+/g, '_')}.pdf`);
+        const fileName = `${cert.tipo_nombre.replace(/\s+/g, '_')}_${cert.estudiante.replace(/\s+/g, '_')}.pdf`;
+        const blob = doc.output('blob');
+        if (descargar) {
+            doc.save(fileName);
+        }
+
+        return { blob, fileName };
     }, []);
+
+    const handleGenerarCertificado = useCallback(async (cert: Certificado) => {
+        if (cert.requiere_pago && !cert.pago_confirmado) {
+            alert('No se puede generar el certificado hasta confirmar el pago.');
+            return;
+        }
+
+        setGeneratingCertId(cert.id);
+
+        try {
+            const { blob, fileName } = await generarPDF(cert, true);
+            const pdf = new File([blob], fileName, { type: 'application/pdf' });
+
+            router.post(
+                `/admin/certificados/${cert.id}/generar`,
+                { archivo: pdf },
+                {
+                    forceFormData: true,
+                    preserveScroll: true,
+                    onSuccess: () => setShowModalGestionar(null),
+                    onFinish: () => setGeneratingCertId(null),
+                },
+            );
+        } catch {
+            setGeneratingCertId(null);
+            alert('No fue posible generar el PDF del certificado.');
+        }
+    }, [generarPDF]);
 
     // ── Notificar Padre ──
     const handleNotificarPadre = useCallback((cert: Certificado) => {
@@ -1082,7 +1120,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    {cert.estado === 'listo' && cert.archivo && (
+                                                    {cert.archivo && (cert.estado === 'listo' || cert.estado === 'entregado') && (
                                                         <a
                                                             href={`/admin/certificados/${cert.id}/download`}
                                                             className="text-green-600 hover:text-green-800 text-sm font-medium"
@@ -1612,6 +1650,11 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${getEstadoBadge(showModalGestionar.estado)}`}>
                                             {getEstadoLabel(showModalGestionar.estado)}
                                         </span>
+                                        {showModalGestionar.requiere_pago && (
+                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${showModalGestionar.pago_confirmado ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                {showModalGestionar.pago_confirmado ? 'Pago confirmado' : 'Pago pendiente'}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1622,7 +1665,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                     const estados = ['solicitado', 'en_proceso', 'listo', 'entregado'];
                                     const currentIdx = estados.indexOf(showModalGestionar.estado);
                                     const isDone = i <= currentIdx;
-                                    const labels = ['Solicitado', 'En proceso', 'Listo', 'Entregado'];
+                                    const labels = ['Solicitado', 'En proceso', 'Generado', 'Entregado'];
                                     return (
                                         <div key={s} className="flex items-center flex-1 min-w-0">
                                             <div className="flex flex-col items-center flex-1 min-w-0">
@@ -1696,6 +1739,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                 <div className="grid grid-cols-2 gap-2">
                                     {(Object.entries(estadosConfig) as [string, { label: string; color: string }][]).map(([key, cfg]) => {
                                         const isCurrent = showModalGestionar.estado === key;
+                                        const bloqueadoPorPago = !showModalGestionar.pago_confirmado && showModalGestionar.requiere_pago && (key === 'listo' || key === 'entregado');
                                         const estadoIcons: Record<string, JSX.Element> = {
                                             solicitado: <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
                                             en_proceso: <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
@@ -1706,11 +1750,13 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                             <button
                                                 key={key}
                                                 onClick={() => handleUpdateEstado(showModalGestionar, key)}
-                                                disabled={isCurrent}
+                                                disabled={isCurrent || bloqueadoPorPago}
                                                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                                                     isCurrent
                                                         ? 'bg-[#293577] text-white cursor-default shadow-md'
-                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:shadow-sm'
+                                                        : bloqueadoPorPago
+                                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:shadow-sm'
                                                 }`}
                                             >
                                                 {estadoIcons[key]}
@@ -1720,6 +1766,11 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                         );
                                     })}
                                 </div>
+                                {!showModalGestionar.pago_confirmado && showModalGestionar.requiere_pago && (
+                                    <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                                        Debes confirmar el pago para habilitar generación y cierre del certificado.
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -1727,15 +1778,32 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                         <div className="p-4 border-t border-gray-100 bg-gray-50/50 space-y-2">
                             {/* PDF + Notify row */}
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => generarPDF(showModalGestionar)}
-                                    className="flex-1 flex items-center justify-center gap-2 bg-[#293577] hover:bg-[#181b49] text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    Generar PDF
-                                </button>
+                                {showModalGestionar.archivo && (showModalGestionar.estado === 'listo' || showModalGestionar.estado === 'entregado') ? (
+                                    <a
+                                        href={`/admin/certificados/${showModalGestionar.id}/download`}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-[#293577] hover:bg-[#181b49] text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Descargar certificado
+                                    </a>
+                                ) : (
+                                    <button
+                                        onClick={() => handleGenerarCertificado(showModalGestionar)}
+                                        disabled={(showModalGestionar.requiere_pago && !showModalGestionar.pago_confirmado) || generatingCertId === showModalGestionar.id}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-[#293577] hover:bg-[#181b49] disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                                    >
+                                        {generatingCertId === showModalGestionar.id ? (
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        )}
+                                        Generar y enviar
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => handleNotificarPadre(showModalGestionar)}
                                     disabled={sendingNotif || !showModalGestionar.padres?.length}

@@ -40,17 +40,22 @@ class HorarioController extends Controller
         $mInt = (int) $m;
         $mPad = str_pad((string) $mInt, 2, '0', STR_PAD_LEFT);
 
-        return array_values(array_unique([
-            $normalized,
+        $variants = [
             $hInt . ':' . $mPad,
             str_pad((string) $hInt, 2, '0', STR_PAD_LEFT) . ':' . $mPad,
             $hInt . ':' . $mInt,
-            $hInt . ':00',
-            str_pad((string) $hInt, 2, '0', STR_PAD_LEFT),
-            (string) $hInt,
             $hInt . ':' . $mPad . ':00',
             str_pad((string) $hInt, 2, '0', STR_PAD_LEFT) . ':' . $mPad . ':00',
-        ]));
+        ];
+
+        // Las formas sin minutos solo representan :00; no deben coincidir con 8:45, 9:30, etc.
+        if ($mInt === 0) {
+            $variants[] = $hInt . ':00';
+            $variants[] = str_pad((string) $hInt, 2, '0', STR_PAD_LEFT);
+            $variants[] = (string) $hInt;
+        }
+
+        return array_values(array_unique($variants));
     }
 
     private function normalizeJornadaBloques(array $bloques, string $nivel, array $defaults): array
@@ -78,24 +83,6 @@ class HorarioController extends Controller
                 'horaFin' => $horaFin,
                 'esDescanso' => (bool) ($slot['esDescanso'] ?? in_array($key, $descansoBase, true)),
             ];
-        }
-
-        // Si un guardado histórico omitió esDescanso, recupera los descansos por patrón base.
-        foreach ($base as $slot) {
-            if (empty($slot['esDescanso'])) {
-                continue;
-            }
-
-            $hora = $this->normalizeHour($slot['hora'] ?? '');
-            $horaFin = $this->normalizeHour($slot['horaFin'] ?? '');
-            $key = $hora . '-' . $horaFin;
-            if (!isset($items[$key])) {
-                $items[$key] = [
-                    'hora' => $hora,
-                    'horaFin' => $horaFin,
-                    'esDescanso' => true,
-                ];
-            }
         }
 
         usort($items, fn($a, $b) => strcmp($a['hora'], $b['hora']));

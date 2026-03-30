@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\{Certificado, ConceptoPago, Pago, TipoCertificado, User};
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -67,6 +68,7 @@ class CertificadoController extends Controller
                     'precio' => (int) ($c->tipoCertificado?->precio ?? 0),
                     'descripcion' => $c->descripcion,
                     'estado' => $c->estado,
+                    'archivo_disponible' => !empty($c->archivo),
                     'fecha_solicitud' => $c->fecha_solicitud?->format('Y-m-d'),
                     'fecha_entrega' => $c->fecha_entrega?->format('Y-m-d'),
                     'pago' => $pago ? [
@@ -143,5 +145,25 @@ class CertificadoController extends Controller
         }
 
         return redirect()->back()->with('success', 'Solicitud registrada. Si aplica costo, ya tienes el pago pendiente en el modulo de Pagos.');
+    }
+
+    public function download(Request $request, Certificado $certificado)
+    {
+        $padre = $request->user();
+        $hijoIds = $padre->hijos()->pluck('users.id');
+
+        if (!$hijoIds->contains((int) $certificado->estudiante_id)) {
+            abort(403, 'No autorizado para descargar este certificado.');
+        }
+
+        if (!in_array($certificado->estado, ['listo', 'entregado'], true)) {
+            return redirect()->back()->with('error', 'El certificado aún no está generado para descarga.');
+        }
+
+        if (!$certificado->archivo || !Storage::exists($certificado->archivo)) {
+            return redirect()->back()->with('error', 'El archivo del certificado no está disponible.');
+        }
+
+        return Storage::download($certificado->archivo);
     }
 }

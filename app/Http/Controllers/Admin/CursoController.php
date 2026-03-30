@@ -162,14 +162,17 @@ class CursoController extends Controller
             'imagen_file'        => 'nullable|image|max:4096',
         ]);
 
+        $hasMateriasPayload = $request->has('materias_asignadas');
         $materiasData = $data['materias_asignadas'] ?? [];
         unset($data['materias_asignadas']);
 
         $data['imagen'] = $this->resolveImageInput($request, $curso->imagen);
         $curso->update($data);
 
-        // Sincronizar materias asignadas
-        $this->syncMaterias($curso, $materiasData);
+        // Sincronizar materias asignadas solo si el payload las incluye.
+        if ($hasMateriasPayload) {
+            $this->syncMaterias($curso, $materiasData);
+        }
 
         return redirect()->back()->with('success', 'Curso actualizado.');
     }
@@ -191,16 +194,52 @@ class CursoController extends Controller
      */
     private function syncMaterias(Curso $curso, array $materiasData): void
     {
-        // Eliminar las existentes
-        $curso->cursoMaterias()->delete();
-
-        // Recrear con los datos nuevos
+        // Normalizar por materia_id (la última selección prevalece si viene repetida).
+        $incomingByMateria = [];
         foreach ($materiasData as $item) {
+            $materiaId = (int) ($item['materia_id'] ?? 0);
+            if ($materiaId <= 0) {
+                continue;
+            }
+
+            $incomingByMateria[$materiaId] = [
+                'materia_id' => $materiaId,
+                'profesor_id' => isset($item['profesor_id']) ? (int) $item['profesor_id'] : null,
+            ];
+        }
+
+        $existing = $curso->cursoMaterias()->withCount('horarioBloques')->get()->keyBy('materia_id');
+
+        // Crear o actualizar sin cambiar IDs existentes, para no perder horario_bloques.
+        foreach ($incomingByMateria as $materiaId => $payload) {
+            $row = $existing->get($materiaId);
+
+            if ($row) {
+                $row->profesor_id = $payload['profesor_id'];
+                $row->save();
+                continue;
+            }
+
             CursoMateria::create([
-                'curso_id'   => $curso->id,
-                'materia_id' => $item['materia_id'],
-                'profesor_id'=> $item['profesor_id'] ?? null,
+                'curso_id' => $curso->id,
+                'materia_id' => $materiaId,
+                'profesor_id' => $payload['profesor_id'],
             ]);
+        }
+
+        // Eliminar solo las materias retiradas que no tienen bloques de horario.
+        $incomingIds = array_map('intval', array_keys($incomingByMateria));
+        $toRemove = $curso->cursoMaterias()
+            ->withCount('horarioBloques')
+            ->whereNotIn('materia_id', $incomingIds)
+            ->get();
+
+        foreach ($toRemove as $row) {
+            if ((int) $row->horario_bloques_count > 0) {
+                continue;
+            }
+
+            $row->delete();
         }
     }
 

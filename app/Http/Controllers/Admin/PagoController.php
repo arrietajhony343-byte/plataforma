@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
-use App\Models\{Pago, ConceptoPago, User, Periodo, Matricula, Curso, Sede};
+use App\Models\{Certificado, Pago, ConceptoPago, User, Periodo, Matricula, Curso, Sede};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -120,13 +120,18 @@ class PagoController extends Controller
             $data['fecha_pago'] = now()->toDateString();
         }
 
-        Pago::create($data);
+        $pago = Pago::create($data);
+        if (($pago->estado ?? null) === 'pagado') {
+            $this->marcarCertificadoEnGestion($pago);
+        }
 
         return redirect()->back()->with('success', 'Pago registrado correctamente.');
     }
 
     public function update(Request $request, Pago $pago)
     {
+        $estadoPrevio = $pago->estado;
+
         $data = $request->validate([
             'estado'       => 'required|in:pendiente,pagado,vencido,anulado',
             'metodo_pago'  => 'nullable|string|max:50',
@@ -140,6 +145,10 @@ class PagoController extends Controller
         }
 
         $pago->update($data);
+
+        if (($data['estado'] ?? null) === 'pagado' && $estadoPrevio !== 'pagado') {
+            $this->marcarCertificadoEnGestion($pago);
+        }
 
         return redirect()->back()->with('success', 'Pago actualizado.');
     }
@@ -157,6 +166,8 @@ class PagoController extends Controller
             'referencia'  => $data['referencia'] ?? null,
             'fecha_pago'  => now()->toDateString(),
         ]);
+
+        $this->marcarCertificadoEnGestion($pago);
 
         return redirect()->back()->with('success', 'Pago confirmado.');
     }
@@ -210,5 +221,35 @@ class PagoController extends Controller
         $concepto->update(['activo' => !$concepto->activo]);
 
         return redirect()->back()->with('success', $concepto->activo ? 'Concepto activado.' : 'Concepto desactivado.');
+    }
+
+    private function marcarCertificadoEnGestion(Pago $pago): void
+    {
+        $certificadoId = $this->extractCertificadoIdFromNotas($pago->notas);
+        if (!$certificadoId) {
+            return;
+        }
+
+        $certificado = Certificado::query()->find($certificadoId);
+        if (!$certificado) {
+            return;
+        }
+
+        if ($certificado->estado === 'solicitado') {
+            $certificado->update(['estado' => 'en_proceso']);
+        }
+    }
+
+    private function extractCertificadoIdFromNotas(?string $notas): ?int
+    {
+        if (!$notas) {
+            return null;
+        }
+
+        if (!preg_match('/certificado:(\d+)/', $notas, $matches)) {
+            return null;
+        }
+
+        return (int) ($matches[1] ?? 0) ?: null;
     }
 }

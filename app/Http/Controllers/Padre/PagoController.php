@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Padre;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Comprobante, Pago, User};
+use App\Models\{Certificado, Comprobante, Notificacion, Pago, User};
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -117,6 +117,8 @@ class PagoController extends Controller
             ]
         );
 
+        $this->marcarCertificadoEnGestionYNotificar($pago);
+
         return redirect()->back()->with('success', 'Pago registrado correctamente y comprobante generado.');
     }
 
@@ -174,5 +176,58 @@ class PagoController extends Controller
             ],
             'comprobantes' => $comprobantes,
         ]);
+    }
+
+    private function marcarCertificadoEnGestionYNotificar(Pago $pago): void
+    {
+        $certificadoId = $this->extractCertificadoIdFromNotas($pago->notas);
+        if (!$certificadoId) {
+            return;
+        }
+
+        $certificado = Certificado::query()->with(['estudiante', 'tipoCertificado'])->find($certificadoId);
+        if (!$certificado) {
+            return;
+        }
+
+        if ($certificado->estado === 'solicitado') {
+            $certificado->update(['estado' => 'en_proceso']);
+        }
+
+        $gestores = User::query()
+            ->where('activo', true)
+            ->whereHas('roles', fn($q) => $q->whereIn('name', ['admin', 'coordinador']))
+            ->when($certificado->estudiante?->sede_id, fn($q, $sedeId) => $q->where('sede_id', $sedeId))
+            ->get();
+
+        if ($gestores->isEmpty()) {
+            return;
+        }
+
+        $tipoNombre = $certificado->tipoCertificado?->nombre ?? $certificado->tipo ?? 'Certificado';
+        $mensaje = 'Se confirmó el pago del certificado "' . $tipoNombre . '" de ' . ($certificado->estudiante?->name ?? 'estudiante') . '. Ya está disponible para gestionar.';
+
+        foreach ($gestores as $gestor) {
+            Notificacion::query()->create([
+                'user_id' => $gestor->id,
+                'tipo' => 'pago',
+                'titulo' => 'Pago de certificado confirmado',
+                'mensaje' => $mensaje,
+                'leida' => false,
+            ]);
+        }
+    }
+
+    private function extractCertificadoIdFromNotas(?string $notas): ?int
+    {
+        if (!$notas) {
+            return null;
+        }
+
+        if (!preg_match('/certificado:(\d+)/', $notas, $matches)) {
+            return null;
+        }
+
+        return (int) ($matches[1] ?? 0) ?: null;
     }
 }

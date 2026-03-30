@@ -22,6 +22,7 @@ interface Solicitud {
     precio: number;
     descripcion: string | null;
     estado: 'solicitado' | 'en_proceso' | 'listo' | 'entregado';
+    archivo_disponible: boolean;
     fecha_solicitud: string | null;
     fecha_entrega: string | null;
     pago: {
@@ -70,13 +71,13 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
 
     const getSeguimiento = (solicitud: Solicitud) => {
         const pagoOk = !solicitud.pago || solicitud.pago.estado === 'pagado';
-        const enProceso = solicitud.estado === 'en_proceso' || solicitud.estado === 'listo' || solicitud.estado === 'entregado';
+        const generadoEnviado = solicitud.estado === 'listo' || solicitud.estado === 'entregado';
         const entregado = solicitud.estado === 'entregado';
 
         const etapas = [
             { label: 'Solicitud registrada', done: true },
             { label: solicitud.pago ? 'Pago confirmado' : 'Sin pago requerido', done: pagoOk },
-            { label: 'En gestion', done: enProceso },
+            { label: 'Generado y enviado', done: generadoEnviado },
             { label: 'Entregado', done: entregado },
         ];
 
@@ -216,11 +217,22 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                                     s.estado === 'en_proceso' ? 'bg-amber-100 text-amber-700' :
                                                     'bg-gray-100 text-gray-700'
                                                 }`}>
-                                                    {s.estado.replace('_', ' ')}
+                                                    {s.estado === 'listo' ? 'generado y enviado' : s.estado.replace('_', ' ')}
                                                 </span>
                                                 <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#293577]/10 text-[#293577]">{formatMonto(s.precio)}</span>
                                             </div>
                                         </div>
+
+                                        {s.archivo_disponible && (s.estado === 'listo' || s.estado === 'entregado') && (
+                                            <div className="mt-3 flex justify-end">
+                                                <a
+                                                    href={`/padre/certificados/${s.id}/download`}
+                                                    className="px-3 py-1.5 rounded-lg bg-[#293577] text-white text-sm font-semibold hover:bg-[#181b49]"
+                                                >
+                                                    Descargar certificado
+                                                </a>
+                                            </div>
+                                        )}
 
                                         <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
                                             <div className="mb-2 h-1.5 rounded-full bg-gray-200">
