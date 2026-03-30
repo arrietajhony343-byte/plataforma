@@ -146,6 +146,21 @@ const fechaLiteral = (fecha = new Date()) => {
     return { dia, mes, anio };
 };
 
+const sanitizarDetalleAdicional = (detalle?: string | null): string | null => {
+    const limpio = (detalle ?? '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^[,.;:\-\s]+/, '')
+        .replace(/[,.;:\-\s]+$/, '');
+
+    // Evita imprimir cadenas de prueba o ruido corto (por ejemplo: "asd").
+    if (limpio.length < 8 || !limpio.includes(' ')) {
+        return null;
+    }
+
+    return limpio;
+};
+
 /**
  * Carga una imagen, la redimensiona al tamaño máximo indicado (en px a 96dpi)
  * y aplica opacidad opcional. Devuelve base64 JPEG (opacidad=1) o PNG (opacidad<1).
@@ -192,7 +207,7 @@ const cargarImagenConOpacidad = async (src: string, opacidad = 1, maxPx = 400): 
                     ctx2.fillStyle = '#ffffff';
                     ctx2.fillRect(0, 0, cW, cH);
                     ctx2.drawImage(img, 0, 0, cW, cH);
-                    res(canvas2.toDataURL('image/jpeg', 0.85));
+                    res(canvas2.toDataURL('image/jpeg', 0.92));
                 } else {
                     res(canvas.toDataURL('image/png'));
                 }
@@ -362,7 +377,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         const W   = 210;
         const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
         const { dia, mes, anio } = fechaLiteral();
-        const logoHeader    = await cargarPrimerLogoDisponible(1,    300);
+        const logoHeader    = await cargarPrimerLogoDisponible(1,    420);
         const logoWatermark = await cargarPrimerLogoDisponible(0.08, 260);
 
         const nombreEstudiante = cert.estudiante.toUpperCase();
@@ -372,14 +387,16 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             : 'documento registrado en la instituci\u00f3n';
         const curso          = (cert.curso || '\u2014').toUpperCase();
         const nivelAcademico = getNivelAcademico(cert.nivel);
-        const detalleAdicional = cert.descripcion?.trim();
+        const detalleAdicional = sanitizarDetalleAdicional(cert.descripcion);
 
         /* ─── Header ─── */
-        // Logo zone: x=8, w=34  |  Triangles max-left at W-38=172mm  |  Text zone: 42..168mm → center=105mm
-        const LOGO_X = 8, LOGO_Y = 4, LOGO_W = 34, LOGO_H = 38;
-        const TRIANG_MAX = 38; // outermost band left-edge distance from right: W - TRIANG_MAX = 172mm
-        const TEXT_RIGHT = W - TRIANG_MAX - 4; // 168mm — derecha del bloque de texto
-        const TEXT_CX  = (LOGO_X + LOGO_W + TEXT_RIGHT) / 2; // ~105mm
+        // Misma geometria de boletines para mantener consistencia visual.
+        const LOGO_X = 7.5, LOGO_Y = 2.5, LOGO_W = 38, LOGO_H = 41;
+        const TRIANG_MAX = 50;
+        const TRIANG_MID = 33;
+        const TRIANG_MIN = 16;
+        const TEXT_RIGHT = W - TRIANG_MAX - 3;
+        const TEXT_CX = W / 2;
         const drawHeader = () => {
             doc.setFillColor(255, 255, 255);
             doc.rect(0, 0, W, 297, 'F');
@@ -387,15 +404,15 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             // ── 3 stacked triangles from top-right corner (largest pale → smallest dark navy) ──
             // All share apex at (W, 0); each drawn on top of the previous one
             doc.setFillColor(188, 214, 242);          // pale blue — largest
-            doc.triangle(W - 58, 0,  W, 0,  W, 58, 'F');
-            doc.setFillColor(80, 128, 200);            // medium blue
-            doc.triangle(W - 38, 0,  W, 0,  W, 38, 'F');
+            doc.triangle(W - TRIANG_MAX, 0, W, 0, W, TRIANG_MAX, 'F');
+            doc.setFillColor(80, 130, 205);            // medium blue
+            doc.triangle(W - TRIANG_MID, 0, W, 0, W, TRIANG_MID, 'F');
             doc.setFillColor(22, 55, 148);             // dark navy — smallest
-            doc.triangle(W - 18, 0,  W, 0,  W, 18, 'F');
+            doc.triangle(W - TRIANG_MIN, 0, W, 0, W, TRIANG_MIN, 'F');
 
             // ── Logo ──
             if (logoHeader) {
-                doc.addImage(logoHeader, 'PNG', LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
+                doc.addImage(logoHeader, 'JPEG', LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
             } else {
                 const cx = LOGO_X + LOGO_W / 2;
                 const cy = LOGO_Y + LOGO_H / 2 - 2;
@@ -433,12 +450,12 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             doc.text('DANE 313001800093  \u2013  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
 
             // ── Navy divider bar under text block (filled + black border) ──
-            const barX = LOGO_X + LOGO_W + 2; // starts just after logo
-            const barW = TEXT_RIGHT - barX;    // ends at text right limit
+            const barX = LOGO_X + LOGO_W + 7;
+            const barW = Math.max(86, TEXT_RIGHT - barX - 1);
             doc.setFillColor(10, 35, 90);
             doc.setDrawColor(0, 0, 0);
-            doc.setLineWidth(0.4);
-            doc.rect(barX, 46, barW, 2.5, 'FD');
+            doc.setLineWidth(0.35);
+            doc.rect(barX, 46, barW, 2.1, 'FD');
         };
 
         /* ─── Watermark ─── */
