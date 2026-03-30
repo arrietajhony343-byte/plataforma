@@ -1,13 +1,14 @@
 import { profesorMenuItems } from '@/Config/profesorMenu';
 import SidebarLayout from '@/Layouts/SidebarLayout';
-import { Head } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { FormEvent, useMemo, useState } from 'react';
 
 interface Resumen {
     totalCursos: number;
     totalClasesSemanales: number;
     actividadesPendientes: number;
     ventanasAbiertas: number;
+    eventosPersonales?: number;
 }
 
 interface ClaseSemanal {
@@ -50,15 +51,26 @@ interface HitoInstitucional {
     periodo: string;
 }
 
+interface EventoPersonal {
+    id: number;
+    titulo: string;
+    descripcion: string | null;
+    fecha: string;
+    hora: string | null;
+    color: string | null;
+}
+
 interface EventoCalendario {
     id: string;
+    sourceId?: number;
     fecha: string;
     inicio: string | null;
     fin: string | null;
     titulo: string;
     descripcion: string | null;
-    categoria: 'clase' | 'actividad' | 'institucional';
+    categoria: 'clase' | 'actividad' | 'institucional' | 'personal';
     tipo: string;
+    color?: string | null;
     curso: string | null;
     materia: string | null;
     salon: string | null;
@@ -71,6 +83,7 @@ interface Props {
     clasesSemanales: ClaseSemanal[];
     actividades: ActividadCalendario[];
     hitosInstitucionales: HitoInstitucional[];
+    eventosPersonales: EventoPersonal[];
 }
 
 const DAY_ORDER: Record<string, number> = {
@@ -192,8 +205,9 @@ function buildWeeklyClassEvents(clases: ClaseSemanal[], start: Date, end: Date):
 function sortEvents(events: EventoCalendario[]) {
     const weights: Record<EventoCalendario['categoria'], number> = {
         institucional: 0,
-        clase: 1,
-        actividad: 2,
+        personal: 1,
+        clase: 2,
+        actividad: 3,
     };
 
     return [...events].sort((a, b) => {
@@ -206,6 +220,15 @@ function sortEvents(events: EventoCalendario[]) {
 }
 
 function getEventTone(event: EventoCalendario) {
+    if (event.categoria === 'personal') {
+        return {
+            dot: 'bg-teal-600',
+            chip: 'bg-teal-100 text-teal-700',
+            soft: 'border-teal-100 bg-teal-50',
+            badge: 'bg-teal-600 text-white',
+        };
+    }
+
     if (event.categoria === 'clase') {
         return {
             dot: 'bg-[#293577]',
@@ -278,24 +301,34 @@ function getEventTone(event: EventoCalendario) {
 }
 
 function getEventLabel(event: EventoCalendario) {
+    if (event.categoria === 'personal') return 'Evento personal';
     if (event.categoria === 'clase') return 'Clase';
     if (event.categoria === 'actividad') return ACTIVITY_META[event.tipo]?.label ?? 'Actividad';
     return HITO_META[event.tipo as HitoInstitucional['tipo']]?.label ?? 'Hito institucional';
 }
 
 function getEventIcon(event: EventoCalendario) {
+    if (event.categoria === 'personal') return 'EP';
     if (event.categoria === 'clase') return 'CL';
     if (event.categoria === 'actividad') return ACTIVITY_META[event.tipo]?.icon ?? 'AC';
     return HITO_META[event.tipo as HitoInstitucional['tipo']]?.icon ?? 'HI';
 }
 
-export default function Calendario({ profesor, resumen, clasesSemanales, actividades, hitosInstitucionales }: Props) {
+export default function Calendario({ profesor, resumen, clasesSemanales, actividades, hitosInstitucionales, eventosPersonales }: Props) {
     const today = new Date();
     const todayIso = toIsoDate(today);
     const nowTime = `${pad(today.getHours())}:${pad(today.getMinutes())}`;
 
     const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
     const [selectedDate, setSelectedDate] = useState(todayIso);
+    const [creatingEvent, setCreatingEvent] = useState(false);
+    const [newEvent, setNewEvent] = useState({
+        titulo: '',
+        descripcion: '',
+        fecha: todayIso,
+        hora: '',
+        color: '#0f766e',
+    });
 
     const monthStart = useMemo(
         () => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1),
@@ -311,8 +344,6 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
     const monthEndIso = toIsoDate(monthEnd);
 
     const monthEvents = useMemo(() => {
-        const classEvents = buildWeeklyClassEvents(clasesSemanales, monthStart, monthEnd);
-
         const activityEvents = actividades
             .filter((actividad) => actividad.fecha >= monthStartIso && actividad.fecha <= monthEndIso)
             .map<EventoCalendario>((actividad) => ({
@@ -347,8 +378,27 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                 periodo: hito.periodo,
             }));
 
-        return sortEvents([...classEvents, ...activityEvents, ...institutionalEvents]);
-    }, [actividades, clasesSemanales, hitosInstitucionales, monthEnd, monthEndIso, monthStart, monthStartIso]);
+        const personalEvents = eventosPersonales
+            .filter((evento) => evento.fecha >= monthStartIso && evento.fecha <= monthEndIso)
+            .map<EventoCalendario>((evento) => ({
+                id: `personal-${evento.id}`,
+                sourceId: evento.id,
+                fecha: evento.fecha,
+                inicio: evento.hora,
+                fin: null,
+                titulo: evento.titulo,
+                descripcion: evento.descripcion,
+                categoria: 'personal',
+                tipo: 'personal',
+                color: evento.color,
+                curso: null,
+                materia: null,
+                salon: null,
+                periodo: null,
+            }));
+
+        return sortEvents([...activityEvents, ...institutionalEvents, ...personalEvents]);
+    }, [actividades, eventosPersonales, hitosInstitucionales, monthEndIso, monthStartIso]);
 
     const eventsByDate = useMemo(() => {
         return monthEvents.reduce<Record<string, EventoCalendario[]>>((acc, event) => {
@@ -364,9 +414,6 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
     );
 
     const nextAgenda = useMemo(() => {
-        const horizonEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 21);
-
-        const classEvents = buildWeeklyClassEvents(clasesSemanales, today, horizonEnd);
         const activityEvents = actividades
             .filter((actividad) => actividad.fecha >= todayIso)
             .map<EventoCalendario>((actividad) => ({
@@ -401,12 +448,29 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                 periodo: hito.periodo,
             }));
 
-        return sortEvents([...classEvents, ...activityEvents, ...institutionalEvents]).slice(0, 8);
-    }, [actividades, clasesSemanales, hitosInstitucionales, today, todayIso]);
+        const personalEvents = eventosPersonales
+            .filter((evento) => evento.fecha >= todayIso)
+            .map<EventoCalendario>((evento) => ({
+                id: `personal-proximo-${evento.id}`,
+                sourceId: evento.id,
+                fecha: evento.fecha,
+                inicio: evento.hora,
+                fin: null,
+                titulo: evento.titulo,
+                descripcion: evento.descripcion,
+                categoria: 'personal',
+                tipo: 'personal',
+                color: evento.color,
+                curso: null,
+                materia: null,
+                salon: null,
+                periodo: null,
+            }));
+
+        return sortEvents([...activityEvents, ...institutionalEvents, ...personalEvents]).slice(0, 8);
+    }, [actividades, eventosPersonales, hitosInstitucionales, todayIso]);
 
     const todayEvents = useMemo(() => {
-        const classEvents = buildWeeklyClassEvents(clasesSemanales, today, today);
-
         const activityEvents = actividades
             .filter((actividad) => actividad.fecha === todayIso)
             .map<EventoCalendario>((actividad) => ({
@@ -441,13 +505,75 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                 periodo: hito.periodo,
             }));
 
-        return sortEvents([...classEvents, ...activityEvents, ...institutionalEvents]);
-    }, [actividades, clasesSemanales, hitosInstitucionales, today, todayIso]);
+        const personalEvents = eventosPersonales
+            .filter((evento) => evento.fecha === todayIso)
+            .map<EventoCalendario>((evento) => ({
+                id: `personal-hoy-${evento.id}`,
+                sourceId: evento.id,
+                fecha: evento.fecha,
+                inicio: evento.hora,
+                fin: null,
+                titulo: evento.titulo,
+                descripcion: evento.descripcion,
+                categoria: 'personal',
+                tipo: 'personal',
+                color: evento.color,
+                curso: null,
+                materia: null,
+                salon: null,
+                periodo: null,
+            }));
+
+        return sortEvents([...activityEvents, ...institutionalEvents, ...personalEvents]);
+    }, [actividades, eventosPersonales, hitosInstitucionales, todayIso]);
+
+    const todayWeekday = today.toLocaleDateString('es-CO', { weekday: 'long' }).toLowerCase();
+
+    const clasesHoy = useMemo(
+        () =>
+            clasesSemanales
+                .filter((clase) => clase.dia.toLowerCase() === todayWeekday)
+                .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio)),
+        [clasesSemanales, todayWeekday],
+    );
 
     const nextClassToday =
-        todayEvents.find((event) => event.categoria === 'clase' && (event.inicio ?? '00:00') >= nowTime) ??
-        todayEvents.find((event) => event.categoria === 'clase') ??
+        clasesHoy.find((clase) => clase.horaInicio >= nowTime) ??
+        clasesHoy[0] ??
         null;
+
+    const createPersonalEvent = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!newEvent.titulo.trim()) return;
+
+        setCreatingEvent(true);
+
+        router.post('/profesor/calendario/eventos-personales', {
+            titulo: newEvent.titulo,
+            descripcion: newEvent.descripcion || null,
+            fecha: newEvent.fecha,
+            hora: newEvent.hora || null,
+            color: newEvent.color,
+        }, {
+            preserveScroll: true,
+            onFinish: () => setCreatingEvent(false),
+            onSuccess: () => {
+                setNewEvent({
+                    titulo: '',
+                    descripcion: '',
+                    fecha: selectedDate,
+                    hora: '',
+                    color: '#0f766e',
+                });
+            },
+        });
+    };
+
+    const deletePersonalEvent = (eventId: number) => {
+        router.delete(`/profesor/calendario/eventos-personales/${eventId}`, {
+            preserveScroll: true,
+        });
+    };
 
     const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const firstDayIndex = (new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() + 6) % 7;
@@ -478,11 +604,11 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                     <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                         <div className="max-w-3xl">
                             <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-white/80">
-                                Agenda administrada
+                                Agenda y seguimiento
                             </div>
                             <h1 className="mt-4 text-3xl font-black tracking-tight">Calendario academico del profesor</h1>
                             <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100/90">
-                                Consulta en una sola vista tus clases recurrentes, las entregas activas y los hitos que define administracion, como apertura y cierre de notas por periodo.
+                                Revisa aperturas y cierres de notas, actividades y fechas institucionales. Tambien puedes crear eventos personales para organizar tu agenda diaria.
                             </p>
                         </div>
 
@@ -500,15 +626,15 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Proxima clase</p>
                         <p className="mt-2 text-lg font-black text-[#293577]">
-                            {nextClassToday ? `${nextClassToday.inicio} · ${nextClassToday.materia ?? nextClassToday.titulo}` : 'Sin clase pendiente hoy'}
+                            {nextClassToday ? `${nextClassToday.horaInicio} · ${nextClassToday.materia ?? 'Clase programada'}` : 'Sin clase pendiente hoy'}
                         </p>
                         <p className="mt-2 text-sm text-gray-500">{nextClassToday?.curso ?? 'No hay mas clases por dictar en la jornada de hoy.'}</p>
                     </div>
 
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Entregas</p>
-                        <p className="mt-2 text-3xl font-black text-amber-600">{resumen.actividadesPendientes}</p>
-                        <p className="mt-2 text-sm text-gray-500">Actividades activas con vencimiento pendiente durante el ano.</p>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">Eventos personales</p>
+                        <p className="mt-2 text-3xl font-black text-teal-600">{resumen.eventosPersonales ?? 0}</p>
+                        <p className="mt-2 text-sm text-gray-500">Eventos personales pendientes desde hoy.</p>
                     </div>
                 </section>
 
@@ -556,8 +682,8 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                                 </div>
 
                                 <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-                                    <span className="rounded-full bg-[#293577]/10 px-3 py-1 text-[#293577]">Clases</span>
                                     <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">Actividades</span>
+                                    <span className="rounded-full bg-teal-100 px-3 py-1 text-teal-700">Eventos personales</span>
                                     <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">Aperturas de notas</span>
                                     <span className="rounded-full bg-rose-100 px-3 py-1 text-rose-700">Cierres de notas</span>
                                     <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Hitos de periodo</span>
@@ -673,6 +799,16 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                                                                     {event.descripcion}
                                                                 </p>
                                                             )}
+
+                                                            {event.categoria === 'personal' && event.sourceId && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => deletePersonalEvent(event.sourceId!)}
+                                                                    className="mt-2 inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100"
+                                                                >
+                                                                    Eliminar evento
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -687,7 +823,7 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                                             </svg>
                                         </div>
                                         <p className="mt-3 text-sm font-semibold text-gray-600">No hay agenda registrada para este dia.</p>
-                                        <p className="mt-1 text-xs text-gray-400">Si esperabas ver algo aqui, debe existir en tus actividades, horarios o configurarse desde administracion.</p>
+                                        <p className="mt-1 text-xs text-gray-400">Puedes crear un evento personal o revisar las actividades y hitos institucionales.</p>
                                     </div>
                                 )}
                             </div>
@@ -695,15 +831,71 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
 
                         <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm">
                             <div className="border-b border-gray-100 px-5 py-4">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Organizacion personal</p>
+                                <h2 className="mt-1 text-xl font-black text-gray-900">Crear evento personal</h2>
+                                <p className="mt-1 text-xs text-gray-500">Se agregara directamente al calendario para la fecha seleccionada.</p>
+                            </div>
+
+                            <form onSubmit={createPersonalEvent} className="space-y-3 p-4">
+                                <input
+                                    type="text"
+                                    value={newEvent.titulo}
+                                    onChange={(event) => setNewEvent((prev) => ({ ...prev, titulo: event.target.value }))}
+                                    placeholder="Ej: Reunion con padres de 5A"
+                                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-[#293577] focus:outline-none focus:ring-2 focus:ring-[#293577]/20"
+                                    required
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                        type="date"
+                                        value={newEvent.fecha}
+                                        onChange={(event) => setNewEvent((prev) => ({ ...prev, fecha: event.target.value }))}
+                                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-[#293577] focus:outline-none focus:ring-2 focus:ring-[#293577]/20"
+                                    />
+                                    <input
+                                        type="time"
+                                        value={newEvent.hora}
+                                        onChange={(event) => setNewEvent((prev) => ({ ...prev, hora: event.target.value }))}
+                                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-[#293577] focus:outline-none focus:ring-2 focus:ring-[#293577]/20"
+                                    />
+                                </div>
+                                <textarea
+                                    value={newEvent.descripcion}
+                                    onChange={(event) => setNewEvent((prev) => ({ ...prev, descripcion: event.target.value }))}
+                                    placeholder="Nota opcional"
+                                    rows={2}
+                                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-[#293577] focus:outline-none focus:ring-2 focus:ring-[#293577]/20"
+                                />
+                                <div className="flex items-center justify-between gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewEvent((prev) => ({ ...prev, fecha: selectedDate }))}
+                                        className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"
+                                    >
+                                        Usar dia seleccionado
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={creatingEvent}
+                                        className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                                    >
+                                        {creatingEvent ? 'Guardando...' : 'Agregar evento'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm">
+                            <div className="border-b border-gray-100 px-5 py-4">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Control institucional</p>
-                                <h2 className="mt-1 text-xl font-black text-gray-900">Proximos hitos</h2>
+                                <h2 className="mt-1 text-xl font-black text-gray-900">Proximos eventos</h2>
                             </div>
 
                             <div className="space-y-4 p-4">
                                 <div>
                                     <div className="mb-3 flex items-center justify-between">
-                                        <p className="text-sm font-black text-gray-900">Proximos hitos</p>
-                                        <span className="text-xs font-semibold text-gray-400">Fuente: administracion y carga docente</span>
+                                        <p className="text-sm font-black text-gray-900">Agenda consolidada</p>
+                                        <span className="text-xs font-semibold text-gray-400">Fuente: administracion, actividades y personal</span>
                                     </div>
 
                                     {nextAgenda.length > 0 ? (

@@ -511,6 +511,7 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     const [showModal, setShowModal]           = useState(false);
     const [processing, setProcessing]         = useState(false);
     const [sendingNotif, setSendingNotif]     = useState<number | null>(null);
+    const [updatingBoletinId, setUpdatingBoletinId] = useState<number | null>(null);
     const [validacionEstricta, setValidacionEstricta] = useState(false);
     const [detalleResumen, setDetalleResumen] = useState<ResumenNotas | null>(null);
     const [detalleTab, setDetalleTab]         = useState<'materias' | 'estudiantes'>('materias');
@@ -603,6 +604,14 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
             nivel:      cursoSeleccionado === 'todos' && nivelSeleccionado !== 'todos' ? nivelSeleccionado : null,
         }, { onFinish: () => setProcessing(false) });
     };
+
+    const handleActualizarBoletin = useCallback((boletin: Boletin) => {
+        setUpdatingBoletinId(boletin.id);
+        router.post(`/admin/boletines/${boletin.id}/actualizar`, {}, {
+            preserveScroll: true,
+            onFinish: () => setUpdatingBoletinId(null),
+        });
+    }, []);
 
     // ── PDF individual ──
     const generarPDFIndividual = useCallback(async (boletin: Boletin) => {
@@ -913,6 +922,18 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                                                             </td>
                                                             <td className="px-4 py-3">
                                                                 <div className="flex justify-end items-center gap-1.5">
+                                                                    <button
+                                                                        onClick={() => handleActualizarBoletin(b)}
+                                                                        disabled={updatingBoletinId === b.id}
+                                                                        className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50 text-xs font-semibold"
+                                                                        title="Actualizar boletín"
+                                                                    >
+                                                                        {updatingBoletinId === b.id
+                                                                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                                        }
+                                                                        <span className="hidden lg:inline">Actualizar boletín</span>
+                                                                    </button>
                                                                     {/* PDF individual */}
                                                                     <button
                                                                         onClick={() => generarPDFIndividual(b)}
@@ -979,6 +1000,17 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
                                             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                                                 <span className={`text-xl font-bold ${promedioColor(b.promedio)}`}>{b.promedio.toFixed(1)}</span>
                                                 <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleActualizarBoletin(b)}
+                                                        disabled={updatingBoletinId === b.id}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white transition-all text-xs font-semibold disabled:opacity-50"
+                                                    >
+                                                        {updatingBoletinId === b.id
+                                                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                        }
+                                                        Actualizar
+                                                    </button>
                                                     <button
                                                         onClick={() => generarPDFIndividual(b)}
                                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#293577]/10 text-[#293577] hover:bg-[#293577] hover:text-white transition-all text-xs font-semibold"

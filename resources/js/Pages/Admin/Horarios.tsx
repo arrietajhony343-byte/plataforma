@@ -227,13 +227,43 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
     }, [profesores]);
 
     /* ── Grid data (vista general — múltiples clases por celda) ── */
-    /* Normaliza '07:00' → '7:00' como safety net ante datos legacy */
-    const normalizeHora = (h: string) => h.replace(/^0(\d):/, '$1:');
+    const normalizeHora = (raw: string | null | undefined) => {
+        const value = String(raw ?? '').trim();
+        if (!value) return '0:00';
+
+        const onlyHour = value.match(/^(\d{1,2})$/);
+        if (onlyHour) {
+            return `${parseInt(onlyHour[1], 10)}:00`;
+        }
+
+        const full = value.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+        if (full) {
+            const hh = parseInt(full[1], 10);
+            const mm = String(parseInt(full[2], 10)).padStart(2, '0');
+            return `${hh}:${mm}`;
+        }
+
+        return value;
+    };
+
+    const toMinutes = (hora: string) => {
+        const n = normalizeHora(hora);
+        const parts = n.split(':');
+        const hh = parseInt(parts[0] ?? '0', 10) || 0;
+        const mm = parseInt(parts[1] ?? '0', 10) || 0;
+        return hh * 60 + mm;
+    };
 
     /** Mapea nivel de DB al NivelKey para jornada */
     const normalizeNivel = (nivel?: string | null): NivelKey => {
-        const n = (nivel ?? '').toLowerCase();
-        if (n === 'preescolar' || n === 'transicion') return 'prejardin';
+        const n = (nivel ?? '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (['preescolar', 'prejardin', 'pre jardin', 'jardin', 'transicion'].includes(n)) return 'prejardin';
         if (n === 'primaria') return 'primaria';
         if (n === 'bachillerato' || n === 'secundaria' || n === 'media') return 'bachillerato';
         return 'general';
@@ -248,42 +278,89 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         return jornadasByNivel.general;
     }, [vistaActiva, cursoSeleccionado, cursos, jornadasByNivel]);
 
-    const horarioData: HorarioSlotMulti[] = useMemo(() => {
-        const descansoHoras = new Set(customSlots.filter(s => s.esDescanso).map(s => s.hora));
-        return customSlots.map(slot => {
-            if (slot.esDescanso) return { hora: slot.hora, horaFin: slot.horaFin, esDescanso: true as const, clases: {} };
-            const clases: Partial<Record<DiaKey, Clase[]>> = {};
-            horarios.forEach(h => {
-                const hn = normalizeHora(h.hora);
-                if (!descansoHoras.has(hn) && hn === slot.hora && dias.some(d => d.key === h.dia)) {
-                    const dia = h.dia as DiaKey;
-                    if (!clases[dia]) clases[dia] = [];
-                    clases[dia]!.push({
-                        id: h.id, curso_materia_id: h.curso_materia_id,
-                        materia: h.materia, materia_id: h.materia_id,
-                        curso: h.curso, curso_id: h.curso_id,
-                        profesor: h.profesor, profesor_id: h.profesor_id,
-                        aula: h.salon ?? '', dia: h.dia,
-                        hora: hn, horaFin: h.horaFin,
-                    });
-                }
-            });
-            return { hora: slot.hora, horaFin: slot.horaFin, clases };
-        });
-    }, [horarios, customSlots]);
-
-    /** horarioData filtrado por sede para la vista General */
-    const horarioDataGeneral: HorarioSlotMulti[] = useMemo(() => {
-        if (sedeSel === 'todas') return horarioData;
-        const descansoHoras = new Set(customSlots.filter(s => s.esDescanso).map(s => s.hora));
-        const horariosFiltrados = horarios.filter(h => {
+    const mergeSlotsWithHorarios = useCallback((filtered: HorarioBackend[]) => {
+        const nivelKeys = new Set<NivelKey>();
+        filtered.forEach(h => {
             const curso = cursos.find(c => c.id === h.curso_id);
-            return curso && String(curso.sede_id ?? '') === sedeSel;
+            nivelKeys.add(normalizeNivel(curso?.nivel));
         });
-        return customSlots.map(slot => {
+
+        const baseSlots: TimeSlot[] = [];
+        if (nivelKeys.size > 0) {
+            nivelKeys.forEach(nivel => {
+                (jornadasByNivel[nivel] ?? []).forEach(slot => baseSlots.push(slot));
+            });
+        } else {
+            baseSlots.push(...customSlots);
+        }
+
+        const map = new Map<string, TimeSlot>();
+
+        baseSlots.forEach(slot => {
+            const hora = normalizeHora(slot.hora);
+            const horaFin = normalizeHora(slot.horaFin);
+            map.set(hora, { hora, horaFin, esDescanso: !!slot.esDescanso });
+        });
+
+        filtered.forEach(h => {
+            const hora = normalizeHora(h.hora);
+            const horaFin = normalizeHora(h.horaFin);
+            const prev = map.get(hora);
+
+            if (!prev) {
+                map.set(hora, { hora, horaFin });
+                return;
+            }
+
+            if (!prev.horaFin || prev.horaFin === '0:00') {
+                map.set(hora, { ...prev, horaFin });
+            }
+        });
+
+        return Array.from(map.values()).sort((a, b) => toMinutes(a.hora) - toMinutes(b.hora));
+    }, [cursos, jornadasByNivel, customSlots]);
+
+    const getCompactSlots = useCallback((filtered: HorarioBackend[]) => {
+        const slots = mergeSlotsWithHorarios(filtered);
+        if (filtered.length === 0) {
+            return slots;
+        }
+
+        const usedHours = new Set(filtered.map(h => normalizeHora(h.hora)));
+        const usedMinutes = Array.from(usedHours).map(toMinutes).sort((a, b) => a - b);
+        const minUsed = usedMinutes[0] ?? 0;
+        const maxUsed = usedMinutes[usedMinutes.length - 1] ?? 0;
+
+        return slots.filter(slot => {
+            const m = toMinutes(slot.hora);
+
+            if (usedHours.has(slot.hora)) {
+                return true;
+            }
+
+            if (!slot.esDescanso) {
+                return false;
+            }
+
+            if (m <= minUsed || m >= maxUsed) {
+                return false;
+            }
+
+            const hasBefore = usedMinutes.some(u => u < m);
+            const hasAfter = usedMinutes.some(u => u > m);
+            return hasBefore && hasAfter;
+        });
+    }, [mergeSlotsWithHorarios]);
+
+    const buildMultiSlotGrid = useCallback((filtered: HorarioBackend[], compact = false) => {
+        const slots = compact ? getCompactSlots(filtered) : mergeSlotsWithHorarios(filtered);
+        const descansoHoras = new Set(slots.filter(s => s.esDescanso).map(s => s.hora));
+
+        return slots.map(slot => {
             if (slot.esDescanso) return { hora: slot.hora, horaFin: slot.horaFin, esDescanso: true as const, clases: {} };
+
             const clases: Partial<Record<DiaKey, Clase[]>> = {};
-            horariosFiltrados.forEach(h => {
+            filtered.forEach(h => {
                 const hn = normalizeHora(h.hora);
                 if (!descansoHoras.has(hn) && hn === slot.hora && dias.some(d => d.key === h.dia)) {
                     const dia = h.dia as DiaKey;
@@ -294,13 +371,31 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                         curso: h.curso, curso_id: h.curso_id,
                         profesor: h.profesor ?? '', profesor_id: h.profesor_id,
                         aula: h.salon ?? '', dia: h.dia,
-                        hora: hn, horaFin: h.horaFin,
+                        hora: hn, horaFin: normalizeHora(h.horaFin),
                     });
                 }
             });
+
             return { hora: slot.hora, horaFin: slot.horaFin, clases };
         });
-    }, [horarioData, horarios, cursos, customSlots, sedeSel]);
+    }, [mergeSlotsWithHorarios, getCompactSlots]);
+
+    const horariosGeneralFiltrados = useMemo(() => {
+        if (sedeSel === 'todas') return horarios;
+        return horarios.filter(h => {
+            const curso = cursos.find(c => c.id === h.curso_id);
+            return curso && String(curso.sede_id ?? '') === sedeSel;
+        });
+    }, [horarios, cursos, sedeSel]);
+
+    const horarioData: HorarioSlotMulti[] = useMemo(() => {
+        return buildMultiSlotGrid(horarios);
+    }, [horarios, buildMultiSlotGrid]);
+
+    /** horarioData filtrado por sede para la vista General */
+    const horarioDataGeneral: HorarioSlotMulti[] = useMemo(() => {
+        return buildMultiSlotGrid(horariosGeneralFiltrados);
+    }, [horariosGeneralFiltrados, buildMultiSlotGrid]);
 
     /* allClases: directamente del prop, excluyendo cualquier entrada en horario de descanso (usa jornada general) */
     const allClases = useMemo<Clase[]>(() => {
@@ -313,7 +408,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 curso: h.curso, curso_id: h.curso_id,
                 profesor: h.profesor, profesor_id: h.profesor_id,
                 aula: h.salon ?? '', dia: h.dia,
-                hora: h.hora, horaFin: h.horaFin,
+                hora: normalizeHora(h.hora), horaFin: normalizeHora(h.horaFin),
             }));
     }, [horarios, jornadasByNivel]);
 
@@ -339,8 +434,9 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
 
     /* ── Helpers vista — construyen grid propio filtrando desde el prop de horarios ── */
     const buildSlotGrid = (filtered: typeof horarios) => {
-        const descansoHoras = new Set(customSlots.filter(s => s.esDescanso).map(s => s.hora));
-        return customSlots.map(slot => {
+        const slots = mergeSlotsWithHorarios(filtered);
+        const descansoHoras = new Set(slots.filter(s => s.esDescanso).map(s => s.hora));
+        return slots.map(slot => {
             if (slot.esDescanso) return { hora: slot.hora, horaFin: slot.horaFin, esDescanso: true as const, clases: {} };
             const clases: Partial<Record<DiaKey, Clase>> = {};
             filtered.forEach(h => {
@@ -352,7 +448,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                         curso: h.curso, curso_id: h.curso_id,
                         profesor: h.profesor, profesor_id: h.profesor_id,
                         aula: h.salon ?? '', dia: h.dia,
-                        hora: h.hora, horaFin: h.horaFin,
+                        hora: horaNorm, horaFin: normalizeHora(h.horaFin),
                     };
                 }
             });
@@ -365,6 +461,12 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
 
     const getHorarioCurso = (curso: string) =>
         buildSlotGrid(horarios.filter(h => h.curso === curso));
+
+    const getHorarioProfesorVista = (nombre: string) =>
+        buildMultiSlotGrid(horarios.filter(h => h.profesor === nombre), true);
+
+    const getHorarioCursoVista = (curso: string) =>
+        buildMultiSlotGrid(horarios.filter(h => h.curso === curso), true);
 
     const getClaseColor = (profesor: string) => {
         const c = profesorColorMap[profesor];
@@ -392,10 +494,15 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
     };
 
     /* ═══════════════════════════ CRUD HANDLERS ═══════════════════════════ */
-    const openCreate = (dia?: DiaKey, hora?: string) => {
+    const openCreate = (dia?: DiaKey, hora?: string, horaFin?: string) => {
         const slot = customSlots.find(s => s.hora === hora);
         setEditingClase(null);
-        setForm({ ...EMPTY_FORM, dia: dia ?? 'lunes', hora_inicio: hora ?? customSlots[0]?.hora ?? '7:00', hora_fin: slot?.horaFin ?? customSlots[0]?.horaFin ?? '7:50' });
+        setForm({
+            ...EMPTY_FORM,
+            dia: dia ?? 'lunes',
+            hora_inicio: hora ?? customSlots[0]?.hora ?? '7:00',
+            hora_fin: horaFin ?? slot?.horaFin ?? customSlots[0]?.horaFin ?? '7:50',
+        });
 
         // Pre-seleccionar y bloquear contexto según la vista activa
         if (vistaActiva === 'curso' && cursoSeleccionado) {
@@ -1051,7 +1158,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                                     </div>
                                                 ) : (
                                                     <div
-                                                        onClick={() => openCreate(d.key, slot.hora)}
+                                                        onClick={() => openCreate(d.key, slot.hora, slot.horaFin)}
                                                         className="p-2 h-[52px] border border-dashed border-gray-200 rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition-all group"
                                                     >
                                                         <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -1128,74 +1235,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         </>
     );
 
-    const renderHorarioGrid = (data: HorarioSlot[]) => (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px]">
-                    <thead>
-                        <tr className="bg-gradient-to-r from-[#181b49] to-[#293577]">
-                            <th className="px-3 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-white/80 w-[90px]">
-                                <div className="flex items-center gap-1.5">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                                    Hora
-                                </div>
-                            </th>
-                            {dias.map(d => (
-                                <th key={d.key} className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-white">{d.label}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data.map((slot, idx) => (
-                            <tr key={idx} className={slot.esDescanso ? 'bg-gradient-to-r from-gray-50 to-gray-100' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}>
-                                <td className="px-3 py-2 whitespace-nowrap border-r border-gray-100">
-                                    <div className="text-xs font-bold text-gray-800">{slot.hora}</div>
-                                    <div className="text-[10px] text-gray-400">{slot.horaFin}</div>
-                                </td>
-                                {slot.esDescanso ? (
-                                    <td colSpan={5} className="px-3 py-3 text-center">
-                                        <div className="flex items-center justify-center gap-2 text-gray-400">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.362-6.387 8.25 8.25 0 0 0 3 2Z" /></svg>
-                                            <span className="text-xs font-semibold uppercase tracking-widest">Descanso</span>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.362-6.387 8.25 8.25 0 0 0 3 2Z" /></svg>
-                                        </div>
-                                    </td>
-                                ) : (
-                                    dias.map(d => {
-                                        const clase = slot.clases[d.key];
-                                        return (
-                                            <td key={d.key} className="px-1.5 py-1.5">
-                                                {clase ? (
-                                                    <div
-                                                        onClick={() => setClaseDetalle(clase)}
-                                                        className={`p-2 rounded-lg ${getClaseColor(clase.profesor)} cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5 group relative`}
-                                                    >
-                                                        <p className="text-xs font-bold text-gray-800 leading-tight">{clase.materia}</p>
-                                                        <p className="text-[11px] text-gray-600 font-medium">{clase.curso}</p>
-                                                        <p className="text-[11px] text-gray-500 truncate">{clase.profesor}</p>
-                                                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <span className="text-[9px] bg-white/80 rounded px-1 py-0.5 text-gray-500">{clase.aula}</span>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div
-                                                        onClick={() => openCreate(d.key, slot.hora)}
-                                                        className="p-2 h-[52px] border border-dashed border-gray-200 rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition-all group"
-                                                    >
-                                                        <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        );
-                                    })
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+    const renderHorarioGrid = (data: HorarioSlotMulti[]) => renderHorarioGridGeneral(data);
 
     /* ═══════════════════════════ RENDER ═══════════════════════════ */
     return (
@@ -1431,7 +1471,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                         </div>
                                     );
                                 })()}
-                                {renderHorarioGrid(getHorarioProfesor(profesorSeleccionado))}
+                                {renderHorarioGrid(getHorarioProfesorVista(profesorSeleccionado))}
                             </>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1590,7 +1630,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                             Agregar clase
                                         </button>
                                     </div>
-                                    {renderHorarioGrid(getHorarioCurso(cursoSeleccionado))}
+                                    {renderHorarioGrid(getHorarioCursoVista(cursoSeleccionado))}
                                 </>
                             );
                         })() : (

@@ -13,6 +13,95 @@ use Inertia\Response;
 class HorarioController extends Controller
 {
     use ScopesBySede;
+
+    private function normalizeHour(mixed $value): string
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return '0:00';
+        }
+
+        if (preg_match('/^(\d{1,2})$/', $raw, $m)) {
+            return ((int) $m[1]) . ':00';
+        }
+
+        if (preg_match('/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/', $raw, $m)) {
+            return ((int) $m[1]) . ':' . str_pad((string) ((int) $m[2]), 2, '0', STR_PAD_LEFT);
+        }
+
+        return $raw;
+    }
+
+    private function hourVariants(string $hour): array
+    {
+        $normalized = $this->normalizeHour($hour);
+        [$h, $m] = array_pad(explode(':', $normalized), 2, '00');
+        $hInt = (int) $h;
+        $mInt = (int) $m;
+        $mPad = str_pad((string) $mInt, 2, '0', STR_PAD_LEFT);
+
+        return array_values(array_unique([
+            $normalized,
+            $hInt . ':' . $mPad,
+            str_pad((string) $hInt, 2, '0', STR_PAD_LEFT) . ':' . $mPad,
+            $hInt . ':' . $mInt,
+            $hInt . ':00',
+            str_pad((string) $hInt, 2, '0', STR_PAD_LEFT),
+            (string) $hInt,
+            $hInt . ':' . $mPad . ':00',
+            str_pad((string) $hInt, 2, '0', STR_PAD_LEFT) . ':' . $mPad . ':00',
+        ]));
+    }
+
+    private function normalizeJornadaBloques(array $bloques, string $nivel, array $defaults): array
+    {
+        $base = $defaults[$nivel] ?? $defaults['general'] ?? [];
+
+        $descansoBase = [];
+        foreach ($base as $slot) {
+            if (!empty($slot['esDescanso'])) {
+                $descansoBase[] = $this->normalizeHour($slot['hora'] ?? '') . '-' . $this->normalizeHour($slot['horaFin'] ?? '');
+            }
+        }
+
+        $items = [];
+        foreach ($bloques as $slot) {
+            $hora = $this->normalizeHour($slot['hora'] ?? '');
+            $horaFin = $this->normalizeHour($slot['horaFin'] ?? '');
+            if ($hora === '0:00' || $horaFin === '0:00') {
+                continue;
+            }
+
+            $key = $hora . '-' . $horaFin;
+            $items[$key] = [
+                'hora' => $hora,
+                'horaFin' => $horaFin,
+                'esDescanso' => (bool) ($slot['esDescanso'] ?? in_array($key, $descansoBase, true)),
+            ];
+        }
+
+        // Si un guardado histórico omitió esDescanso, recupera los descansos por patrón base.
+        foreach ($base as $slot) {
+            if (empty($slot['esDescanso'])) {
+                continue;
+            }
+
+            $hora = $this->normalizeHour($slot['hora'] ?? '');
+            $horaFin = $this->normalizeHour($slot['horaFin'] ?? '');
+            $key = $hora . '-' . $horaFin;
+            if (!isset($items[$key])) {
+                $items[$key] = [
+                    'hora' => $hora,
+                    'horaFin' => $horaFin,
+                    'esDescanso' => true,
+                ];
+            }
+        }
+
+        usort($items, fn($a, $b) => strcmp($a['hora'], $b['hora']));
+
+        return array_values($items);
+    }
     /* ================================================================
      *  INDEX — Vista principal con todos los datos
      * ================================================================ */
@@ -49,8 +138,8 @@ class HorarioController extends Controller
                         'profesor'        => $cm->profesor ? $cm->profesor->name : '—',
                         'profesor_id'     => $cm->profesor_id,
                         'dia'             => $bloque->dia,
-                        'hora'            => $bloque->hora_inicio,
-                        'horaFin'         => $bloque->hora_fin,
+                        'hora'            => $this->normalizeHour($bloque->hora_inicio),
+                        'horaFin'         => $this->normalizeHour($bloque->hora_fin),
                         'salon'           => $bloque->salon ?? '',
                         'sede_id'         => $curso->sede_id,
                         'sede_nombre'     => $curso->sede?->nombre ?? null,
@@ -133,8 +222,12 @@ class HorarioController extends Controller
 
         $jornadas = [];
         foreach (array_keys($jornadasDefaults) as $nivel) {
-            $row = Jornada::where('nivel', $nivel)->first();
-            $jornadas[$nivel] = $row ? $row->bloques : ($jornadasDefaults[$nivel] ?? $jornadasDefaults['general']);
+            $row = $nivel === 'prejardin'
+                ? Jornada::whereIn('nivel', ['prejardin', 'preescolar', 'transicion'])->orderByRaw("CASE nivel WHEN 'prejardin' THEN 0 WHEN 'preescolar' THEN 1 ELSE 2 END")->first()
+                : Jornada::where('nivel', $nivel)->first();
+
+            $sourceBloques = $row ? (array) $row->bloques : (array) ($jornadasDefaults[$nivel] ?? $jornadasDefaults['general']);
+            $jornadas[$nivel] = $this->normalizeJornadaBloques($sourceBloques, $nivel, $jornadasDefaults);
         }
 
         return Inertia::render('Admin/Horarios', [
@@ -157,21 +250,20 @@ class HorarioController extends Controller
         $data = $request->validate([
             'curso_materia_id' => 'required|exists:curso_materia,id',
             'dia'              => 'required|in:lunes,martes,miercoles,jueves,viernes',
-            'hora_inicio'      => ['required', 'regex:/^\d{1,2}:\d{2}$/'],
-            'hora_fin'         => ['required', 'regex:/^\d{1,2}:\d{2}$/'],
+            'hora_inicio'      => ['required', 'regex:/^\d{1,2}(:\d{1,2}(:\d{1,2})?)?$/'],
+            'hora_fin'         => ['required', 'regex:/^\d{1,2}(:\d{1,2}(:\d{1,2})?)?$/'],
             'salon'            => 'nullable|string|max:50',
         ]);
+
+        $data['hora_inicio'] = $this->normalizeHour($data['hora_inicio']);
+        $data['hora_fin'] = $this->normalizeHour($data['hora_fin']);
 
         if (strtotime($data['hora_fin']) <= strtotime($data['hora_inicio'])) {
             throw ValidationException::withMessages([
                 'hora_fin' => 'La hora de fin debe ser posterior a la hora de inicio.',
             ]);
         }
-
-        // Normalizar horas: '07:00' → '7:00' (quitar cero inicial)
-        $normHora = fn(string $h): string => (int) explode(':', $h)[0] . ':' . explode(':', $h)[1];
-        $data['hora_inicio'] = $normHora($data['hora_inicio']);
-        $data['hora_fin']    = $normHora($data['hora_fin']);
+        $horaVariants = $this->hourVariants($data['hora_inicio']);
 
         $cm = CursoMateria::with('curso', 'materia', 'profesor')->findOrFail($data['curso_materia_id']);
 
@@ -185,7 +277,7 @@ class HorarioController extends Controller
         // 1) Conflicto: mismo curso, mismo día, misma hora
         $conflictoCurso = HorarioBloque::whereHas('cursoMateria', fn($q) => $q->where('curso_id', $cm->curso_id))
             ->where('dia', $data['dia'])
-            ->where('hora_inicio', $data['hora_inicio'])
+            ->whereIn('hora_inicio', $horaVariants)
             ->exists();
 
         if ($conflictoCurso) {
@@ -198,7 +290,7 @@ class HorarioController extends Controller
         if ($cm->profesor_id) {
             $conflictoProfesor = HorarioBloque::whereHas('cursoMateria', fn($q) => $q->where('profesor_id', $cm->profesor_id))
                 ->where('dia', $data['dia'])
-                ->where('hora_inicio', $data['hora_inicio'])
+                ->whereIn('hora_inicio', $horaVariants)
                 ->exists();
 
             if ($conflictoProfesor) {
@@ -212,7 +304,7 @@ class HorarioController extends Controller
         if (!empty($data['salon'])) {
             $conflictoSalon = HorarioBloque::where('salon', $data['salon'])
                 ->where('dia', $data['dia'])
-                ->where('hora_inicio', $data['hora_inicio'])
+                ->whereIn('hora_inicio', $horaVariants)
                 ->exists();
 
             if ($conflictoSalon) {
@@ -235,20 +327,20 @@ class HorarioController extends Controller
         $data = $request->validate([
             'curso_materia_id' => 'required|exists:curso_materia,id',
             'dia'              => 'required|in:lunes,martes,miercoles,jueves,viernes',
-            'hora_inicio'      => ['required', 'regex:/^\d{1,2}:\d{2}$/'],
-            'hora_fin'         => ['required', 'regex:/^\d{1,2}:\d{2}$/'],
+            'hora_inicio'      => ['required', 'regex:/^\d{1,2}(:\d{1,2}(:\d{1,2})?)?$/'],
+            'hora_fin'         => ['required', 'regex:/^\d{1,2}(:\d{1,2}(:\d{1,2})?)?$/'],
             'salon'            => 'nullable|string|max:50',
         ]);
+
+        $data['hora_inicio'] = $this->normalizeHour($data['hora_inicio']);
+        $data['hora_fin'] = $this->normalizeHour($data['hora_fin']);
+        $horaVariants = $this->hourVariants($data['hora_inicio']);
 
         if (strtotime($data['hora_fin']) <= strtotime($data['hora_inicio'])) {
             throw ValidationException::withMessages([
                 'hora_fin' => 'La hora de fin debe ser posterior a la hora de inicio.',
             ]);
         }
-        // Normalizar horas: '07:00' → '7:00'
-        $normHora = fn(string $h): string => (int) explode(':', $h)[0] . ':' . explode(':', $h)[1];
-        $data['hora_inicio'] = $normHora($data['hora_inicio']);
-        $data['hora_fin']    = $normHora($data['hora_fin']);
         $cm = CursoMateria::with('curso', 'materia', 'profesor')->findOrFail($data['curso_materia_id']);
 
         // Verificar que el curso_materia tiene un profesor asignado
@@ -261,7 +353,7 @@ class HorarioController extends Controller
         // Conflicto curso (excluir el bloque actual)
         $conflictoCurso = HorarioBloque::whereHas('cursoMateria', fn($q) => $q->where('curso_id', $cm->curso_id))
             ->where('dia', $data['dia'])
-            ->where('hora_inicio', $data['hora_inicio'])
+            ->whereIn('hora_inicio', $horaVariants)
             ->where('id', '!=', $horarioBloque->id)
             ->exists();
 
@@ -275,7 +367,7 @@ class HorarioController extends Controller
         if ($cm->profesor_id) {
             $conflictoProfesor = HorarioBloque::whereHas('cursoMateria', fn($q) => $q->where('profesor_id', $cm->profesor_id))
                 ->where('dia', $data['dia'])
-                ->where('hora_inicio', $data['hora_inicio'])
+                ->whereIn('hora_inicio', $horaVariants)
                 ->where('id', '!=', $horarioBloque->id)
                 ->exists();
 
@@ -290,7 +382,7 @@ class HorarioController extends Controller
         if (!empty($data['salon'])) {
             $conflictoSalon = HorarioBloque::where('salon', $data['salon'])
                 ->where('dia', $data['dia'])
-                ->where('hora_inicio', $data['hora_inicio'])
+                ->whereIn('hora_inicio', $horaVariants)
                 ->where('id', '!=', $horarioBloque->id)
                 ->exists();
 

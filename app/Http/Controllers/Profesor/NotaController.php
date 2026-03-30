@@ -207,6 +207,7 @@ class NotaController extends Controller
             ]),
             'estudiantes'   => $estudiantesData,
             'notasAbiertas' => (bool) $periodo->notas_abiertas && $periodo->estado === 'activo',
+            'puedeEditar'   => in_array($periodo->estado, ['activo', 'pendiente'], true),
         ]);
     }
 
@@ -308,8 +309,8 @@ class NotaController extends Controller
                 if (!$cm || $cm->profesor_id !== auth()->id()) {
                     continue;
                 }
-                if (!$periodo || !$periodo->notas_abiertas || $periodo->estado !== 'activo') {
-                    return response()->json(['message' => 'El registro de notas está cerrado para este periodo.'], 422);
+                if (!$periodo || !in_array($periodo->estado, ['activo', 'pendiente'], true)) {
+                    return response()->json(['message' => 'El período está cerrado y no permite cambios de notas.'], 422);
                 }
                 $checked[$cId] = $concepto;
             }

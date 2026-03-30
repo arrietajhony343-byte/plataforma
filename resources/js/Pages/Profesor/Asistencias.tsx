@@ -563,29 +563,29 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
 
                 {/* ── Filters ── */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-                    <div className="flex flex-wrap items-end gap-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
 
                         {/* Curso */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Curso</label>
                             <select value={cursoSel} onChange={e => { const v = e.target.value; guardedChange(() => setCursoSel(v)); }}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[100px]">
+                                className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors">
                                 {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                             </select>
                         </div>
 
                         {/* Materia */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Materia</label>
                             <select value={materiaSel} onChange={e => { const v = e.target.value; guardedChange(() => setMateriaSel(v)); }}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[140px]">
+                                className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors">
                                 {materiasDisponibles.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                             </select>
                         </div>
 
                         {!vistaResumen ? (
                             /* Fecha (modo registro) */
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1 min-w-0 sm:col-span-2 xl:col-span-2">
                                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Fecha</label>
                                 <div className="flex items-center gap-1">
                                     <button onClick={() => navigateDate(-1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Día anterior">
@@ -609,10 +609,10 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                             </div>
                         ) : (
                             /* Periodo (modo resumen) */
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1 min-w-0">
                                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Periodo</label>
                                 <select value={periodoSel} onChange={e => setPeriodoSel(e.target.value)}
-                                    className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[160px]">
+                                    className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors">
                                     {periodos.map(p => (
                                         <option key={p.id} value={p.id}>
                                             {p.nombre}{p.estado === 'activo' ? ' ✓' : p.estado === 'finalizado' ? ' (Cerrado)' : ''}

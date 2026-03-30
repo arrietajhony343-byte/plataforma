@@ -99,6 +99,7 @@ Route::middleware(['auth', 'verified', 'role:admin|coordinador'])->prefix('admin
     // Boletines
     Route::get('/boletines', [BoletinController::class, 'index'])->name('boletines');
     Route::post('/boletines/generar', [BoletinController::class, 'generate'])->name('boletines.generar');
+    Route::post('/boletines/{boletin}/actualizar', [BoletinController::class, 'actualizar'])->name('boletines.actualizar');
     Route::post('/boletines/{boletin}/observacion', [BoletinController::class, 'updateObservacion'])->name('boletines.observacion');
     Route::post('/boletines/{boletin}/notificar', [BoletinController::class, 'notificar'])->name('boletines.notificar');
     Route::post('/boletines/notificar-masivo', [BoletinController::class, 'notificarMasivo'])->name('boletines.notificar-masivo');
@@ -208,7 +209,10 @@ Route::middleware(['auth', 'verified', 'role:profesor'])->prefix('profesor')->na
     Route::post('/observador/boletin-observacion', [ProfesorObservadorController::class, 'storeBoletinObservacion'])->name('observador.boletin.store');
 
     // Calendario
+    Route::get('/horario', [ProfesorCalendarioController::class, 'horario'])->name('horario');
     Route::get('/calendario', [ProfesorCalendarioController::class, 'index'])->name('calendario');
+    Route::post('/calendario/eventos-personales', [ProfesorCalendarioController::class, 'storePersonalEvento'])->name('calendario.eventos.store');
+    Route::delete('/calendario/eventos-personales/{evento}', [ProfesorCalendarioController::class, 'destroyPersonalEvento'])->name('calendario.eventos.destroy');
 
     // Actividades
     Route::get('/actividades', [ProfesorActividadController::class, 'index'])->name('actividades');
@@ -285,6 +289,7 @@ Route::middleware(['auth', 'verified', 'role:padre'])->prefix('padre')->name('pa
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/profile/hijos/{hijo}', [ProfileController::class, 'updateHijo'])->name('profile.hijos.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Notificaciones API (todos los roles)

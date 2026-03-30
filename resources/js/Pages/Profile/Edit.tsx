@@ -32,6 +32,26 @@ interface UserData {
     acudiente_telefono?: string | null;
 }
 
+interface HijoProfileData {
+    id: number;
+    nombre: string;
+    dificultad_aprendizaje: boolean;
+    dificultad_aprendizaje_desc?: string | null;
+    diagnostico_salud: boolean;
+    diagnostico_salud_desc?: string | null;
+    alergias: boolean;
+    alergias_desc?: string | null;
+    nombre_madre?: string | null;
+    telefono_madre?: string | null;
+    ocupacion_madre?: string | null;
+    nombre_padre?: string | null;
+    telefono_padre?: string | null;
+    ocupacion_padre?: string | null;
+    convive_con?: string | null;
+    numero_hermanos?: number | null;
+    lugar_que_ocupa_familia?: string | null;
+}
+
 function getMenuItems(rol: string) {
     if (rol === 'admin')      return adminMenuItems;
     if (rol === 'profesor')   return profesorMenuItems;
@@ -46,10 +66,14 @@ export default function Edit({
     mustVerifyEmail,
     status,
     userData,
+    canEditProfile,
+    hijosProfile,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
     userData: UserData;
+    canEditProfile: boolean;
+    hijosProfile: HijoProfileData[];
 }) {
     const { auth } = usePage().props as { auth: { user: { rol?: string } } };
     const rol = (auth?.user?.rol ?? userData.rol ?? '');
@@ -172,6 +196,8 @@ export default function Edit({
                                 mustVerifyEmail={mustVerifyEmail}
                                 status={status}
                                 userData={userData}
+                                canEditProfile={canEditProfile}
+                                hijosProfile={hijosProfile}
                             />
                         )}
                         {activeTab === 'seguridad' && <UpdatePasswordForm />}

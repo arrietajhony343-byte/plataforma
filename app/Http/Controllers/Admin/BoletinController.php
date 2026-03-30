@@ -336,6 +336,45 @@ class BoletinController extends Controller
     }
 
     /**
+     * Actualizar un boletín individual con notas/observaciones recientes
+     */
+    public function actualizar(Boletin $boletin)
+    {
+        $periodo = $boletin->periodo;
+
+        if (!$periodo) {
+            return redirect()->back()->with('error', 'El boletín no tiene período asociado.');
+        }
+
+        $notasStatus = $this->buildNotasStatus($boletin->estudiante_id, $boletin->curso_id, $boletin->periodo_id);
+
+        $directorObs = is_string($boletin->observacion_general)
+            ? trim($boletin->observacion_general)
+            : '';
+
+        $obsSources = $this->collectObservationSources(
+            $boletin->estudiante_id,
+            $boletin->curso_id,
+            $periodo,
+            $directorObs,
+        );
+
+        $estaCompleto = $notasStatus['notas_completas'] && $obsSources['tiene_observacion_director'];
+
+        $promedio = Nota::where('estudiante_id', $boletin->estudiante_id)
+            ->where('periodo_id', $boletin->periodo_id)
+            ->where('tipo', 'definitiva')
+            ->avg('valor');
+
+        $boletin->promedio = round($promedio ?? 0, 1);
+        $boletin->observacion_general = $this->buildBoletinObservationText($directorObs, $obsSources);
+        $boletin->estado = $estaCompleto ? 'generado' : 'borrador';
+        $boletin->save();
+
+        return redirect()->back()->with('success', 'Boletín actualizado correctamente.');
+    }
+
+    /**
      * Notificar a los padres que el boletín está listo
      */
     public function notificar(Boletin $boletin)

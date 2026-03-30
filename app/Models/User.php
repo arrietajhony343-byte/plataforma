@@ -169,6 +169,12 @@ class User extends Authenticatable
         return $this->hasMany(Observacion::class, 'profesor_id');
     }
 
+    /** Eventos personales del calendario docente */
+    public function profesorEventos(): HasMany
+    {
+        return $this->hasMany(ProfesorEvento::class, 'user_id');
+    }
+
     /** Observadores de período escritos como director de grupo */
     public function observadoresPeriodoDirigidos(): HasMany
     {

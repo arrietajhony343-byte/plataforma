@@ -2,7 +2,6 @@ import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head } from '@inertiajs/react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
-import * as XLSX from 'xlsx';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface Periodo {
@@ -246,59 +245,6 @@ export default function Reportes({ periodos, periodoActualId, cursos, sedes, ani
         setSelectedCurso('todos');
     };
 
-    // ── Export to Excel ──
-    const handleExportExcel = () => {
-        let data: Record<string, unknown>[] = [];
-        let sheetName = 'Reporte';
-
-        if (selectedReport === 'rendimiento') {
-            data = rendimiento.map(r => ({
-                'Nivel': getNivelLabel(r.nivel),
-                'Curso': r.curso,
-                'Promedio': r.promedio,
-                'Aprobados': r.aprobados,
-                'Reprobados': r.reprobados,
-                'Total Estudiantes': r.totalEstud,
-                'Mejor Materia': r.mejorMateria,
-                'Atención Requerida': r.peorMateria,
-            }));
-            sheetName = 'Rendimiento';
-        } else if (selectedReport === 'comentarios' && comentarios) {
-            data = [
-                { 'Métrica': 'Total Comentarios', 'Valor': comentarios.total },
-                { 'Métrica': 'Positivos', 'Valor': comentarios.positivas },
-                { 'Métrica': 'Negativos', 'Valor': comentarios.negativas },
-                { 'Métrica': 'Neutros', 'Valor': comentarios.neutras },
-            ];
-            sheetName = 'Comentarios';
-        } else if (selectedReport === 'asistencia' && asistencia) {
-            data = asistencia.porCurso.map(a => ({
-                'Curso': a.curso,
-                'Nivel': getNivelLabel(a.nivel),
-                'Estudiantes': a.totalEstudiantes,
-                '% Asistencia': a.promedioAsist,
-                'Inasistencias': a.inasistencias,
-                'Tardanzas': a.tardanzas,
-            }));
-            sheetName = 'Asistencia';
-        }
-
-        if (data.length === 0) {
-            alert('No hay datos para exportar. Genera primero el reporte.');
-            return;
-        }
-
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
-        const periodo = periodoInfo?.nombre ?? 'Todos';
-        const nivel = nivelSeleccionado === 'todos' ? 'Todos' : getNivelLabel(nivelSeleccionado);
-        const fileName = `Reporte_${sheetName}_${periodo.replace(/\s/g, '_')}_${nivel}.xlsx`;
-
-        XLSX.writeFile(wb, fileName);
-    };
-
     return (
         <SidebarLayout menuItems={adminMenuItems} title="Reportes Globales">
             <Head title="Reportes Globales" />
@@ -313,13 +259,6 @@ export default function Reportes({ periodos, periodoActualId, cursos, sedes, ani
                         </div>
                         <p className="text-gray-600 text-sm">Genera y descarga reportes institucionales</p>
                     </div>
-                    <button
-                        onClick={handleExportExcel}
-                        className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                        Exportar a Excel
-                    </button>
                 </div>
 
                 {/* Tipos de reporte */}

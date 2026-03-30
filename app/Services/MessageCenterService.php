@@ -380,12 +380,28 @@ class MessageCenterService
         }
 
         if ($contact->hasRole('padre')) {
-            $hijos = $contact->hijos->pluck('name')->filter()->values();
+            $hijos = $contact->hijos
+                ->pluck('name')
+                ->filter()
+                ->map(fn ($name) => trim((string) $name))
+                ->sort()
+                ->values();
 
             if ($hijos->isNotEmpty()) {
-                return $hijos->count() === 1
-                    ? 'Acudiente de ' . Str::before($hijos->first(), ' ')
-                    : 'Acudiente de ' . $hijos->count() . ' estudiantes';
+                $primerNombre = Str::before($hijos->first(), ' ');
+
+                if ($hijos->count() === 1) {
+                    return 'Acudiente de ' . $primerNombre;
+                }
+
+                $segundoNombre = Str::before($hijos->get(1), ' ');
+                $restantes = $hijos->count() - 2;
+
+                if ($hijos->count() === 2) {
+                    return 'Acudiente de ' . $primerNombre . ' y ' . $segundoNombre;
+                }
+
+                return 'Acudiente de ' . $primerNombre . ', ' . $segundoNombre . ' y ' . $restantes . ' más';
             }
 
             return 'Padre de familia';

@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router, useForm } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { padreMenuItems } from '@/Config/padreMenu';
 
 interface HijoOption {
@@ -63,6 +63,29 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
         router.get('/padre/certificados', { hijo_id: id }, { preserveState: true });
     };
 
+    const tipoSeleccionado = useMemo(
+        () => tipos.find((tipo) => tipo.id === Number(data.tipo_certificado_id)) ?? null,
+        [tipos, data.tipo_certificado_id],
+    );
+
+    const getSeguimiento = (solicitud: Solicitud) => {
+        const pagoOk = !solicitud.pago || solicitud.pago.estado === 'pagado';
+        const enProceso = solicitud.estado === 'en_proceso' || solicitud.estado === 'listo' || solicitud.estado === 'entregado';
+        const entregado = solicitud.estado === 'entregado';
+
+        const etapas = [
+            { label: 'Solicitud registrada', done: true },
+            { label: solicitud.pago ? 'Pago confirmado' : 'Sin pago requerido', done: pagoOk },
+            { label: 'En gestion', done: enProceso },
+            { label: 'Entregado', done: entregado },
+        ];
+
+        return {
+            progreso: etapas.filter((etapa) => etapa.done).length,
+            etapas,
+        };
+    };
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
         post('/padre/certificados', {
@@ -112,6 +135,11 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                             {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre} - {formatMonto(t.precio)}</option>)}
                                         </select>
                                         {errors.tipo_certificado_id && <p className="text-xs text-red-600 mt-1">{errors.tipo_certificado_id}</p>}
+                                        {tipoSeleccionado && (
+                                            <p className="mt-2 text-xs text-[#293577]">
+                                                Seleccionado: <span className="font-semibold">{tipoSeleccionado.nombre}</span> · {formatMonto(tipoSeleccionado.precio)}
+                                            </p>
+                                        )}
                                     </div>
 
                                     <div>
@@ -136,11 +164,23 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                 <h2 className="font-bold text-[#181b49] mb-4">Tipos disponibles</h2>
                                 <div className="grid md:grid-cols-2 gap-3">
                                     {tipos.map((t) => (
-                                        <div key={t.id} className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                                        <button
+                                            type="button"
+                                            key={t.id}
+                                            onClick={() => setData('tipo_certificado_id', t.id)}
+                                            className={`rounded-lg border p-3 text-left transition ${
+                                                Number(data.tipo_certificado_id) === t.id
+                                                    ? 'border-[#293577] bg-[#293577]/5 ring-1 ring-[#293577]/20'
+                                                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                                            }`}
+                                        >
                                             <p className="font-semibold text-gray-800">{t.nombre}</p>
                                             <p className="text-xs text-gray-500 mt-1">{t.descripcion || 'Sin descripcion adicional'}</p>
                                             <p className="text-sm font-bold text-[#293577] mt-2">{formatMonto(t.precio)}</p>
-                                        </div>
+                                            {Number(data.tipo_certificado_id) === t.id && (
+                                                <p className="mt-2 text-xs font-semibold text-[#293577]">Tipo seleccionado para la solicitud</p>
+                                            )}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
@@ -158,6 +198,11 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
 
                                 {solicitudes.map((s) => (
                                     <div key={s.id} className="p-4">
+                                        {(() => {
+                                            const seguimiento = getSeguimiento(s);
+
+                                            return (
+                                                <>
                                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                                             <div>
                                                 <p className="font-semibold text-gray-800">{s.tipo}</p>
@@ -177,6 +222,22 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                             </div>
                                         </div>
 
+                                        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                            <div className="mb-2 h-1.5 rounded-full bg-gray-200">
+                                                <div
+                                                    className="h-1.5 rounded-full bg-[#293577] transition-all"
+                                                    style={{ width: `${(seguimiento.progreso / seguimiento.etapas.length) * 100}%` }}
+                                                />
+                                            </div>
+                                            <div className="grid gap-2 sm:grid-cols-2">
+                                                {seguimiento.etapas.map((etapa) => (
+                                                    <div key={etapa.label} className={`rounded-lg border px-2 py-1.5 text-xs font-semibold ${etapa.done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-white text-gray-500'}`}>
+                                                        {etapa.label}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         {s.pago && (
                                             <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                                 <div className="text-sm text-gray-600">
@@ -193,6 +254,9 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                                 )}
                                             </div>
                                         )}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 ))}
                             </div>

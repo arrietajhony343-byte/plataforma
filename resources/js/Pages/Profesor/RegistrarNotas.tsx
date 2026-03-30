@@ -108,6 +108,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
     const [estudiantes, setEstudiantes]   = useState<EstudianteData[]>([]);
     const [notasLocales, setNotasLocales] = useState<Record<number, Record<number, string>>>({});
     const [notasAbiertas, setNotasAbiertas] = useState(true);
+    const [puedeEditar, setPuedeEditar] = useState(true);
     const [loading, setLoading]   = useState(false);
     const [guardando, setGuardando] = useState(false);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -177,10 +178,11 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
         setExpandedRow(null);
         fetch(`/profesor/notas/datos?curso_materia_id=${cursoMateriaId}&periodo_id=${periodoSel}`)
             .then(r => r.json())
-            .then((data: { conceptos: ConceptoNota[]; estudiantes: EstudianteData[]; notasAbiertas: boolean }) => {
+            .then((data: { conceptos: ConceptoNota[]; estudiantes: EstudianteData[]; notasAbiertas: boolean; puedeEditar: boolean }) => {
                 setConceptos(data.conceptos);
                 setEstudiantes(data.estudiantes);
                 setNotasAbiertas(data.notasAbiertas);
+                setPuedeEditar(data.puedeEditar);
 
                 // Init local grades from backend
                 const locales: Record<number, Record<number, string>> = {};
@@ -220,7 +222,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
     // ── Save manual grades ──
     const guardarNotas = () => {
-        if (!notasAbiertas) return;
+        if (!puedeEditar) return;
         setGuardando(true);
         setErrorMsg(null);
 
@@ -414,7 +416,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                         </div>
                         <p className="text-sm text-gray-500 mt-0.5">{materiaNombre} — {cursoNombre}</p>
                     </div>
-                    {notasAbiertas && cursoMateriaId && estudiantes.length > 0 && (
+                    {puedeEditar && cursoMateriaId && estudiantes.length > 0 && (
                         <button
                             onClick={guardarNotas}
                             disabled={guardando || manualConceptos.length === 0}
@@ -470,34 +472,34 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
                 {/* ── Filters ── */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-                    <div className="flex flex-wrap items-end gap-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
 
                         {/* Curso */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Curso</label>
                             <select value={cursoSel} onChange={e => { const v = e.target.value; guardedChange(() => setCursoSel(v)); }}
                                 disabled={configOpen}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[100px] disabled:opacity-50 disabled:cursor-not-allowed">
+                                className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                 {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                             </select>
                         </div>
 
                         {/* Materia */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Materia</label>
                             <select value={materiaSel} onChange={e => { const v = e.target.value; guardedChange(() => setMateriaSel(v)); }}
                                 disabled={configOpen}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed">
+                                className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                 {materiasDisponibles.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                             </select>
                         </div>
 
                         {/* Periodo */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-0.5">Periodo</label>
                             <select value={periodoSel} onChange={e => { const v = e.target.value; guardedChange(() => setPeriodoSel(v)); }}
                                 disabled={configOpen}
-                                className="border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors min-w-[160px] disabled:opacity-50 disabled:cursor-not-allowed">
+                                className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm font-medium text-gray-800 focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                 {periodos.map(p => (
                                     <option key={p.id} value={p.id}>
                                         {p.nombre}{p.estado === 'activo' ? ' ✓' : p.estado === 'finalizado' ? ' (Cerrado)' : ''}
@@ -508,7 +510,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
                         {/* Lock indicator + config-open warning */}
                         {configOpen && (
-                            <div className="mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200">
+                            <div className="mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200 w-fit">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                                 Selectores bloqueados
                             </div>
@@ -516,17 +518,23 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
                         {/* Lock indicator */}
                         {periodoActual && (
-                            <div className={`mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border ${
-                                notasAbiertas
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                    : 'bg-red-50 text-red-700 border-red-200'
+                            <div className={`mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border w-fit ${
+                                !puedeEditar
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : notasAbiertas
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-amber-50 text-amber-700 border-amber-200'
                             }`}>
-                                {notasAbiertas ? (
+                                {puedeEditar ? (
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
                                 ) : (
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                                 )}
-                                {notasAbiertas ? 'Notas Abiertas' : 'Bloqueadas'}
+                                {!puedeEditar
+                                    ? 'Bloqueadas'
+                                    : notasAbiertas
+                                        ? 'Ventana de calificación abierta'
+                                        : 'Borrador habilitado (fuera de ventana)'}
                             </div>
                         )}
 
@@ -534,12 +542,12 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                 </div>
 
                 {/* ── Lock banner ── */}
-                {!notasAbiertas && cursoMateriaId && !loading && (
+                {!puedeEditar && cursoMateriaId && !loading && (
                     <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
                         <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                         <div className="flex-1">
                             <p className="font-bold text-amber-800 text-sm">Registro de notas bloqueado</p>
-                            <p className="text-amber-700 text-xs mt-0.5">El periodo actual no permite registrar o modificar notas. Contacta al administrador si necesitas realizar cambios.</p>
+                            <p className="text-amber-700 text-xs mt-0.5">El periodo está cerrado/finalizado y no permite registrar o modificar notas.</p>
                             {periodoActual?.ventanaInicio && (
                                 <div className="mt-2 flex flex-wrap gap-3">
                                     <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
@@ -560,6 +568,16 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                     </div>
                 )}
 
+                {!notasAbiertas && puedeEditar && cursoMateriaId && !loading && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3">
+                        <svg className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <div className="flex-1">
+                            <p className="font-bold text-blue-800 text-sm">Modo borrador habilitado</p>
+                            <p className="text-blue-700 text-xs mt-0.5">Puedes registrar y guardar notas/configuración antes de abrir la ventana de calificación. Cuando la ventana se abra, ya tendrás la información lista para confirmar.</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Concept config ── */}
                 {cursoMateriaId && !loading && conceptos.length > 0 && (
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -570,7 +588,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                     <svg className="w-4 h-4 text-[#293577]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                     Configuración de Evaluación
                                 </h2>
-                                {notasAbiertas && (
+                                {puedeEditar && (
                                     <button onClick={configOpen ? () => setConfigOpen(false) : openConfig}
                                         className="text-xs font-semibold text-[#293577] hover:text-[#181b49] flex items-center gap-1 transition-colors">
                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={configOpen ? "M6 18L18 6M6 6l12 12" : "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"} /></svg>
@@ -799,7 +817,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                                             min="0" max="5" step="0.1"
                                                             value={notasLocales[est.id]?.[c.id!] ?? ''}
                                                             onChange={e => handleNotaChange(est.id, c.id!, e.target.value)}
-                                                            disabled={!notasAbiertas}
+                                                            disabled={!puedeEditar}
                                                             placeholder="—"
                                                             className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-semibold focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
                                                         />
@@ -862,7 +880,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                 </div>
 
                 {/* ── Bottom save bar (mobile) ── */}
-                {notasAbiertas && cursoMateriaId && estudiantes.length > 0 && manualConceptos.length > 0 && (
+                {puedeEditar && cursoMateriaId && estudiantes.length > 0 && manualConceptos.length > 0 && (
                     <div className="sm:hidden sticky bottom-4">
                         <button
                             onClick={guardarNotas}

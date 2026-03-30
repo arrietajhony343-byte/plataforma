@@ -29,6 +29,7 @@ class CalendarioController extends Controller
                 'hijo' => null,
                 'items' => [],
                 'pendientes' => [],
+                'horarioSemanal' => [],
                 'resumen' => [
                     'total' => 0,
                     'proximas' => 0,
@@ -65,6 +66,7 @@ class CalendarioController extends Controller
                 ],
                 'items' => [],
                 'pendientes' => [],
+                'horarioSemanal' => [],
                 'resumen' => [
                     'total' => 0,
                     'proximas' => 0,
@@ -143,6 +145,36 @@ class CalendarioController extends Controller
             ->with(['cursoMateria.materia:id,nombre', 'cursoMateria.profesor:id,name'])
             ->get();
 
+        $dayOrder = [
+            'lunes' => 1,
+            'martes' => 2,
+            'miercoles' => 3,
+            'miércoles' => 3,
+            'jueves' => 4,
+            'viernes' => 5,
+            'sabado' => 6,
+            'sábado' => 6,
+            'domingo' => 7,
+        ];
+
+        $horarioSemanal = $horarios
+            ->map(function (HorarioBloque $hb) {
+                return [
+                    'id' => $hb->id,
+                    'dia' => (string) $hb->dia,
+                    'horaInicio' => $hb->hora_inicio ? substr((string) $hb->hora_inicio, 0, 5) : null,
+                    'horaFin' => $hb->hora_fin ? substr((string) $hb->hora_fin, 0, 5) : null,
+                    'materia' => $hb->cursoMateria?->materia?->nombre ?? 'Materia',
+                    'profesor' => $hb->cursoMateria?->profesor?->name ?? 'Sin profesor',
+                    'salon' => $hb->salon,
+                ];
+            })
+            ->sortBy([
+                fn(array $item) => $dayOrder[mb_strtolower($item['dia'], 'UTF-8')] ?? 99,
+                fn(array $item) => $item['horaInicio'] ?? '99:99',
+            ])
+            ->values();
+
         $inicioAnio = Carbon::create($anio, 1, 1)->startOfDay();
         $finAnio = Carbon::create($anio, 12, 31)->endOfDay();
 
@@ -202,6 +234,7 @@ class CalendarioController extends Controller
             ],
             'items' => $items,
             'pendientes' => $pendientes,
+            'horarioSemanal' => $horarioSemanal,
             'resumen' => [
                 'total' => $items->count(),
                 'proximas' => $items->where('fecha', '>=', now()->toDateString())->count(),

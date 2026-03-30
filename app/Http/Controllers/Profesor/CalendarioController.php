@@ -3,18 +3,19 @@
 namespace App\Http\Controllers\Profesor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Actividad, CursoMateria, Periodo};
+use App\Models\{Actividad, CursoMateria, Periodo, ProfesorEvento};
+use Carbon\CarbonInterface;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CalendarioController extends Controller
 {
-    public function index(): Response
+    private function getCursoMaterias($user, int $anio)
     {
-        $user = auth()->user();
-        $anio = now()->year;
-
-        $cursoMaterias = CursoMateria::where('profesor_id', $user->id)
+        return CursoMateria::where('profesor_id', $user->id)
             ->whereHas('curso', fn($q) => $q->where('anio', $anio))
             ->with([
                 'curso:id,nombre,anio',
@@ -22,11 +23,11 @@ class CalendarioController extends Controller
                 'horarioBloques:id,curso_materia_id,dia,hora_inicio,hora_fin,salon',
             ])
             ->get();
+    }
 
-        $cmIds = $cursoMaterias->pluck('id');
-        $cursoIds = $cursoMaterias->pluck('curso_id')->unique()->values();
-
-        $clasesSemanales = $cursoMaterias
+    private function getClasesSemanales($cursoMaterias)
+    {
+        return $cursoMaterias
             ->flatMap(fn($cm) => $cm->horarioBloques->map(fn($bloque) => [
                 'id' => $bloque->id,
                 'materia' => $cm->materia?->nombre,
@@ -38,6 +39,18 @@ class CalendarioController extends Controller
             ]))
             ->sortBy(['dia', 'horaInicio'])
             ->values();
+    }
+
+    public function index(): Response
+    {
+        $user = auth()->user();
+        $anio = now()->year;
+
+        $cursoMaterias = $this->getCursoMaterias($user, $anio);
+
+        $cmIds = $cursoMaterias->pluck('id');
+        $cursoIds = $cursoMaterias->pluck('curso_id')->unique()->values();
+        $clasesSemanales = $this->getClasesSemanales($cursoMaterias);
 
         $actividades = Actividad::whereIn('curso_materia_id', $cmIds)
             ->activa()
@@ -142,11 +155,31 @@ class CalendarioController extends Controller
             ->values();
 
         $hoy = now()->toDateString();
+        $eventosPersonales = collect();
+        if (Schema::hasTable('profesor_eventos')) {
+            $eventosPersonales = ProfesorEvento::query()
+                ->where('user_id', $user->id)
+                ->whereYear('fecha', $anio)
+                ->orderBy('fecha')
+                ->orderBy('hora')
+                ->get()
+                ->map(fn(ProfesorEvento $evento) => [
+                    'id' => $evento->id,
+                    'titulo' => $evento->titulo,
+                    'descripcion' => $evento->descripcion,
+                    'fecha' => $this->formatDateValue($evento->fecha),
+                    'hora' => $this->formatTimeValue($evento->hora),
+                    'color' => $evento->color,
+                ])
+                ->values();
+        }
+
         $resumen = [
             'totalCursos' => $cursoIds->count(),
             'totalClasesSemanales' => $clasesSemanales->count(),
             'actividadesPendientes' => $actividades->filter(fn($a) => $a['fecha'] >= $hoy)->count(),
             'ventanasAbiertas' => $ventanasNotas->where('notasAbiertas', true)->count(),
+            'eventosPersonales' => $eventosPersonales->filter(fn($e) => $e['fecha'] >= $hoy)->count(),
         ];
 
         return Inertia::render('Profesor/Calendario', [
@@ -156,6 +189,85 @@ class CalendarioController extends Controller
             'actividades' => $actividades,
             'hitosInstitucionales' => $hitosInstitucionales,
             'ventanasNotas' => $ventanasNotas,
+            'eventosPersonales' => $eventosPersonales,
         ]);
+    }
+
+    public function horario(): Response
+    {
+        $user = auth()->user();
+        $anio = now()->year;
+
+        $cursoMaterias = $this->getCursoMaterias($user, $anio);
+        $clasesSemanales = $this->getClasesSemanales($cursoMaterias);
+
+        $resumen = [
+            'totalCursos' => $cursoMaterias->pluck('curso_id')->unique()->count(),
+            'totalClasesSemanales' => $clasesSemanales->count(),
+            'diasConClase' => $clasesSemanales->pluck('dia')->unique()->count(),
+        ];
+
+        return Inertia::render('Profesor/Horario', [
+            'profesor' => ['nombre' => $user->name],
+            'resumen' => $resumen,
+            'clasesSemanales' => $clasesSemanales,
+        ]);
+    }
+
+    public function storePersonalEvento(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'titulo' => ['required', 'string', 'max:120'],
+            'descripcion' => ['nullable', 'string', 'max:500'],
+            'fecha' => ['required', 'date'],
+            'hora' => ['nullable', 'date_format:H:i'],
+            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        ]);
+
+        ProfesorEvento::query()->create([
+            'user_id' => $request->user()->id,
+            'titulo' => $data['titulo'],
+            'descripcion' => $data['descripcion'] ?? null,
+            'fecha' => $data['fecha'],
+            'hora' => $data['hora'] ?? null,
+            'color' => $data['color'] ?? '#0f766e',
+        ]);
+
+        return redirect()->back()->with('success', 'Evento personal registrado.');
+    }
+
+    public function destroyPersonalEvento(ProfesorEvento $evento): RedirectResponse
+    {
+        abort_unless((int) $evento->user_id === (int) auth()->id(), 403);
+
+        $evento->delete();
+
+        return redirect()->back()->with('success', 'Evento personal eliminado.');
+    }
+
+    private function formatDateValue(mixed $value): ?string
+    {
+        if ($value instanceof CarbonInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_string($value) && $value !== '') {
+            return substr($value, 0, 10);
+        }
+
+        return null;
+    }
+
+    private function formatTimeValue(mixed $value): ?string
+    {
+        if ($value instanceof CarbonInterface) {
+            return $value->format('H:i');
+        }
+
+        if (is_string($value) && $value !== '') {
+            return substr($value, 0, 5);
+        }
+
+        return null;
     }
 }
