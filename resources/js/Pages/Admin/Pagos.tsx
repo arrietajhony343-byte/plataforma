@@ -12,6 +12,9 @@ interface ConceptoPago {
     id: number; nombre: string; descripcion: string | null;
     monto: number; periodicidad: 'unico' | 'mensual' | 'anual';
     activo: boolean; pagos_count: number;
+    tipo_certificado_id: number | null;
+    tipo_certificado_nombre: string | null;
+    es_certificado: boolean;
 }
 interface Pago {
     id: number; estudiante_id: number; estudiante: string;
@@ -48,6 +51,12 @@ const periodicidadLabel: Record<string, string> = {
 const metodos = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'PSE', 'Tarjeta', 'Otro'];
 
 const fmt = (n: number) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n);
+const fechaVencimientoVisible = (pago: Pago) => pago.estado === 'pagado' ? '—' : pago.fecha_vencimiento;
+
+const fmtFechaHora = () => new Intl.DateTimeFormat('es-CO', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+}).format(new Date());
 
 const normalizeNivel = (nivel?: string | null) => {
     if (!nivel) return 'sin_nivel';
@@ -104,6 +113,13 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
     const [editConcepto, setEditConcepto] = useState<ConceptoPago | null>(null);
     const [formConcepto, setFormConcepto] = useState({ nombre: '', descripcion: '', monto: '', periodicidad: 'mensual' });
 
+    const requiereVencimiento = formPago.estado !== 'pagado';
+    const conceptoSeleccionado = useMemo(
+        () => conceptos.find(c => c.id.toString() === formPago.concepto_pago_id) ?? null,
+        [conceptos, formPago.concepto_pago_id]
+    );
+    const esConceptoCertificado = !!conceptoSeleccionado?.es_certificado;
+
     /* ── Memos ── */
     const nivelesDisponibles = useMemo(() => {
         const bag = new Set<string>();
@@ -156,7 +172,7 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
 
     const handleRegistrarPago = useCallback((e: React.FormEvent) => {
         e.preventDefault();
-        if (!formPago.estudiante_id || !formPago.concepto_pago_id || !formPago.fecha_vencimiento) return;
+        if (!formPago.estudiante_id || !formPago.concepto_pago_id || (requiereVencimiento && !formPago.fecha_vencimiento)) return;
         setProcessing(true);
         router.post('/admin/pagos', {
             estudiante_id: parseInt(formPago.estudiante_id),
@@ -166,14 +182,15 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
             estado: formPago.estado,
             metodo_pago: formPago.metodo_pago || null,
             referencia: formPago.referencia || null,
-            fecha_vencimiento: formPago.fecha_vencimiento,
+            fecha_vencimiento: requiereVencimiento ? formPago.fecha_vencimiento : null,
             fecha_pago: formPago.fecha_pago || null,
             notas: formPago.notas || null,
+            tipo_certificado_id: conceptoSeleccionado?.tipo_certificado_id ?? null,
         }, {
             onSuccess: () => { setShowRegistrar(false); resetFormPago(); },
             onFinish: () => setProcessing(false),
         });
-    }, [formPago]);
+    }, [formPago, requiereVencimiento, conceptoSeleccionado]);
 
     const resetFormPago = () => {
         setFormPago({
@@ -240,30 +257,121 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
 
     /* ── Exportar ── */
     const handleExportar = useCallback(() => {
-        const data = pagosFiltrados.map(p => ({
-            Estudiante: p.estudiante,
-            Curso: p.curso,
-            Concepto: p.concepto,
-            Período: p.periodo,
-            Monto: p.monto,
-            Estado: estadosConfig[p.estado]?.label ?? p.estado,
-            'Método de Pago': p.metodo_pago ?? '',
-            Referencia: p.referencia ?? '',
-            'Fecha Vencimiento': p.fecha_vencimiento,
-            'Fecha Pago': p.fecha_pago ?? '',
-            Notas: p.notas ?? '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Pagos');
-        XLSX.writeFile(wb, `Pagos_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    }, [pagosFiltrados]);
+        const fechaGen = fmtFechaHora();
+
+        const resumenSheet = XLSX.utils.aoa_to_sheet([
+            ['CONTROL DE PAGOS - REPORTE'],
+            ['Fecha de generacion', fechaGen],
+            ['Periodo activo', periodoActivo?.nombre ?? 'No definido'],
+            ['Periodo filtro', periodoSel === 'todos' ? 'Todos los periodos' : (periodos.find(p => p.id.toString() === periodoSel)?.nombre ?? periodoSel)],
+            ['Sede', sedeSel === 'todas' ? 'Todas' : (sedes.find(s => s.id.toString() === sedeSel)?.nombre ?? sedeSel)],
+            ['Nivel', nivelSel === 'todos' ? 'Todos' : nivelLabel(nivelSel)],
+            ['Curso', cursoSel === 'todos' ? 'Todos' : cursoSel],
+            ['Estado', estadoFiltro === 'todos' ? 'Todos' : (estadosConfig[estadoFiltro]?.label ?? estadoFiltro)],
+            ['Concepto', conceptoFiltro === 'todos' ? 'Todos' : (conceptos.find(c => c.id.toString() === conceptoFiltro)?.nombre ?? conceptoFiltro)],
+            ['Busqueda', busqueda || 'Sin busqueda'],
+            [],
+            ['Indicador', 'Valor'],
+            ['Total registros', stats.total],
+            ['Total recaudado', stats.recaudado],
+            ['Total pendiente', stats.pendiente],
+            ['Total vencido', stats.vencido],
+        ]);
+        resumenSheet['!cols'] = [{ wch: 30 }, { wch: 55 }];
+        XLSX.utils.book_append_sheet(wb, resumenSheet, 'Resumen');
+
+        const registrosSheet = XLSX.utils.json_to_sheet(
+            pagosFiltrados.length > 0
+                ? pagosFiltrados.map(p => ({
+                    Estudiante: p.estudiante,
+                    'ID estudiante': p.estudiante_id,
+                    Sede: sedes.find(s => s.id === p.sede_id)?.nombre ?? 'N/A',
+                    Curso: p.curso,
+                    Nivel: nivelLabel(p.nivel),
+                    Concepto: p.concepto,
+                    Periodo: p.periodo,
+                    Monto: p.monto,
+                    Estado: estadosConfig[p.estado]?.label ?? p.estado,
+                    'Metodo de pago': p.metodo_pago ?? '',
+                    Referencia: p.referencia ?? '',
+                    'Fecha vencimiento': p.estado === 'pagado' ? '' : p.fecha_vencimiento,
+                    'Fecha pago': p.fecha_pago ?? '',
+                    Notas: p.notas ?? '',
+                }))
+                : [{ Estudiante: 'Sin registros', 'ID estudiante': '', Sede: '', Curso: '', Nivel: '', Concepto: '', Periodo: '', Monto: 0, Estado: '', 'Metodo de pago': '', Referencia: '', 'Fecha vencimiento': '', 'Fecha pago': '', Notas: '' }]
+        );
+        registrosSheet['!cols'] = [
+            { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 26 },
+            { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 30 },
+        ];
+        XLSX.utils.book_append_sheet(wb, registrosSheet, 'Registros');
+
+        const conceptosSheet = XLSX.utils.json_to_sheet(
+            conceptos.map(c => ({
+                Concepto: c.nombre,
+                Descripcion: c.descripcion ?? '',
+                Periodicidad: periodicidadLabel[c.periodicidad] ?? c.periodicidad,
+                Monto: c.monto,
+                Estado: c.activo ? 'Activo' : 'Inactivo',
+                'Pagos asociados': c.pagos_count,
+            }))
+        );
+        conceptosSheet['!cols'] = [{ wch: 32 }, { wch: 42 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, conceptosSheet, 'Conceptos');
+
+        const estadosSheet = XLSX.utils.json_to_sheet([
+            {
+                Estado: 'Pagado',
+                Registros: pagosFiltrados.filter(p => p.estado === 'pagado').length,
+                Monto: pagosFiltrados.filter(p => p.estado === 'pagado').reduce((s, p) => s + p.monto, 0),
+            },
+            {
+                Estado: 'Pendiente',
+                Registros: pagosFiltrados.filter(p => p.estado === 'pendiente').length,
+                Monto: pagosFiltrados.filter(p => p.estado === 'pendiente').reduce((s, p) => s + p.monto, 0),
+            },
+            {
+                Estado: 'Vencido',
+                Registros: pagosFiltrados.filter(p => p.estado === 'vencido').length,
+                Monto: pagosFiltrados.filter(p => p.estado === 'vencido').reduce((s, p) => s + p.monto, 0),
+            },
+            {
+                Estado: 'Anulado',
+                Registros: pagosFiltrados.filter(p => p.estado === 'anulado').length,
+                Monto: pagosFiltrados.filter(p => p.estado === 'anulado').reduce((s, p) => s + p.monto, 0),
+            },
+        ]);
+        estadosSheet['!cols'] = [{ wch: 18 }, { wch: 12 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, estadosSheet, 'Estados');
+
+        XLSX.writeFile(wb, `Control_Pagos_Detallado_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }, [
+        pagosFiltrados,
+        periodoActivo,
+        periodoSel,
+        periodos,
+        sedeSel,
+        sedes,
+        nivelSel,
+        cursoSel,
+        estadoFiltro,
+        conceptoFiltro,
+        conceptos,
+        busqueda,
+        stats,
+    ]);
 
     /* ── Auto-fill monto cuando se selecciona concepto ── */
     const handleConceptoSelect = (conceptoId: string) => {
         setFormPago(prev => {
             const c = conceptos.find(c => c.id.toString() === conceptoId);
-            return { ...prev, concepto_pago_id: conceptoId, monto: c ? c.monto.toString() : prev.monto };
+            return {
+                ...prev,
+                concepto_pago_id: conceptoId,
+                monto: c ? c.monto.toString() : prev.monto,
+                periodo_id: c?.es_certificado ? '' : prev.periodo_id,
+            };
         });
     };
 
@@ -514,7 +622,7 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                                     </td>
                                                     <td className="px-4 py-3 text-sm text-gray-600">{p.concepto}</td>
                                                     <td className="px-4 py-3 text-sm text-gray-800 text-right font-semibold whitespace-nowrap">{fmt(p.monto)}</td>
-                                                    <td className="px-4 py-3 text-sm text-gray-500 text-center whitespace-nowrap">{p.fecha_vencimiento}</td>
+                                                    <td className="px-4 py-3 text-sm text-gray-500 text-center whitespace-nowrap">{fechaVencimientoVisible(p)}</td>
                                                     <td className="px-4 py-3 text-center">
                                                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${estadosConfig[p.estado]?.color}`}>
                                                             <span className={`w-1.5 h-1.5 rounded-full ${estadosConfig[p.estado]?.dot}`} />
@@ -583,7 +691,7 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                     <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                                         <div>
                                             <p className="text-lg font-bold text-gray-800">{fmt(p.monto)}</p>
-                                            <p className="text-xs text-gray-400">Vence: {p.fecha_vencimiento}</p>
+                                            <p className="text-xs text-gray-400">Vence: {fechaVencimientoVisible(p)}</p>
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <button onClick={() => setDetallePago(p)}
@@ -637,7 +745,14 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                         {conceptos.map(c => (
                                             <tr key={c.id} className={`hover:bg-gray-50/70 transition-colors ${!c.activo ? 'opacity-50' : ''}`}>
                                                 <td className="px-5 py-3">
-                                                    <p className="text-sm font-semibold text-gray-800">{c.nombre}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm font-semibold text-gray-800">{c.nombre}</p>
+                                                        {c.es_certificado && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700">
+                                                                Certificado
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="px-5 py-3 text-sm text-gray-500 max-w-[200px] truncate">{c.descripcion || '—'}</td>
                                                 <td className="px-5 py-3 text-sm font-semibold text-gray-800 text-right whitespace-nowrap">{fmt(c.monto)}</td>
@@ -648,19 +763,26 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                                 </td>
                                                 <td className="px-5 py-3 text-sm text-gray-600 text-center">{c.pagos_count}</td>
                                                 <td className="px-5 py-3 text-center">
-                                                    <button onClick={() => handleToggleConcepto(c)}
-                                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${c.activo ? 'bg-green-500' : 'bg-gray-300'}`}>
+                                                    <button
+                                                        onClick={() => handleToggleConcepto(c)}
+                                                        disabled={c.es_certificado}
+                                                        title={c.es_certificado ? 'Gestionado desde Tipos de Certificado' : undefined}
+                                                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${c.activo ? 'bg-green-500' : 'bg-gray-300'} ${c.es_certificado ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                                         <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${c.activo ? 'translate-x-4' : 'translate-x-0.5'}`} />
                                                     </button>
                                                 </td>
                                                 <td className="px-5 py-3">
                                                     <div className="flex justify-end">
-                                                        <button onClick={() => abrirEditConcepto(c)} title="Editar"
-                                                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-[#293577] transition-colors">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                            </svg>
-                                                        </button>
+                                                        {!c.es_certificado ? (
+                                                            <button onClick={() => abrirEditConcepto(c)} title="Editar"
+                                                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-[#293577] transition-colors">
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                </svg>
+                                                            </button>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400">Gestionado en Certificados</span>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -676,11 +798,20 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                 <div key={c.id} className={`bg-white rounded-xl shadow-sm p-4 border border-gray-100 ${!c.activo ? 'opacity-50' : ''}`}>
                                     <div className="flex items-start justify-between mb-2">
                                         <div>
-                                            <p className="font-semibold text-gray-800">{c.nombre}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-semibold text-gray-800">{c.nombre}</p>
+                                                {c.es_certificado && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700">
+                                                        Certificado
+                                                    </span>
+                                                )}
+                                            </div>
                                             {c.descripcion && <p className="text-xs text-gray-400 mt-0.5">{c.descripcion}</p>}
                                         </div>
-                                        <button onClick={() => handleToggleConcepto(c)}
-                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${c.activo ? 'bg-green-500' : 'bg-gray-300'}`}>
+                                        <button
+                                            onClick={() => handleToggleConcepto(c)}
+                                            disabled={c.es_certificado}
+                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${c.activo ? 'bg-green-500' : 'bg-gray-300'} ${c.es_certificado ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                             <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${c.activo ? 'translate-x-4' : 'translate-x-0.5'}`} />
                                         </button>
                                     </div>
@@ -691,12 +822,16 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                                 {periodicidadLabel[c.periodicidad]}
                                             </span>
                                         </div>
-                                        <button onClick={() => abrirEditConcepto(c)}
-                                            className="p-2 rounded-lg bg-gray-100 text-gray-600">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                        </button>
+                                        {!c.es_certificado ? (
+                                            <button onClick={() => abrirEditConcepto(c)}
+                                                className="p-2 rounded-lg bg-gray-100 text-gray-600">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                        ) : (
+                                            <span className="text-xs text-gray-400">Gestionado en Certificados</span>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -752,31 +887,56 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]">
                                         <option value="">Seleccionar...</option>
                                         {conceptos.filter(c => c.activo).map(c => (
-                                            <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.monto)})</option>
+                                            <option key={c.id} value={c.id}>
+                                                {c.es_certificado ? '[Certificado] ' : ''}{c.nombre} ({fmt(c.monto)})
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Período</label>
-                                    <select value={formPago.periodo_id} onChange={e => setFormPago(prev => ({ ...prev, periodo_id: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]">
+                                    <select
+                                        value={formPago.periodo_id}
+                                        disabled={esConceptoCertificado}
+                                        onChange={e => setFormPago(prev => ({ ...prev, periodo_id: e.target.value }))}
+                                        className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] ${esConceptoCertificado ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}>
                                         <option value="">Sin período</option>
                                         {periodos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                                     </select>
                                 </div>
                             </div>
 
+                            {esConceptoCertificado && (
+                                <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
+                                    Este concepto crea automáticamente una solicitud de certificado.
+                                    {conceptoSeleccionado?.tipo_certificado_nombre ? ` Tipo: ${conceptoSeleccionado.tipo_certificado_nombre}.` : ''}
+                                    {' '}El monto se toma del precio configurado en Certificados.
+                                </div>
+                            )}
+
                             {/* Monto + Estado */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Monto *</label>
                                     <input type="number" step="100" min="0" placeholder="0" value={formPago.monto}
+                                        readOnly={esConceptoCertificado}
                                         onChange={e => setFormPago(prev => ({ ...prev, monto: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]" />
+                                        className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577] ${esConceptoCertificado ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                                    <select value={formPago.estado} onChange={e => setFormPago(prev => ({ ...prev, estado: e.target.value }))}
+                                    <select
+                                        value={formPago.estado}
+                                        onChange={e => setFormPago(prev => {
+                                            const estado = e.target.value;
+                                            const hoy = new Date().toISOString().slice(0, 10);
+                                            return {
+                                                ...prev,
+                                                estado,
+                                                fecha_vencimiento: estado === 'pagado' ? '' : prev.fecha_vencimiento,
+                                                fecha_pago: estado === 'pagado' && !prev.fecha_pago ? hoy : prev.fecha_pago,
+                                            };
+                                        })}
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]">
                                         <option value="pendiente">Pendiente</option>
                                         <option value="pagado">Pagado</option>
@@ -785,13 +945,15 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                             </div>
 
                             {/* Fechas */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Vencimiento *</label>
-                                    <input type="date" value={formPago.fecha_vencimiento}
-                                        onChange={e => setFormPago(prev => ({ ...prev, fecha_vencimiento: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]" />
-                                </div>
+                            <div className={`grid gap-3 ${formPago.estado === 'pagado' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                {formPago.estado !== 'pagado' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Vencimiento *</label>
+                                        <input type="date" value={formPago.fecha_vencimiento}
+                                            onChange={e => setFormPago(prev => ({ ...prev, fecha_vencimiento: e.target.value }))}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]" />
+                                    </div>
+                                )}
                                 {formPago.estado === 'pagado' && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Pago</label>
@@ -835,7 +997,9 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                     className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-sm font-medium text-gray-600">
                                     Cancelar
                                 </button>
-                                <button type="submit" disabled={processing || !formPago.estudiante_id || !formPago.concepto_pago_id || !formPago.monto || !formPago.fecha_vencimiento}
+                                <button
+                                    type="submit"
+                                    disabled={processing || !formPago.estudiante_id || !formPago.concepto_pago_id || !formPago.monto || (requiereVencimiento && !formPago.fecha_vencimiento)}
                                     className="flex-1 bg-[#293577] hover:bg-[#181b49] disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors">
                                     {processing ? 'Guardando...' : 'Registrar Pago'}
                                 </button>
@@ -912,7 +1076,7 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                 {[
                                     ['Concepto', detallePago.concepto],
                                     ['Monto', fmt(detallePago.monto)],
-                                    ['Vencimiento', detallePago.fecha_vencimiento],
+                                    ['Vencimiento', fechaVencimientoVisible(detallePago)],
                                     ['Fecha Pago', detallePago.fecha_pago ?? '—'],
                                     ['Método', detallePago.metodo_pago ?? '—'],
                                     ['Referencia', detallePago.referencia ?? '—'],

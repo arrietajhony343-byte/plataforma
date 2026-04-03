@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
-use App\Models\{Certificado, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion, Nota, Pago};
+use App\Models\{Certificado, ConceptoPago, TipoCertificado, User, Curso, Sede, Mensaje, Notificacion, Nota, Pago};
 use Illuminate\Http\{Request, JsonResponse, RedirectResponse};
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -260,17 +260,21 @@ class CertificadoController extends Controller
      */
     public function generar(Request $request, Certificado $certificado): RedirectResponse
     {
-        $request->validate([
-            'archivo' => ['required', 'file', 'mimes:pdf', 'max:10240'],
-        ]);
-
         if (!$this->pagoConfirmadoParaCertificado($certificado)) {
             return redirect()->back()->with('error', 'Debe confirmarse el pago antes de generar el certificado.');
         }
 
         if ($certificado->archivo && Storage::exists($certificado->archivo)) {
-            Storage::delete($certificado->archivo);
+            if (in_array($certificado->estado, ['solicitado', 'en_proceso'], true)) {
+                $certificado->update(['estado' => 'listo']);
+            }
+
+            return redirect()->back()->with('success', 'El certificado ya estaba generado. Se conservó el archivo existente.');
         }
+
+        $request->validate([
+            'archivo' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+        ]);
 
         $nombreArchivo = 'certificado_' . $certificado->id . '_' . now()->format('Ymd_His') . '.pdf';
         $rutaArchivo = $request->file('archivo')->storeAs('certificados/' . $certificado->estudiante_id, $nombreArchivo);
@@ -391,7 +395,18 @@ class CertificadoController extends Controller
             'activo'      => 'boolean',
         ]);
 
-        TipoCertificado::create($data);
+        $tipo = TipoCertificado::create($data);
+
+        ConceptoPago::query()->updateOrCreate(
+            ['tipo_certificado_id' => $tipo->id],
+            [
+                'nombre' => 'Solicitud certificado: ' . $tipo->nombre,
+                'descripcion' => 'Solicitud de ' . $tipo->nombre . ' generada desde certificados o control de pagos.',
+                'monto' => (int) $tipo->precio,
+                'periodicidad' => 'unico',
+                'activo' => (bool) $tipo->activo,
+            ]
+        );
 
         return redirect()->back()->with('success', 'Tipo de certificado creado correctamente.');
     }
@@ -411,6 +426,17 @@ class CertificadoController extends Controller
 
         $tipo->update($data);
 
+        ConceptoPago::query()->updateOrCreate(
+            ['tipo_certificado_id' => $tipo->id],
+            [
+                'nombre' => 'Solicitud certificado: ' . $tipo->nombre,
+                'descripcion' => 'Solicitud de ' . $tipo->nombre . ' generada desde certificados o control de pagos.',
+                'monto' => (int) $tipo->precio,
+                'periodicidad' => 'unico',
+                'activo' => (bool) $tipo->activo,
+            ]
+        );
+
         return redirect()->back()->with('success', 'Tipo de certificado actualizado.');
     }
 
@@ -423,6 +449,10 @@ class CertificadoController extends Controller
         if ($tipo->certificados()->exists()) {
             return redirect()->back()->with('error', 'No se puede eliminar: hay certificados de este tipo.');
         }
+
+        ConceptoPago::query()
+            ->where('tipo_certificado_id', $tipo->id)
+            ->update(['activo' => false]);
 
         $tipo->delete();
 

@@ -17,7 +17,7 @@ interface HijoData {
 
 interface ItemCalendario {
     id: string;
-    origen: 'actividad' | 'evento' | 'horario';
+    origen: 'actividad' | 'evento';
     titulo: string;
     materia: string;
     profesor: string;
@@ -29,16 +29,6 @@ interface ItemCalendario {
     vencida: boolean;
 }
 
-interface HorarioSemanalItem {
-    id: number;
-    dia: string;
-    horaInicio: string | null;
-    horaFin: string | null;
-    materia: string;
-    profesor: string;
-    salon: string | null;
-}
-
 interface Props {
     padre: {
         nombre: string;
@@ -47,7 +37,6 @@ interface Props {
     hijo: HijoData | null;
     items: ItemCalendario[];
     pendientes: ItemCalendario[];
-    horarioSemanal: HorarioSemanalItem[];
     resumen: {
         total: number;
         proximas: number;
@@ -55,8 +44,8 @@ interface Props {
     };
 }
 
-export default function Calendario({ padre, hijos, hijo, items, pendientes, horarioSemanal, resumen }: Props) {
-    const [vistaActual, setVistaActual] = useState<'calendario' | 'lista' | 'horario'>('calendario');
+export default function Calendario({ padre, hijos, hijo, items, pendientes, resumen }: Props) {
+    const [vistaActual, setVistaActual] = useState<'calendario' | 'lista'>('calendario');
     const [selectedActividad, setSelectedActividad] = useState<ItemCalendario | null>(null);
 
     const onHijoChange = (id: number) => {
@@ -79,7 +68,6 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, hora
         if (['tarea', 'proyecto', 'taller'].includes(tipo)) return 'bg-blue-100 text-blue-800 border-blue-200';
         if (['reunion_padres', 'reunion'].includes(tipo)) return 'bg-amber-100 text-amber-800 border-amber-200';
         if (['institucional', 'academico', 'evento', 'otro'].includes(tipo)) return 'bg-slate-100 text-slate-700 border-slate-200';
-        if (['clase'].includes(tipo)) return 'bg-indigo-100 text-indigo-800 border-indigo-200';
         return 'bg-[#293577]/10 text-[#293577] border-[#293577]/20';
     };
 
@@ -88,7 +76,6 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, hora
         if (['tarea', 'proyecto', 'taller'].includes(tipo)) return 'T';
         if (['reunion_padres', 'reunion'].includes(tipo)) return 'R';
         if (['institucional', 'academico', 'evento', 'otro'].includes(tipo)) return 'I';
-        if (['clase'].includes(tipo)) return 'C';
         return 'A';
     };
 
@@ -107,30 +94,6 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, hora
         const bd = `${b.fecha} ${b.hora ?? '23:59'}`;
         return ad.localeCompare(bd);
     });
-
-    const diasHorario = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
-    const horasHorario = Array.from(
-        new Set(
-            horarioSemanal
-                .map((item) => item.horaInicio)
-                .filter((hora): hora is string => Boolean(hora)),
-        ),
-    ).sort();
-
-    const bloquesPorDiaHora = useMemo(() => {
-        const map = new Map<string, HorarioSemanalItem[]>();
-
-        for (const item of horarioSemanal) {
-            const dia = item.dia.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            const hora = item.horaInicio ?? '--:--';
-            const key = `${dia}-${hora}`;
-            const prev = map.get(key) ?? [];
-            prev.push(item);
-            map.set(key, prev);
-        }
-
-        return map;
-    }, [horarioSemanal]);
 
     return (
         <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
@@ -189,15 +152,18 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, hora
                             </div>
                         )}
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             <button onClick={() => setVistaActual('calendario')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${vistaActual === 'calendario' ? 'bg-[#293577] text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
                                 Calendario
                             </button>
                             <button onClick={() => setVistaActual('lista')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${vistaActual === 'lista' ? 'bg-[#293577] text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
                                 Lista
                             </button>
-                            <button onClick={() => setVistaActual('horario')} className={`px-4 py-2 rounded-lg text-sm font-semibold ${vistaActual === 'horario' ? 'bg-[#293577] text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
-                                Horario
+                            <button
+                                onClick={() => router.get('/padre/horario', { hijo_id: hijo.id })}
+                                className="px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-gray-200 text-gray-600 hover:border-[#293577] hover:text-[#293577]"
+                            >
+                                Ver horario
                             </button>
                         </div>
 
@@ -250,7 +216,7 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, hora
                                     })}
                                 </div>
                             </div>
-                        ) : vistaActual === 'lista' ? (
+                        ) : (
                             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                                 <div className="px-4 py-3 border-b bg-gray-50"><h3 className="font-semibold text-gray-700">Agenda</h3></div>
                                 <div className="divide-y">
@@ -269,79 +235,6 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, hora
                                         </button>
                                     ))}
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white rounded-xl border border-gray-100 p-4">
-                                <h3 className="font-semibold text-gray-700 mb-4">Horario semanal de {hijo.nombre}</h3>
-                                {horarioSemanal.length === 0 ? (
-                                    <div className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">
-                                        No hay bloques de horario registrados para este curso.
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div className="hidden lg:block overflow-x-auto">
-                                            <div className="grid grid-cols-6 gap-2 min-w-[860px]">
-                                                <div className="text-xs font-semibold uppercase text-gray-500 px-2 py-2">Hora</div>
-                                                {diasHorario.map((dia) => (
-                                                    <div key={dia} className="text-xs font-semibold uppercase text-gray-500 px-2 py-2 text-center">
-                                                        {dia}
-                                                    </div>
-                                                ))}
-
-                                                {horasHorario.map((hora) => (
-                                                    <div key={`row-${hora}`} className="contents">
-                                                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-sm font-semibold text-gray-700">
-                                                            {hora}
-                                                        </div>
-                                                        {diasHorario.map((dia) => {
-                                                            const key = `${dia}-${hora}`;
-                                                            const bloques = bloquesPorDiaHora.get(key) ?? [];
-                                                            return (
-                                                                <div key={`${key}-cell`} className="rounded-lg border border-gray-100 p-2 min-h-[92px] space-y-2">
-                                                                    {bloques.length === 0 ? (
-                                                                        <span className="text-xs text-gray-300">-</span>
-                                                                    ) : (
-                                                                        bloques.map((bloque) => (
-                                                                            <div key={bloque.id} className="rounded-lg border border-indigo-100 bg-indigo-50 p-2">
-                                                                                <p className="text-xs font-semibold text-indigo-900">{bloque.materia}</p>
-                                                                                <p className="text-[11px] text-indigo-700">{bloque.horaInicio} - {bloque.horaFin ?? '--:--'}</p>
-                                                                                <p className="text-[11px] text-gray-600">{bloque.profesor}</p>
-                                                                                {bloque.salon && <p className="text-[11px] text-gray-500">Salon {bloque.salon}</p>}
-                                                                            </div>
-                                                                        ))
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="lg:hidden space-y-3">
-                                            {diasHorario.map((dia) => {
-                                                const bloquesDia = horarioSemanal.filter((item) => item.dia.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === dia);
-                                                if (bloquesDia.length === 0) return null;
-
-                                                return (
-                                                    <div key={dia} className="rounded-lg border border-gray-100 p-3">
-                                                        <p className="text-sm font-semibold text-gray-700 mb-2 capitalize">{dia}</p>
-                                                        <div className="space-y-2">
-                                                            {bloquesDia.map((bloque) => (
-                                                                <div key={bloque.id} className="rounded-lg border border-indigo-100 bg-indigo-50 p-2">
-                                                                    <p className="text-sm font-semibold text-indigo-900">{bloque.materia}</p>
-                                                                    <p className="text-xs text-indigo-700">{bloque.horaInicio} - {bloque.horaFin ?? '--:--'}</p>
-                                                                    <p className="text-xs text-gray-600">{bloque.profesor}</p>
-                                                                    {bloque.salon && <p className="text-xs text-gray-500">Salon {bloque.salon}</p>}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                )}
                             </div>
                         )}
                     </>

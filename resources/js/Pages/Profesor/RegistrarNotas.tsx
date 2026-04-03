@@ -43,6 +43,7 @@ interface EstudianteData {
     actividadDetalle: ActividadDetalle[];
     manuales: Record<number, number>;
     definitiva: number | null;
+    indicadorDesempeno: string;
 }
 
 interface Props {
@@ -107,6 +108,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
     const [conceptos, setConceptos]       = useState<ConceptoNota[]>([]);
     const [estudiantes, setEstudiantes]   = useState<EstudianteData[]>([]);
     const [notasLocales, setNotasLocales] = useState<Record<number, Record<number, string>>>({});
+    const [indicadoresLocales, setIndicadoresLocales] = useState<Record<number, string>>({});
     const [notasAbiertas, setNotasAbiertas] = useState(true);
     const [puedeEditar, setPuedeEditar] = useState(true);
     const [loading, setLoading]   = useState(false);
@@ -186,13 +188,16 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
 
                 // Init local grades from backend
                 const locales: Record<number, Record<number, string>> = {};
+                const indicadores: Record<number, string> = {};
                 data.estudiantes.forEach(est => {
                     locales[est.id] = {};
                     Object.entries(est.manuales || {}).forEach(([cId, val]) => {
                         locales[est.id][Number(cId)] = val.toString();
                     });
+                    indicadores[est.id] = est.indicadorDesempeno ?? '';
                 });
                 setNotasLocales(locales);
+                setIndicadoresLocales(indicadores);
                 setIsDirty(false); // fresh data, no unsaved changes
             })
             .catch(() => setErrorMsg('Error cargando datos.'))
@@ -242,7 +247,12 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
             });
         });
 
-        if (notas.length === 0) {
+        const indicadores = estudiantes.map(est => ({
+            estudiante_id: est.id,
+            texto: (indicadoresLocales[est.id] ?? '').trim(),
+        }));
+
+        if (notas.length === 0 && indicadores.length === 0) {
             setGuardando(false);
             return;
         }
@@ -256,7 +266,12 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                 'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json',
             },
-            body: JSON.stringify({ notas }),
+            body: JSON.stringify({
+                curso_materia_id: cursoMateriaId,
+                periodo_id: Number(periodoSel),
+                notas,
+                indicadores,
+            }),
         })
             .then(r => {
                 if (r.status === 419) {
@@ -381,6 +396,14 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
         }));
     };
 
+    const handleIndicadorChange = (estId: number, value: string) => {
+        setIsDirty(true);
+        setIndicadoresLocales(prev => ({
+            ...prev,
+            [estId]: value,
+        }));
+    };
+
     // ── Guard for filter changes with unsaved data ──
     const guardedChange = (change: () => void) => {
         if (isDirtyRef.current) {
@@ -419,7 +442,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                     {puedeEditar && cursoMateriaId && estudiantes.length > 0 && (
                         <button
                             onClick={guardarNotas}
-                            disabled={guardando || manualConceptos.length === 0}
+                                disabled={guardando}
                             className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm ${
                                 isDirty
                                     ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300'
@@ -767,6 +790,9 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                                 </div>
                                             </th>
                                         ))}
+                                        <th className="text-center px-3 py-3 font-bold text-xs uppercase tracking-wider border-b border-gray-200 text-gray-900 min-w-[220px]">
+                                            Indicador desempeño
+                                        </th>
                                         <th className="text-center px-3 py-3 font-bold text-xs uppercase tracking-wider border-b border-gray-200 text-gray-900 min-w-[100px]">
                                             Definitiva
                                         </th>
@@ -824,6 +850,18 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                                     </td>
                                                 ))}
 
+                                                {/* Indicador de desempeño */}
+                                                <td className="px-3 py-3 border-b border-gray-100">
+                                                    <input
+                                                        type="text"
+                                                        value={indicadoresLocales[est.id] ?? ''}
+                                                        onChange={e => handleIndicadorChange(est.id, e.target.value)}
+                                                        disabled={!puedeEditar}
+                                                        placeholder="Texto para boletín de esta materia"
+                                                        className="w-full min-w-[200px] border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577] disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
+                                                    />
+                                                </td>
+
                                                 {/* Definitiva */}
                                                 <td className="px-3 py-3 text-center border-b border-gray-100">
                                                     <span className={`text-lg font-extrabold ${gradeColor(def)}`}>
@@ -835,7 +873,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                                             {/* Expanded activity detail */}
                                             {isExpanded && (
                                                 <tr key={`detail-${est.id}`} className="bg-blue-50/40">
-                                                    <td colSpan={2 + manualConceptos.length + (actConcepto ? 1 : 0)} className="px-4 py-3 border-b border-gray-200">
+                                                    <td colSpan={3 + manualConceptos.length + (actConcepto ? 1 : 0)} className="px-4 py-3 border-b border-gray-200">
                                                         <div className="max-w-xl ml-9">
                                                             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Detalle de Actividades — {est.nombre}</p>
                                                             {est.actividadDetalle.length === 0 ? (
@@ -880,7 +918,7 @@ export default function RegistrarNotas({ profesor, cursos, materias, periodos, c
                 </div>
 
                 {/* ── Bottom save bar (mobile) ── */}
-                {puedeEditar && cursoMateriaId && estudiantes.length > 0 && manualConceptos.length > 0 && (
+                {puedeEditar && cursoMateriaId && estudiantes.length > 0 && (
                     <div className="sm:hidden sticky bottom-4">
                         <button
                             onClick={guardarNotas}

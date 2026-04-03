@@ -59,11 +59,31 @@ const dias: { key: DiaKey; label: string }[] = [
     { key: 'viernes', label: 'Viernes' },
 ];
 
+const parseHora = (raw: string) => {
+    const [hRaw, mRaw = '0'] = raw.split(':');
+    const h = Number.parseInt(hRaw, 10);
+    const m = Number.parseInt(mRaw, 10);
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    return { h, m };
+};
+
+const toMinutes = (raw: string) => {
+    const parsed = parseHora(raw);
+    if (!parsed) return Number.MAX_SAFE_INTEGER;
+    return parsed.h * 60 + parsed.m;
+};
+
+const formatHora = (raw: string) => {
+    const parsed = parseHora(raw);
+    if (!parsed) return raw;
+    return `${String(parsed.h).padStart(2, '0')}:${String(parsed.m).padStart(2, '0')}`;
+};
+
 export default function Horario({ profesor, resumen, clasesSemanales }: Props) {
     const clasesOrdenadas = useMemo(() => [...clasesSemanales].sort((a, b) => {
         const dayDiff = (DAY_ORDER[a.dia.toLowerCase()] ?? 99) - (DAY_ORDER[b.dia.toLowerCase()] ?? 99);
         if (dayDiff !== 0) return dayDiff;
-        return a.horaInicio.localeCompare(b.horaInicio);
+        return toMinutes(a.horaInicio) - toMinutes(b.horaInicio);
     }), [clasesSemanales]);
 
     const horarioGrid = useMemo<HorarioSlot[]>(() => {
@@ -87,7 +107,7 @@ export default function Horario({ profesor, resumen, clasesSemanales }: Props) {
             }
         });
 
-        return Array.from(slotsMap.values()).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+        return Array.from(slotsMap.values()).sort((a, b) => toMinutes(a.horaInicio) - toMinutes(b.horaInicio));
     }, [clasesOrdenadas]);
 
     return (
@@ -144,8 +164,8 @@ export default function Horario({ profesor, resumen, clasesSemanales }: Props) {
                                     {horarioGrid.map((slot, idx) => (
                                         <tr key={`${slot.horaInicio}-${slot.horaFin}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}>
                                             <td className="px-3 py-2 border-r border-gray-100 align-top">
-                                                <div className="text-xs font-bold text-gray-800">{slot.horaInicio}</div>
-                                                <div className="text-[10px] text-gray-400">{slot.horaFin}</div>
+                                                <div className="text-xs font-bold text-gray-800">{formatHora(slot.horaInicio)}</div>
+                                                <div className="text-[10px] text-gray-400">{formatHora(slot.horaFin)}</div>
                                             </td>
                                             {dias.map((d) => {
                                                 const clase = slot.clases[d.key];

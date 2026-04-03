@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Models\{HorarioBloque, CursoMateria, Curso, User, Materia, Sede, Jornada};
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -13,6 +14,66 @@ use Inertia\Response;
 class HorarioController extends Controller
 {
     use ScopesBySede;
+
+    private function normalizeNivel(?string $nivel): string
+    {
+        $normalized = strtolower(trim((string) $nivel));
+        $normalized = strtr($normalized, [
+            'á' => 'a',
+            'é' => 'e',
+            'í' => 'i',
+            'ó' => 'o',
+            'ú' => 'u',
+            'ñ' => 'n',
+        ]);
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+
+        return $normalized === 'pre jardin' ? 'prejardin' : $normalized;
+    }
+
+    private function isNivelInicial(?string $nivel): bool
+    {
+        return in_array($this->normalizeNivel($nivel), ['prejardin', 'jardin', 'preescolar', 'transicion'], true);
+    }
+
+    private function canShareProfesorSlot(CursoMateria $cursoMateria, Collection $conflictos): bool
+    {
+        if (!$this->isNivelInicial($cursoMateria->curso?->nivel)) {
+            return false;
+        }
+
+        if ($conflictos->isEmpty()) {
+            return true;
+        }
+
+        $nivelesValidos = $conflictos->every(fn(HorarioBloque $bloque) => $this->isNivelInicial($bloque->cursoMateria?->curso?->nivel));
+        if (!$nivelesValidos) {
+            return false;
+        }
+
+        // En inicial permitimos clases conjuntas, pero solo hasta 2 cursos simultáneos por docente.
+        $cursosSimultaneos = $conflictos
+            ->map(fn(HorarioBloque $bloque) => $bloque->cursoMateria?->curso_id)
+            ->filter()
+            ->push($cursoMateria->curso_id)
+            ->unique()
+            ->count();
+
+        return $cursosSimultaneos <= 2;
+    }
+
+    private function canShareSalonSlot(CursoMateria $cursoMateria, Collection $conflictos): bool
+    {
+        if (!$this->canShareProfesorSlot($cursoMateria, $conflictos)) {
+            return false;
+        }
+
+        if (!$cursoMateria->profesor_id) {
+            return false;
+        }
+
+        return $conflictos->every(fn(HorarioBloque $bloque) => (int) ($bloque->cursoMateria?->profesor_id ?? 0) === (int) $cursoMateria->profesor_id);
+    }
 
     private function normalizeHour(mixed $value): string
     {
@@ -275,12 +336,13 @@ class HorarioController extends Controller
 
         // 2) Conflicto: mismo profesor, mismo día, misma hora (en cualquier curso)
         if ($cm->profesor_id) {
-            $conflictoProfesor = HorarioBloque::whereHas('cursoMateria', fn($q) => $q->where('profesor_id', $cm->profesor_id))
+            $conflictosProfesor = HorarioBloque::with('cursoMateria.curso')
+                ->whereHas('cursoMateria', fn($q) => $q->where('profesor_id', $cm->profesor_id))
                 ->where('dia', $data['dia'])
                 ->whereIn('hora_inicio', $horaVariants)
-                ->exists();
+                ->get();
 
-            if ($conflictoProfesor) {
+            if ($conflictosProfesor->isNotEmpty() && !$this->canShareProfesorSlot($cm, $conflictosProfesor)) {
                 throw ValidationException::withMessages([
                     'hora_inicio' => "El profesor {$cm->profesor->name} ya tiene una clase el {$data['dia']} a las {$data['hora_inicio']}.",
                 ]);
@@ -289,12 +351,13 @@ class HorarioController extends Controller
 
         // 3) Conflicto: mismo salón, mismo día, misma hora
         if (!empty($data['salon'])) {
-            $conflictoSalon = HorarioBloque::where('salon', $data['salon'])
+            $conflictosSalon = HorarioBloque::with('cursoMateria.curso')
+                ->where('salon', $data['salon'])
                 ->where('dia', $data['dia'])
                 ->whereIn('hora_inicio', $horaVariants)
-                ->exists();
+                ->get();
 
-            if ($conflictoSalon) {
+            if ($conflictosSalon->isNotEmpty() && !$this->canShareSalonSlot($cm, $conflictosSalon)) {
                 throw ValidationException::withMessages([
                     'salon' => "El aula {$data['salon']} ya está ocupada el {$data['dia']} a las {$data['hora_inicio']}.",
                 ]);
@@ -352,13 +415,14 @@ class HorarioController extends Controller
 
         // Conflicto profesor
         if ($cm->profesor_id) {
-            $conflictoProfesor = HorarioBloque::whereHas('cursoMateria', fn($q) => $q->where('profesor_id', $cm->profesor_id))
+            $conflictosProfesor = HorarioBloque::with('cursoMateria.curso')
+                ->whereHas('cursoMateria', fn($q) => $q->where('profesor_id', $cm->profesor_id))
                 ->where('dia', $data['dia'])
                 ->whereIn('hora_inicio', $horaVariants)
                 ->where('id', '!=', $horarioBloque->id)
-                ->exists();
+                ->get();
 
-            if ($conflictoProfesor) {
+            if ($conflictosProfesor->isNotEmpty() && !$this->canShareProfesorSlot($cm, $conflictosProfesor)) {
                 throw ValidationException::withMessages([
                     'hora_inicio' => "El profesor {$cm->profesor->name} ya tiene una clase el {$data['dia']} a las {$data['hora_inicio']}.",
                 ]);
@@ -367,13 +431,14 @@ class HorarioController extends Controller
 
         // Conflicto salón
         if (!empty($data['salon'])) {
-            $conflictoSalon = HorarioBloque::where('salon', $data['salon'])
+            $conflictosSalon = HorarioBloque::with('cursoMateria.curso')
+                ->where('salon', $data['salon'])
                 ->where('dia', $data['dia'])
                 ->whereIn('hora_inicio', $horaVariants)
                 ->where('id', '!=', $horarioBloque->id)
-                ->exists();
+                ->get();
 
-            if ($conflictoSalon) {
+            if ($conflictosSalon->isNotEmpty() && !$this->canShareSalonSlot($cm, $conflictosSalon)) {
                 throw ValidationException::withMessages([
                     'salon' => "El aula {$data['salon']} ya está ocupada el {$data['dia']} a las {$data['hora_inicio']}.",
                 ]);

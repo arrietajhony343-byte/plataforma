@@ -3,8 +3,7 @@
 namespace App\Http\Controllers\Padre;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Actividad, CursoMateria, Entrega, HorarioBloque, Matricula, Periodo, PeriodoEvento, User};
-use Carbon\Carbon;
+use App\Models\{Actividad, Entrega, Matricula, Periodo, PeriodoEvento, User};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -29,7 +28,6 @@ class CalendarioController extends Controller
                 'hijo' => null,
                 'items' => [],
                 'pendientes' => [],
-                'horarioSemanal' => [],
                 'resumen' => [
                     'total' => 0,
                     'proximas' => 0,
@@ -66,7 +64,6 @@ class CalendarioController extends Controller
                 ],
                 'items' => [],
                 'pendientes' => [],
-                'horarioSemanal' => [],
                 'resumen' => [
                     'total' => 0,
                     'proximas' => 0,
@@ -140,78 +137,8 @@ class CalendarioController extends Controller
                 'vencida' => false,
             ]);
 
-        $horarios = HorarioBloque::query()
-            ->whereIn('curso_materia_id', $cursoMateriaIds)
-            ->with(['cursoMateria.materia:id,nombre', 'cursoMateria.profesor:id,name'])
-            ->get();
-
-        $dayOrder = [
-            'lunes' => 1,
-            'martes' => 2,
-            'miercoles' => 3,
-            'miércoles' => 3,
-            'jueves' => 4,
-            'viernes' => 5,
-            'sabado' => 6,
-            'sábado' => 6,
-            'domingo' => 7,
-        ];
-
-        $horarioSemanal = $horarios
-            ->map(function (HorarioBloque $hb) {
-                return [
-                    'id' => $hb->id,
-                    'dia' => (string) $hb->dia,
-                    'horaInicio' => $hb->hora_inicio ? substr((string) $hb->hora_inicio, 0, 5) : null,
-                    'horaFin' => $hb->hora_fin ? substr((string) $hb->hora_fin, 0, 5) : null,
-                    'materia' => $hb->cursoMateria?->materia?->nombre ?? 'Materia',
-                    'profesor' => $hb->cursoMateria?->profesor?->name ?? 'Sin profesor',
-                    'salon' => $hb->salon,
-                ];
-            })
-            ->sortBy([
-                fn(array $item) => $dayOrder[mb_strtolower($item['dia'], 'UTF-8')] ?? 99,
-                fn(array $item) => $item['horaInicio'] ?? '99:99',
-            ])
-            ->values();
-
-        $inicioAnio = Carbon::create($anio, 1, 1)->startOfDay();
-        $finAnio = Carbon::create($anio, 12, 31)->endOfDay();
-
-        $horarioItems = collect();
-        foreach ($horarios as $hb) {
-            $dayOfWeek = $this->dayOfWeekFromLabel((string) $hb->dia);
-            if ($dayOfWeek === null) {
-                continue;
-            }
-
-            $cursor = $inicioAnio->copy();
-            while ((int) $cursor->dayOfWeek !== $dayOfWeek) {
-                $cursor->addDay();
-            }
-
-            while ($cursor->lte($finAnio)) {
-                $horarioItems->push([
-                    'id' => 'hor-' . $hb->id . '-' . $cursor->format('Ymd'),
-                    'origen' => 'horario',
-                    'titulo' => 'Clase: ' . ($hb->cursoMateria?->materia?->nombre ?? 'Materia'),
-                    'materia' => $hb->cursoMateria?->materia?->nombre ?? 'Materia',
-                    'profesor' => $hb->cursoMateria?->profesor?->name ?? 'Sin profesor',
-                    'fecha' => $cursor->format('Y-m-d'),
-                    'hora' => $hb->hora_inicio ? substr((string) $hb->hora_inicio, 0, 5) : null,
-                    'tipo' => 'clase',
-                    'descripcion' => 'Horario de clase' . ($hb->salon ? ' · Salon: ' . $hb->salon : ''),
-                    'entregada' => null,
-                    'vencida' => false,
-                ]);
-
-                $cursor->addWeek();
-            }
-        }
-
         $items = $actividadItems
             ->concat($eventos)
-            ->concat($horarioItems)
             ->filter(fn($i) => !empty($i['fecha']))
             ->sortBy(['fecha', 'hora'])
             ->values();
@@ -234,26 +161,11 @@ class CalendarioController extends Controller
             ],
             'items' => $items,
             'pendientes' => $pendientes,
-            'horarioSemanal' => $horarioSemanal,
             'resumen' => [
                 'total' => $items->count(),
                 'proximas' => $items->where('fecha', '>=', now()->toDateString())->count(),
                 'vencidas' => $actividadItems->where('vencida', true)->count(),
             ],
         ]);
-    }
-
-    private function dayOfWeekFromLabel(string $dia): ?int
-    {
-        return match (mb_strtolower(trim($dia), 'UTF-8')) {
-            'domingo' => Carbon::SUNDAY,
-            'lunes' => Carbon::MONDAY,
-            'martes' => Carbon::TUESDAY,
-            'miercoles', 'miércoles' => Carbon::WEDNESDAY,
-            'jueves' => Carbon::THURSDAY,
-            'viernes' => Carbon::FRIDAY,
-            'sabado', 'sábado' => Carbon::SATURDAY,
-            default => null,
-        };
     }
 }

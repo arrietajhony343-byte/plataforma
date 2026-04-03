@@ -138,6 +138,7 @@ export default function SidebarLayout({
         success: '✅',
         warning: '⚠️',
         error:   '🔴',
+        actividad: '📚',
         pago:    '💰',
         nota:    '📝',
         boletin: '📋',

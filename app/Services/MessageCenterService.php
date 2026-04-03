@@ -49,6 +49,7 @@ class MessageCenterService
                     'rol' => $this->roleLabel($contacto),
                     'avatar' => $this->avatarFor($contacto->name),
                     'subtitle' => $this->contactSubtitle($contacto),
+                    'perfil' => $this->contactProfile($contacto),
                     'ultimoMensaje' => $ultimoMensaje?->contenido ?: ($ultimoMensaje?->archivo_url ? '📎 Archivo adjunto' : null),
                     'ultimoMensajeFecha' => $ultimoMensaje?->created_at?->diffForHumans(),
                     'ultimoMensajeAt' => $ultimoMensaje?->created_at?->timestamp ?? 0,
@@ -80,6 +81,7 @@ class MessageCenterService
                 'rol' => $this->roleLabel($contacto),
                 'avatar' => $this->avatarFor($contacto->name),
                 'subtitle' => $this->contactSubtitle($contacto),
+                'perfil' => $this->contactProfile($contacto),
             ])
             ->sortBy('nombre')
             ->values()
@@ -132,6 +134,7 @@ class MessageCenterService
                 'rol' => $this->roleLabel($destinatario),
                 'avatar' => $this->avatarFor($destinatario->name),
                 'subtitle' => $this->contactSubtitle($destinatario),
+                'perfil' => $this->contactProfile($destinatario),
             ],
         ];
     }
@@ -155,9 +158,18 @@ class MessageCenterService
         $query = User::query()
             ->with([
                 'roles:id,name',
+                'sede:id,nombre',
                 'cursoMaterias.materia:id,nombre',
                 'cursosDirector:id,nombre,director_grupo_id',
-                'hijos:id,name',
+                'padres:id,name,documento,telefono',
+                'hijos' => fn ($q) => $q
+                    ->select('users.id', 'users.name', 'users.documento')
+                    ->with([
+                        'matriculas' => fn ($mq) => $mq
+                            ->activa()
+                            ->with('curso:id,nombre')
+                            ->latest('id'),
+                    ]),
                 'matriculas' => fn ($q) => $q->activa()->with('curso:id,nombre')->latest('id'),
             ])
             ->activo()
@@ -316,6 +328,60 @@ class MessageCenterService
                 'tipo'   => $mensaje->archivo_tipo,
                 'tamano' => $mensaje->archivo_tamano,
             ] : null,
+        ];
+    }
+
+    private function contactProfile(User $contact): array
+    {
+        $hijos = $contact->hijos
+            ->map(function (User $hijo) {
+                $curso = $hijo->matriculas->first()?->curso?->nombre;
+
+                return [
+                    'id' => $hijo->id,
+                    'nombre' => $hijo->name,
+                    'documento' => $hijo->documento,
+                    'curso' => $curso,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $materias = $contact->cursoMaterias
+            ->pluck('materia.nombre')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $cursosDireccion = $contact->cursosDirector
+            ->pluck('nombre')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $acudientes = $contact->padres
+            ->map(fn(User $padre) => [
+                'id' => $padre->id,
+                'nombre' => $padre->name,
+                'documento' => $padre->documento,
+                'telefono' => $padre->telefono,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'documento' => $contact->documento,
+            'email' => $contact->email,
+            'telefono' => $contact->telefono,
+            'direccion' => $contact->direccion,
+            'sede' => $contact->sede?->nombre,
+            'curso_actual' => $contact->matriculas->first()?->curso?->nombre,
+            'hijos' => $hijos,
+            'materias' => $materias,
+            'cursos_direccion' => $cursosDireccion,
+            'acudientes' => $acudientes,
         ];
     }
 

@@ -14,9 +14,16 @@ interface Actividad {
     titulo: string;
     descripcion: string;
     tipo: string;
+    tienePreguntas: boolean;
     fechaAsignada: string;
     fechaEntrega: string;
-    estado: 'pendiente' | 'entregada' | 'calificada' | 'vencida';
+    fechaLimiteIndividual?: string | null;
+    estado: 'pendiente' | 'entregada' | 'calificada' | 'vencida' | 'devuelta';
+    puedeEntregar: boolean;
+    permiteEntregaTardia: boolean;
+    maxIntentos?: number | null;
+    intentosUsados?: number;
+    notaDevolucion?: string | null;
     nota?: number;
     peso: number;
     archivos?: string[];
@@ -48,6 +55,22 @@ interface Props {
     materias: Materia[];
 }
 
+const TIPO_CONFIG: Record<string, { label: string; badge: string }> = {
+    tarea: { label: 'Tarea', badge: 'bg-indigo-100 text-indigo-700' },
+    taller: { label: 'Taller', badge: 'bg-blue-100 text-blue-700' },
+    proyecto: { label: 'Proyecto', badge: 'bg-purple-100 text-purple-700' },
+    quiz: { label: 'Quiz', badge: 'bg-rose-100 text-rose-700' },
+    examen: { label: 'Examen', badge: 'bg-red-100 text-red-700' },
+};
+
+const ESTADO_CONFIG: Record<string, { label: string; icon: string; badge: string }> = {
+    pendiente: { label: 'Pendiente', icon: '⏳', badge: 'bg-amber-100 text-amber-700 border-amber-200' },
+    entregada: { label: 'Entregada', icon: '✅', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+    calificada: { label: 'Calificada', icon: '🏆', badge: 'bg-green-100 text-green-700 border-green-200' },
+    vencida: { label: 'Vencida', icon: '⌛', badge: 'bg-red-100 text-red-700 border-red-200' },
+    devuelta: { label: 'Devuelta', icon: '↩️', badge: 'bg-orange-100 text-orange-700 border-orange-200' },
+};
+
 export default function Materias({ estudiante, materias }: Props) {
     const nombre = estudiante?.nombre || 'Estudiante';
     const [materiaActiva, setMateriaActiva] = useState<number | null>(null);
@@ -66,24 +89,16 @@ export default function Materias({ estudiante, materias }: Props) {
     }, [materiaDetalle, filtroActividad]);
 
     const getEstadoBadge = (estado: string) => {
-        switch (estado) {
-            case 'pendiente': return 'bg-amber-100 text-amber-700 border-amber-200';
-            case 'entregada': return 'bg-blue-100 text-blue-700 border-blue-200';
-            case 'calificada': return 'bg-green-100 text-green-700 border-green-200';
-            case 'vencida': return 'bg-red-100 text-red-700 border-red-200';
-            default: return 'bg-gray-100 text-gray-700';
-        }
+        return ESTADO_CONFIG[estado]?.badge ?? 'bg-gray-100 text-gray-700 border-gray-200';
     };
 
     const getEstadoIcon = (estado: string) => {
-        switch (estado) {
-            case 'pendiente': return '';
-            case 'entregada': return '';
-            case 'calificada': return '';
-            case 'vencida': return '';
-            default: return '';
-        }
+        return ESTADO_CONFIG[estado]?.icon ?? '•';
     };
+
+    const getEstadoLabel = (estado: string) => ESTADO_CONFIG[estado]?.label ?? estado;
+
+    const getTipo = (tipo: string) => TIPO_CONFIG[(tipo ?? '').toLowerCase()] ?? { label: tipo, badge: 'bg-gray-100 text-gray-700' };
 
     const getNotaColor = (nota: number) => {
         if (nota >= 4.0) return 'text-green-600';
@@ -247,6 +262,8 @@ export default function Materias({ estudiante, materias }: Props) {
                         {[
                             { key: 'todas', label: 'Todas', count: materiaDetalle.actividades.length },
                             { key: 'pendiente', label: 'Pendientes', count: materiaDetalle.actividades.filter(a => a.estado === 'pendiente').length },
+                            { key: 'devuelta', label: 'Devueltas', count: materiaDetalle.actividades.filter(a => a.estado === 'devuelta').length },
+                            { key: 'entregada', label: 'Entregadas', count: materiaDetalle.actividades.filter(a => a.estado === 'entregada').length },
                             { key: 'calificada', label: 'Calificadas', count: materiaDetalle.actividades.filter(a => a.estado === 'calificada').length },
                             { key: 'vencida', label: 'Vencidas', count: materiaDetalle.actividades.filter(a => a.estado === 'vencida').length },
                         ].map(f => (
@@ -280,15 +297,21 @@ export default function Materias({ estudiante, materias }: Props) {
                                                     <span className="text-sm">{getEstadoIcon(act.estado)}</span>
                                                     <h4 className="font-bold text-gray-900 text-sm">{act.titulo}</h4>
                                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getEstadoBadge(act.estado)}`}>
-                                                        {act.estado}
+                                                        {getEstadoLabel(act.estado)}
                                                     </span>
-                                                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{act.tipo}</span>
+                                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${getTipo(act.tipo).badge}`}>{getTipo(act.tipo).label}</span>
+                                                    {act.estado === 'vencida' && act.permiteEntregaTardia && (
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">Tardía permitida</span>
+                                                    )}
                                                 </div>
                                                 <p className="text-xs text-gray-500 mt-1">{act.descripcion}</p>
                                                 <div className="flex items-center gap-4 mt-2 text-[11px] text-gray-400">
                                                     <span>Asignada: {act.fechaAsignada}</span>
-                                                    <span>Entrega: {act.fechaEntrega}</span>
+                                                    <span>Entrega: {act.fechaLimiteIndividual ?? act.fechaEntrega}</span>
                                                     <span>Peso: {act.peso}%</span>
+                                                    {act.maxIntentos !== null && act.maxIntentos !== undefined && (
+                                                        <span>Intentos: {act.intentosUsados ?? 0}/{act.maxIntentos}</span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
@@ -298,16 +321,30 @@ export default function Materias({ estudiante, materias }: Props) {
                                                         <p className="text-[10px] text-gray-400">/5.0</p>
                                                     </div>
                                                 )}
-                                                {(act.estado === 'pendiente' || act.estado === 'vencida') && (
-                                                    <Link
-                                                        href={route('estudiante.actividades.show', act.id)}
-                                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${act.estado === 'vencida' ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-[#293577] hover:bg-[#181b49] text-white'}`}
-                                                    >
-                                                        {act.estado === 'vencida' ? 'Ver' : 'Entregar'}
-                                                    </Link>
-                                                )}
+                                                <Link
+                                                    href={route('estudiante.actividades.show', act.id)}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                                                        (act.estado === 'pendiente' || act.estado === 'devuelta' || act.estado === 'vencida') && act.puedeEntregar
+                                                            ? (act.estado === 'vencida'
+                                                                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                                                : 'bg-[#293577] hover:bg-[#181b49] text-white')
+                                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                                    }`}
+                                                >
+                                                    {(act.estado === 'pendiente' || act.estado === 'devuelta' || act.estado === 'vencida') && act.puedeEntregar
+                                                        ? (act.tienePreguntas || ['quiz', 'examen'].includes((act.tipo ?? '').toLowerCase())
+                                                            ? 'Resolver'
+                                                            : (act.estado === 'vencida' ? 'Entregar tarde' : 'Entregar'))
+                                                        : 'Ver detalle'}
+                                                </Link>
                                             </div>
                                         </div>
+                                        {act.estado === 'devuelta' && act.notaDevolucion && (
+                                            <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-100">
+                                                <p className="text-xs font-semibold text-orange-700 mb-0.5">Corrección solicitada:</p>
+                                                <p className="text-xs text-orange-600 italic">"{act.notaDevolucion}"</p>
+                                            </div>
+                                        )}
                                         {act.retroalimentacion && (
                                             <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
                                                 <p className="text-xs font-semibold text-blue-700 mb-0.5">Retroalimentación del profesor:</p>

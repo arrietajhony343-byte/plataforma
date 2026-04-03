@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Profesor;
 
 use App\Http\Controllers\Controller;
-use App\Models\{CursoMateria, Actividad, Entrega, Matricula, Periodo, Pregunta, Opcion};
+use App\Models\{CursoMateria, Actividad, Entrega, Matricula, Notificacion, Periodo, Pregunta, Opcion};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,19 +16,15 @@ class ActividadController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
 
         // loadCursoMaterias already computes pesoUsado
         $cursoMaterias = $this->loadCursoMaterias($user->id);
         $cmIds = $cursoMaterias->pluck('id')->toArray();
 
         // Estudiantes matriculados por curso (sin duplicados)
-        $estudiantesPorCurso = DB::table('matriculas')
-            ->whereIn('curso_id', CursoMateria::whereIn('id', $cmIds)->pluck('curso_id'))
-            ->where('estado', 'activa')
-            ->select('curso_id', DB::raw('COUNT(DISTINCT estudiante_id) as total'))
-            ->groupBy('curso_id')
-            ->pluck('total', 'curso_id');
+        $estudiantesPorCurso = $cursoMaterias
+            ->groupBy('cursoId')
+            ->map(fn($items) => (int)($items->first()['totalEstudiantes'] ?? 0));
 
         // Conteos de entregas por actividad
         $entregaStats = DB::table('entregas')
@@ -35,7 +32,7 @@ class ActividadController extends Controller
             ->whereIn('actividades.curso_materia_id', $cmIds)
             ->select(
                 'entregas.actividad_id',
-                DB::raw("SUM(CASE WHEN entregas.estado IN ('entregada','calificada') THEN 1 ELSE 0 END) as entregados"),
+                DB::raw("SUM(CASE WHEN entregas.estado IN ('entregada','atrasada','calificada') THEN 1 ELSE 0 END) as entregados"),
                 DB::raw("SUM(CASE WHEN entregas.estado = 'calificada' THEN 1 ELSE 0 END) as calificados"),
                 DB::raw("SUM(CASE WHEN entregas.estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes"),
             )
@@ -72,10 +69,45 @@ class ActividadController extends Controller
                 ];
             });
 
+        $cursos = $cursoMaterias
+            ->groupBy('cursoId')
+            ->map(function ($items, $cursoId) use ($actividades) {
+                $first = $items->first();
+                $actividadesCurso = $actividades->where('cursoId', (int)$cursoId);
+
+                return [
+                    'id'              => (int)$cursoId,
+                    'nombre'          => $first['curso'],
+                    'nivel'           => $first['nivel'],
+                    'totalEstudiantes'=> (int)($first['totalEstudiantes'] ?? 0),
+                    'totalMaterias'   => $items->count(),
+                    'totalActividades'=> $actividadesCurso->count(),
+                    'activas'         => $actividadesCurso->where('activa', true)->count(),
+                    'porCalificar'    => $actividadesCurso->sum(
+                        fn($a) => max(0, (int)$a['entregados'] - (int)$a['calificados'])
+                    ),
+                    'vencidas'        => $actividadesCurso->filter(function ($a) {
+                        if (!$a['activa'] || empty($a['fechaEntrega'])) {
+                            return false;
+                        }
+                        return now()->gt(\Carbon\Carbon::parse($a['fechaEntrega']));
+                    })->count(),
+                    'materias'        => $items->map(fn($cm) => [
+                        'id'        => (int)$cm['id'],
+                        'nombre'    => $cm['materia'],
+                        'pesoUsado' => (float)$cm['pesoUsado'],
+                    ])->values()->all(),
+                ];
+            })
+            ->sortBy('nombre', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+
         return Inertia::render('Profesor/Actividades', [
             'profesor'      => ['nombre' => $user->name],
             'actividades'   => $actividades,
             'cursoMaterias' => $cursoMaterias,
+            'cursos'        => $cursos,
         ]);
     }
 
@@ -110,6 +142,8 @@ class ActividadController extends Controller
         if ($cm->profesor_id !== $user->id) {
             abort(403);
         }
+
+        $this->validarPreguntasEvaluacion($request, (string) $data['tipo']);
 
         $data['fecha_asignacion'] = now()->toDateString();
         $data['activa'] = $data['activa'] ?? true;
@@ -194,6 +228,46 @@ class ActividadController extends Controller
         return redirect()->route('profesor.actividades')->with('success', 'Actividad creada exitosamente.');
     }
 
+    private function validarPreguntasEvaluacion(Request $request, string $tipoActividad): void
+    {
+        if (!in_array($tipoActividad, ['quiz', 'examen'], true)) {
+            return;
+        }
+
+        $preguntas = $request->input('preguntas', []);
+        if (!is_array($preguntas) || count($preguntas) === 0) {
+            throw ValidationException::withMessages([
+                'preguntas' => 'Debes agregar al menos una pregunta para actividades tipo quiz o examen.',
+            ]);
+        }
+
+        foreach ($preguntas as $idx => $pregunta) {
+            $numero = $idx + 1;
+            $tipoPregunta = (string) ($pregunta['tipo'] ?? '');
+
+            if ($tipoPregunta === 'abierta') {
+                continue;
+            }
+
+            $opciones = $pregunta['opciones'] ?? [];
+            if (!is_array($opciones) || count($opciones) < 2) {
+                throw ValidationException::withMessages([
+                    'preguntas' => "La pregunta {$numero} debe tener al menos dos opciones.",
+                ]);
+            }
+
+            $correctas = collect($opciones)
+                ->filter(fn($opcion) => filter_var($opcion['es_correcta'] ?? false, FILTER_VALIDATE_BOOLEAN))
+                ->count();
+
+            if ($correctas < 1) {
+                throw ValidationException::withMessages([
+                    'preguntas' => "La pregunta {$numero} debe tener una opción correcta.",
+                ]);
+            }
+        }
+    }
+
     /**
      * Shared helper: load cursoMaterias with porcentaje already used.
      */
@@ -204,6 +278,13 @@ class ActividadController extends Controller
             ->whereHas('curso', fn($q) => $q->where('anio', $anio))
             ->with(['curso', 'materia'])
             ->get();
+
+        $estudiantesPorCurso = DB::table('matriculas')
+            ->whereIn('curso_id', $cms->pluck('curso_id')->unique()->values())
+            ->where('estado', 'activa')
+            ->select('curso_id', DB::raw('COUNT(DISTINCT estudiante_id) as total'))
+            ->groupBy('curso_id')
+            ->pluck('total', 'curso_id');
 
         // Peso ya usado por curso_materia
         $query = DB::table('actividades')
@@ -221,21 +302,42 @@ class ActividadController extends Controller
             'materia'     => $cm->materia->nombre,
             'nivel'       => $cm->curso->nivel,
             'pesoUsado'   => (float)($pesoUsado->get($cm->id, 0)),
+            'totalEstudiantes' => (int)($estudiantesPorCurso->get($cm->curso_id, 0)),
         ]);
     }
 
     /**
      * Show create activity form.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
         $user = auth()->user();
         $cursoMaterias = $this->loadCursoMaterias($user->id);
+
+        $prefillCursoId = $request->filled('curso_id') ? (int)$request->input('curso_id') : null;
+        $prefillCursoMateriaId = $request->filled('curso_materia_id') ? (int)$request->input('curso_materia_id') : null;
+
+        if ($prefillCursoMateriaId !== null && !$cursoMaterias->contains(fn($cm) => (int)$cm['id'] === $prefillCursoMateriaId)) {
+            $prefillCursoMateriaId = null;
+        }
+
+        if ($prefillCursoMateriaId !== null) {
+            $cm = $cursoMaterias->first(fn($item) => (int)$item['id'] === $prefillCursoMateriaId);
+            $prefillCursoId = $cm ? (int)$cm['cursoId'] : $prefillCursoId;
+        }
+
+        if ($prefillCursoId !== null && !$cursoMaterias->contains(fn($cm) => (int)$cm['cursoId'] === $prefillCursoId)) {
+            $prefillCursoId = null;
+        }
 
         return Inertia::render('Profesor/CrearActividad', [
             'profesor'      => ['nombre' => $user->name],
             'cursoMaterias' => $cursoMaterias,
             'actividad'     => null,
+            'prefill'       => [
+                'cursoId'        => $prefillCursoId,
+                'cursoMateriaId' => $prefillCursoMateriaId,
+            ],
         ]);
     }
 
@@ -311,6 +413,9 @@ class ActividadController extends Controller
             'preguntas.*.opciones.*.es_correcta' => 'nullable',
         ]);
 
+        $tipoActividad = (string) ($data['tipo'] ?? $actividad->tipo);
+        $this->validarPreguntasEvaluacion($request, $tipoActividad);
+
         // Handle file upload
         if ($request->hasFile('archivo_instrucciones')) {
             if ($actividad->archivo_instrucciones) {
@@ -334,7 +439,7 @@ class ActividadController extends Controller
             $data['max_intentos'] = ($raw !== '' && $raw !== null) ? (int)$raw : null;
         }
 
-        $tienePreguntas = !empty($data['preguntas']) && in_array($data['tipo'] ?? $actividad->tipo, ['quiz', 'examen']);
+        $tienePreguntas = !empty($data['preguntas']) && in_array($tipoActividad, ['quiz', 'examen']);
         $data['tiene_preguntas'] = $tienePreguntas;
 
         unset($data['preguntas']);
@@ -405,7 +510,7 @@ class ActividadController extends Controller
                 'id'                    => $e->id,
                 'estudianteId'          => $e->estudiante_id,
                 'estudiante'            => $e->estudiante->name ?? 'N/A',
-                'estado'                => $e->estado,
+                'estado'                => $this->estadoEntregaProfesor($e),
                 'contenido'             => $e->contenido,
                 'archivo'               => $e->archivo,
                 'calificacion'          => $e->calificacion ? (float)$e->calificacion : null,
@@ -428,6 +533,59 @@ class ActividadController extends Controller
         ]);
     }
 
+    private function estadoEntregaProfesor(Entrega $entrega): string
+    {
+        if (
+            $entrega->estado === 'devuelta'
+            || ($entrega->estado === 'pendiente' && !empty($entrega->nota_devolucion) && $entrega->fecha_entrega === null)
+        ) {
+            return 'devuelta';
+        }
+
+        return $entrega->estado;
+    }
+
+    private function entregaTieneEnvio(Entrega $entrega): bool
+    {
+        if ($entrega->fecha_entrega !== null) {
+            return true;
+        }
+
+        return in_array($entrega->estado, ['entregada', 'atrasada', 'calificada'], true)
+            || !empty($entrega->contenido)
+            || !empty($entrega->archivo)
+            || !empty($entrega->respuestas_quiz);
+    }
+
+    private function notificarEstudianteEntregaDevuelta(Entrega $entrega, ?string $nota): void
+    {
+        $tituloActividad = $entrega->actividad?->titulo ?? 'tu actividad';
+        $mensaje = "Tu profesor devolvió \"{$tituloActividad}\" para corrección.";
+        if (!empty($nota)) {
+            $mensaje .= " Comentario: {$nota}";
+        }
+        $mensaje .= ' Puedes volver a enviarla desde Mis Materias.';
+
+        Notificacion::create([
+            'user_id' => $entrega->estudiante_id,
+            'tipo'    => 'actividad',
+            'titulo'  => 'Actividad devuelta para corrección',
+            'mensaje' => $mensaje,
+        ]);
+    }
+
+    private function notificarEstudianteEntregaReactivada(Entrega $entrega): void
+    {
+        $tituloActividad = $entrega->actividad?->titulo ?? 'tu actividad';
+
+        Notificacion::create([
+            'user_id' => $entrega->estudiante_id,
+            'tipo'    => 'actividad',
+            'titulo'  => 'Actividad reactivada para reenvío',
+            'mensaje' => "Tu profesor reactivó \"{$tituloActividad}\". Ya puedes volver a enviarla.",
+        ]);
+    }
+
     /**
      * Bulk grade entregas — returns JSON.
      */
@@ -446,22 +604,32 @@ class ActividadController extends Controller
         ]);
 
         $saved = 0;
+        $skipped = 0;
         foreach ($data['calificaciones'] as $cal) {
             $entrega = Entrega::where('id', $cal['entrega_id'])
                 ->where('actividad_id', $actividad->id)
                 ->first();
 
-            if ($entrega && $cal['calificacion'] !== null) {
-                $entrega->update([
-                    'calificacion'     => $cal['calificacion'],
-                    'retroalimentacion'=> $cal['retroalimentacion'] ?? null,
-                    'estado'           => 'calificada',
-                ]);
-                $saved++;
+            if (!$entrega || !$this->entregaTieneEnvio($entrega)) {
+                $skipped++;
+                continue;
             }
+
+            if ($cal['calificacion'] === null || !is_numeric($cal['calificacion'])) {
+                $skipped++;
+                continue;
+            }
+
+            $entrega->update([
+                'calificacion'      => $cal['calificacion'],
+                'retroalimentacion' => $cal['retroalimentacion'] ?? null,
+                'nota_devolucion'   => null,
+                'estado'            => 'calificada',
+            ]);
+            $saved++;
         }
 
-        return response()->json(['success' => true, 'saved' => $saved]);
+        return response()->json(['success' => true, 'saved' => $saved, 'skipped' => $skipped]);
     }
 
     /**
@@ -483,13 +651,27 @@ class ActividadController extends Controller
 
         switch ($data['tipo']) {
             case 'devolver':
+                if (!$this->entregaTieneEnvio($entrega)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No puedes devolver una entrega que aún no fue enviada.',
+                    ], 422);
+                }
+
+                $notaDevolucion = trim((string) ($data['nota_devolucion'] ?? ''));
+                if ($notaDevolucion === '') {
+                    $notaDevolucion = null;
+                }
+
                 $entrega->update([
                     'estado'            => 'pendiente',
                     'calificacion'      => null,
                     'retroalimentacion' => null,
-                    'nota_devolucion'   => $data['nota_devolucion'] ?? null,
+                    'nota_devolucion'   => $notaDevolucion,
                     'fecha_entrega'     => null,
                 ]);
+
+                $this->notificarEstudianteEntregaDevuelta($entrega->fresh('actividad'), $notaDevolucion);
                 break;
 
             case 'extender_individual':
@@ -502,11 +684,14 @@ class ActividadController extends Controller
 
             case 'reactivar':
                 $entrega->update([
-                    'estado'        => 'pendiente',
-                    'calificacion'  => null,
-                    'fecha_entrega' => null,
-                    'nota_devolucion'=> null,
+                    'estado'            => 'pendiente',
+                    'calificacion'      => null,
+                    'retroalimentacion' => null,
+                    'fecha_entrega'     => null,
+                    'nota_devolucion'   => null,
                 ]);
+
+                $this->notificarEstudianteEntregaReactivada($entrega->fresh('actividad'));
                 break;
         }
 
@@ -522,6 +707,10 @@ class ActividadController extends Controller
         if ($actividad->cursoMateria->profesor_id !== $user->id) {
             abort(403);
         }
+
+        $request->merge([
+            'nueva_fecha' => $request->input('nueva_fecha', $request->input('nueva_fecha_entrega')),
+        ]);
 
         $data = $request->validate([
             'nueva_fecha' => 'required|date',

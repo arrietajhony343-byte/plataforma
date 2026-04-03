@@ -107,7 +107,10 @@ class DashboardController extends Controller
         if ($entrega->estado === 'calificada') {
             return 'calificada';
         }
-        if ($entrega->estado === 'devuelta') {
+        if (
+            $entrega->estado === 'devuelta'
+            || ($entrega->estado === 'pendiente' && !empty($entrega->nota_devolucion) && $entrega->fecha_entrega === null)
+        ) {
             return 'devuelta';
         }
         if (in_array($entrega->estado, ['entregada', 'atrasada'])) {

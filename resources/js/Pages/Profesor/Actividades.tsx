@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router, Link } from '@inertiajs/react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { profesorMenuItems } from '@/Config/profesorMenu';
 
 // ── Types ──
@@ -29,13 +29,27 @@ interface CursoMateria {
     cursoId: number;
     materia: string;
     nivel: string;
+    totalEstudiantes?: number;
+}
+
+interface CursoResumen {
+    id: number;
+    nombre: string;
+    nivel: string;
+    totalEstudiantes: number;
+    totalMaterias: number;
+    totalActividades: number;
+    activas: number;
+    porCalificar: number;
+    vencidas: number;
+    materias: { id: number; nombre: string; pesoUsado: number }[];
 }
 
 interface EntregaDetail {
     id: number;
     estudianteId: number;
     estudiante: string;
-    estado: 'pendiente' | 'entregada' | 'calificada' | 'atrasada';
+    estado: 'pendiente' | 'entregada' | 'calificada' | 'atrasada' | 'devuelta';
     contenido: string | null;
     archivo: string | null;
     calificacion: number | null;
@@ -49,6 +63,7 @@ interface Props {
     profesor: { nombre: string };
     actividades: Actividad[];
     cursoMaterias: CursoMateria[];
+    cursos: CursoResumen[];
 }
 
 // ── Tipo config ──
@@ -62,12 +77,14 @@ const tiposConfig: Record<string, { label: string; color: string; bg: string }> 
 
 const tiposOpciones = ['tarea', 'quiz', 'examen', 'proyecto', 'taller'] as const;
 
-export default function Actividades({ profesor, actividades, cursoMaterias }: Props) {
+export default function Actividades({ profesor, actividades, cursoMaterias, cursos }: Props) {
     // ── State ──
     const [searchTerm, setSearchTerm] = useState('');
-    const [filtroCm, setFiltroCm] = useState('');
     const [filtroEstado, setFiltroEstado] = useState('todas');
+    const [cursoSeleccionadoId, setCursoSeleccionadoId] = useState<number | null>(cursos[0]?.id ?? null);
+    const [materiaSeleccionadaId, setMateriaSeleccionadaId] = useState<number | null>(null);
     const [processing, setProcessing] = useState(false);
+    const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     // Modal crear/editar
     const [showForm, setShowForm] = useState(false);
@@ -99,6 +116,43 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
     const [fechaExtGeneral, setFechaExtGeneral] = useState('');
 
     // ── Computed ──
+    useEffect(() => {
+        if (cursos.length === 0) {
+            setCursoSeleccionadoId(null);
+            return;
+        }
+        if (cursoSeleccionadoId === null || !cursos.some(c => c.id === cursoSeleccionadoId)) {
+            setCursoSeleccionadoId(cursos[0].id);
+        }
+    }, [cursos, cursoSeleccionadoId]);
+
+    useEffect(() => {
+        setMateriaSeleccionadaId(null);
+    }, [cursoSeleccionadoId]);
+
+    const cursoSeleccionado = useMemo(
+        () => cursos.find(c => c.id === cursoSeleccionadoId) ?? null,
+        [cursos, cursoSeleccionadoId]
+    );
+
+    const materiasCursoSeleccionado = useMemo(() => {
+        if (!cursoSeleccionadoId) return [];
+
+        return cursoMaterias
+            .filter(cm => cm.cursoId === cursoSeleccionadoId)
+            .map(cm => {
+                const acts = actividades.filter(a => a.cursoMateriaId === cm.id);
+                return {
+                    ...cm,
+                    totalActividades: acts.length,
+                    activas: acts.filter(a => a.activa).length,
+                    porCalificar: acts.reduce((s, a) => s + Math.max(0, a.entregados - a.calificados), 0),
+                    pesoProgramado: acts.reduce((s, a) => s + a.porcentaje, 0),
+                };
+            })
+            .sort((a, b) => a.materia.localeCompare(b.materia));
+    }, [cursoSeleccionadoId, cursoMaterias, actividades]);
+
     const stats = useMemo(() => {
         const activas = actividades.filter(a => a.activa).length;
         const inactivas = actividades.filter(a => !a.activa).length;
@@ -109,10 +163,11 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
 
     const filtradas = useMemo(() => {
         let r = [...actividades];
+        if (cursoSeleccionadoId) r = r.filter(a => a.cursoId === cursoSeleccionadoId);
+        if (materiaSeleccionadaId) r = r.filter(a => a.cursoMateriaId === materiaSeleccionadaId);
         if (filtroEstado === 'activas') r = r.filter(a => a.activa);
         else if (filtroEstado === 'cerradas') r = r.filter(a => !a.activa);
         else if (filtroEstado === 'porCalificar') r = r.filter(a => a.entregados > a.calificados && a.activa);
-        if (filtroCm) r = r.filter(a => a.cursoMateriaId.toString() === filtroCm);
         if (searchTerm) {
             const s = searchTerm.toLowerCase();
             r = r.filter(a =>
@@ -122,7 +177,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
             );
         }
         return r;
-    }, [actividades, filtroEstado, filtroCm, searchTerm]);
+    }, [actividades, cursoSeleccionadoId, materiaSeleccionadaId, filtroEstado, searchTerm]);
 
     // Agrupadas por materia
     const actividadesPorMateria = useMemo(() => {
@@ -202,6 +257,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
     const openEntregas = useCallback(async (act: Actividad) => {
         setShowEntregas(act);
         setLoadingEntregas(true);
+        setFeedback(null);
         setFiltroEntrega('todos');
         setCalificaciones({});
         try {
@@ -231,11 +287,29 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' },
             body: JSON.stringify(body),
         });
-        return res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.message || 'No se pudo actualizar la entrega.');
+        }
+        return data;
     };
 
     const handleGuardarCalificaciones = async () => {
         if (!showEntregas) return;
+
+        setFeedback(null);
+
+        const invalidNote = Object.entries(calificaciones).find(([, v]) => {
+            if (v.nota === '') return false;
+            const nota = Number.parseFloat(v.nota);
+            return Number.isNaN(nota) || nota < 0 || nota > 5;
+        });
+
+        if (invalidNote) {
+            setFeedback({ type: 'error', text: 'Cada nota debe ser un número entre 0.0 y 5.0.' });
+            return;
+        }
+
         const cals = Object.entries(calificaciones)
             .filter(([, v]) => v.nota !== '')
             .map(([id, v]) => ({
@@ -251,52 +325,95 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' },
                 body: JSON.stringify({ calificaciones: cals }),
             });
-            if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                throw new Error(data.message || 'No se pudieron guardar las calificaciones.');
+            }
+
+            if ((data.saved ?? 0) > 0) {
                 setShowEntregas(null);
                 router.reload({ only: ['actividades'] });
+                return;
             }
+
+            setFeedback({ type: 'error', text: 'No se guardaron calificaciones. Verifica que el estudiante haya entregado antes de calificar.' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Error al guardar calificaciones.';
+            setFeedback({ type: 'error', text: message });
         } finally {
             setProcessing(false);
         }
     };
 
     const handleDevolver = async (entregaId: number, nota: string) => {
-        await putEntrega(entregaId, { tipo: 'devolver', nota_devolucion: nota || null });
-        setDevolviendo(null);
-        if (showEntregas) await openEntregas(showEntregas);
-        router.reload({ only: ['actividades'] });
+        try {
+            setFeedback(null);
+            await putEntrega(entregaId, { tipo: 'devolver', nota_devolucion: nota || null });
+            setDevolviendo(null);
+            if (showEntregas) await openEntregas(showEntregas);
+            router.reload({ only: ['actividades'] });
+            setFeedback({ type: 'success', text: 'Entrega devuelta correctamente. El estudiante fue notificado y ya puede volver a enviarla.' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo devolver la entrega.';
+            setFeedback({ type: 'error', text: message });
+        }
     };
 
     const handleExtenderIndividual = async (entregaId: number, fecha: string) => {
         if (!fecha) return;
-        await putEntrega(entregaId, { tipo: 'extender_individual', nueva_fecha: fecha });
-        setExtendiendoInd(null);
-        if (showEntregas) await openEntregas(showEntregas);
+        try {
+            setFeedback(null);
+            await putEntrega(entregaId, { tipo: 'extender_individual', nueva_fecha: fecha });
+            setExtendiendoInd(null);
+            if (showEntregas) await openEntregas(showEntregas);
+            setFeedback({ type: 'success', text: 'Plazo individual actualizado.' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo extender el plazo individual.';
+            setFeedback({ type: 'error', text: message });
+        }
     };
 
     const handleExtenderGeneral = async () => {
         if (!showEntregas || !fechaExtGeneral) return;
         setProcessing(true);
         try {
-            await fetch(`/profesor/actividades/${showEntregas.id}/extender-plazo`, {
+            setFeedback(null);
+            const res = await fetch(`/profesor/actividades/${showEntregas.id}/extender-plazo`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
-                body: JSON.stringify({ nueva_fecha_entrega: fechaExtGeneral }),
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' },
+                body: JSON.stringify({ nueva_fecha: fechaExtGeneral }),
             });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.message || 'No se pudo extender el plazo general.');
+            }
+
             setExtendiendoGeneral(false);
             setFechaExtGeneral('');
             if (showEntregas) await openEntregas(showEntregas);
             router.reload({ only: ['actividades'] });
+            setFeedback({ type: 'success', text: 'Plazo general actualizado para todos los estudiantes.' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo extender el plazo general.';
+            setFeedback({ type: 'error', text: message });
         } finally {
             setProcessing(false);
         }
     };
 
     const handleReenviar = async (entregaId: number) => {
-        if (!confirm('¿Permitir que el estudiante reenvíe? La calificación actual se eliminará.')) return;
-        await putEntrega(entregaId, { tipo: 'reactivar' });
-        if (showEntregas) await openEntregas(showEntregas);
-        router.reload({ only: ['actividades'] });
+        if (!confirm('¿Reactivar para que el estudiante vuelva a enviar? Se eliminará la calificación actual.')) return;
+        try {
+            setFeedback(null);
+            await putEntrega(entregaId, { tipo: 'reactivar' });
+            if (showEntregas) await openEntregas(showEntregas);
+            router.reload({ only: ['actividades'] });
+            setFeedback({ type: 'success', text: 'Entrega reactivada. El estudiante fue notificado para reenviar.' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo reactivar la entrega.';
+            setFeedback({ type: 'error', text: message });
+        }
     };
 
     const entregasFiltradas = useMemo(() => {
@@ -335,6 +452,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
         entregada:  { label: 'Entregada',  cls: 'text-blue-600',  dot: 'bg-blue-400'  },
         calificada: { label: 'Calificada', cls: 'text-emerald-600', dot: 'bg-emerald-400' },
         atrasada:   { label: 'Atrasada',   cls: 'text-red-600',   dot: 'bg-red-400'   },
+        devuelta:   { label: 'Devuelta',   cls: 'text-orange-600', dot: 'bg-orange-400' },
     };
 
     // ── Render ──
@@ -351,7 +469,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                         <p className="text-sm text-gray-500 mt-0.5">Crea, asigna y califica actividades para tus estudiantes</p>
                     </div>
                     <Link
-                        href="/profesor/actividades/crear"
+                        href={cursoSeleccionado ? `/profesor/actividades/crear?curso_id=${cursoSeleccionado.id}` : '/profesor/actividades/crear'}
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#293577] text-white rounded-xl text-sm font-semibold hover:bg-[#181b49] transition-colors shadow-lg shadow-[#293577]/20"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -377,6 +495,144 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                     ))}
                 </div>
 
+                {/* ── Cursos asignados ── */}
+                <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                        <div>
+                            <h2 className="text-sm sm:text-base font-extrabold text-gray-900">Tus cursos</h2>
+                            <p className="text-xs text-gray-500">Selecciona un curso para ver su detalle y gestionar actividades por materia</p>
+                        </div>
+                        <span className="text-xs font-semibold text-[#293577] bg-[#293577]/10 px-2.5 py-1 rounded-full w-fit">
+                            {cursos.length} curso{cursos.length !== 1 ? 's' : ''} asignado{cursos.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+
+                    {cursos.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                            No tienes cursos asignados en el año activo.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {cursos.map(curso => {
+                                const activo = cursoSeleccionadoId === curso.id;
+                                return (
+                                    <div
+                                        key={curso.id}
+                                        className={`rounded-xl border p-3.5 transition-all ${
+                                            activo
+                                                ? 'border-[#293577] bg-[#293577]/5 shadow-sm'
+                                                : 'border-gray-200 bg-white hover:border-[#293577]/40 hover:shadow-sm'
+                                        }`}
+                                    >
+                                        <button
+                                            onClick={() => setCursoSeleccionadoId(curso.id)}
+                                            className="w-full text-left"
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div>
+                                                    <p className="text-sm font-extrabold text-gray-900">{curso.nombre}</p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">Nivel: {curso.nivel}</p>
+                                                </div>
+                                                {activo && (
+                                                    <span className="text-[10px] font-bold text-[#293577] bg-white border border-[#293577]/20 rounded-full px-2 py-0.5">
+                                                        Seleccionado
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 mt-3">
+                                                <div className="rounded-lg bg-gray-50 border border-gray-100 p-2">
+                                                    <p className="text-[10px] text-gray-500">Estudiantes</p>
+                                                    <p className="text-sm font-extrabold text-gray-800">{curso.totalEstudiantes}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-gray-50 border border-gray-100 p-2">
+                                                    <p className="text-[10px] text-gray-500">Materias</p>
+                                                    <p className="text-sm font-extrabold text-gray-800">{curso.totalMaterias}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-gray-50 border border-gray-100 p-2">
+                                                    <p className="text-[10px] text-gray-500">Actividades</p>
+                                                    <p className="text-sm font-extrabold text-gray-800">{curso.totalActividades}</p>
+                                                </div>
+                                                <div className="rounded-lg bg-gray-50 border border-gray-100 p-2">
+                                                    <p className="text-[10px] text-gray-500">Por calificar</p>
+                                                    <p className="text-sm font-extrabold text-amber-600">{curso.porCalificar}</p>
+                                                </div>
+                                            </div>
+                                        </button>
+
+                                        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                                            <span className="text-[11px] text-gray-500">{curso.activas} activas · {curso.vencidas} vencidas</span>
+                                            <Link
+                                                href={`/profesor/actividades/crear?curso_id=${curso.id}`}
+                                                className="text-xs font-bold text-[#293577] hover:underline"
+                                            >
+                                                Asignar actividad
+                                            </Link>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Detalle del curso seleccionado ── */}
+                {cursoSeleccionado && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+                            <div>
+                                <h3 className="text-base font-extrabold text-gray-900">Detalle de {cursoSeleccionado.nombre}</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    {cursoSeleccionado.totalEstudiantes} estudiantes · {cursoSeleccionado.totalMaterias} materias · {cursoSeleccionado.totalActividades} actividades
+                                </p>
+                            </div>
+                            <Link
+                                href={`/profesor/actividades/crear?curso_id=${cursoSeleccionado.id}`}
+                                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#293577] text-white text-xs font-semibold hover:bg-[#181b49] transition-colors w-fit"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                Nueva actividad para este curso
+                            </Link>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {materiasCursoSeleccionado.map(cm => {
+                                const activo = materiaSeleccionadaId === cm.id;
+                                return (
+                                    <div
+                                        key={cm.id}
+                                        className={`rounded-xl border p-3 ${activo ? 'border-[#293577] bg-[#293577]/5' : 'border-gray-200 bg-white'}`}
+                                    >
+                                        <button
+                                            onClick={() => setMateriaSeleccionadaId(prev => (prev === cm.id ? null : cm.id))}
+                                            className="w-full text-left"
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <p className="text-sm font-bold text-gray-900">{cm.materia}</p>
+                                                {activo && <span className="text-[10px] font-bold text-[#293577]">Filtrando</span>}
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                {cm.totalActividades} actividad{cm.totalActividades !== 1 ? 'es' : ''} · {cm.pesoProgramado.toFixed(0)}% programado
+                                            </p>
+                                            <p className="text-[11px] text-gray-500 mt-1">
+                                                {cm.activas} activas · {cm.porCalificar} por calificar
+                                            </p>
+                                        </button>
+                                        <div className="mt-2 pt-2 border-t border-gray-100">
+                                            <Link
+                                                href={`/profesor/actividades/crear?curso_id=${cursoSeleccionado.id}&curso_materia_id=${cm.id}`}
+                                                className="text-xs font-bold text-[#293577] hover:underline"
+                                            >
+                                                Asignar por esta materia
+                                            </Link>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Filters ── */}
                 <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row gap-3">
                     <div className="flex-1 relative">
@@ -390,13 +646,14 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                         />
                     </div>
                     <select
-                        value={filtroCm}
-                        onChange={e => setFiltroCm(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/20 min-w-[180px]"
+                        value={materiaSeleccionadaId ? materiaSeleccionadaId.toString() : ''}
+                        onChange={e => setMateriaSeleccionadaId(e.target.value ? parseInt(e.target.value) : null)}
+                        disabled={!cursoSeleccionado}
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#293577]/20 min-w-[220px] disabled:bg-gray-50 disabled:text-gray-400"
                     >
-                        <option value="">Todos los cursos</option>
-                        {cursoMaterias.map(cm => (
-                            <option key={cm.id} value={cm.id}>{cm.materia} — {cm.curso}</option>
+                        <option value="">{cursoSeleccionado ? 'Todas las materias del curso' : 'Selecciona un curso'}</option>
+                        {materiasCursoSeleccionado.map(cm => (
+                            <option key={cm.id} value={cm.id}>{cm.materia} — {cm.totalActividades} act.</option>
                         ))}
                     </select>
                     <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hidden">
@@ -425,9 +682,14 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                 {actividadesPorMateria.length === 0 ? (
                     <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
                         <svg className="w-14 h-14 mx-auto text-gray-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
-                        <p className="text-sm font-semibold text-gray-500 mb-1">No se encontraron actividades</p>
+                        <p className="text-sm font-semibold text-gray-500 mb-1">
+                            {cursoSeleccionado ? `No hay actividades para ${cursoSeleccionado.nombre}` : 'No se encontraron actividades'}
+                        </p>
                         <p className="text-xs text-gray-400 mb-4">Prueba con otros filtros o crea una nueva actividad</p>
-                        <Link href="/profesor/actividades/crear" className="inline-flex items-center gap-2 text-sm text-[#293577] font-semibold hover:underline">
+                        <Link
+                            href={cursoSeleccionado ? `/profesor/actividades/crear?curso_id=${cursoSeleccionado.id}` : '/profesor/actividades/crear'}
+                            className="inline-flex items-center gap-2 text-sm text-[#293577] font-semibold hover:underline"
+                        >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
                             Crear primera actividad
                         </Link>
@@ -771,6 +1033,8 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                 { k: 'todos', l: 'Todos' },
                                 { k: 'pendiente', l: 'Pendientes' },
                                 { k: 'entregada', l: 'Entregadas' },
+                                { k: 'atrasada', l: 'Atrasadas' },
+                                { k: 'devuelta', l: 'Devueltas' },
                                 { k: 'calificada', l: 'Calificadas' },
                             ].map(f => (
                                 <button
@@ -784,6 +1048,24 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                 </button>
                             ))}
                         </div>
+
+                        <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50/60">
+                            <p className="text-[11px] text-amber-800">
+                                <span className="font-bold">Devolver:</span> devuelve la entrega actual con comentario para corrección.
+                                {' '}
+                                <span className="font-bold">Reenviar (Reactivar):</span> reabre una entrega calificada para un nuevo intento.
+                            </p>
+                        </div>
+
+                        {feedback && (
+                            <div className={`mx-4 mt-3 mb-1 rounded-lg border px-3 py-2 text-xs ${
+                                feedback.type === 'success'
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                    : 'bg-red-50 border-red-200 text-red-700'
+                            }`}>
+                                {feedback.text}
+                            </div>
+                        )}
 
                         {/* Entregas list */}
                         <div className="overflow-y-auto flex-1 p-4 space-y-2">
@@ -805,6 +1087,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                         <div key={e.id} className={`rounded-xl border p-3 sm:p-4 transition-all ${
                                             e.estado === 'calificada' ? 'bg-emerald-50/30 border-emerald-200' :
                                             e.estado === 'entregada' ? 'bg-blue-50/30 border-blue-200' :
+                                            e.estado === 'devuelta' ? 'bg-orange-50/40 border-orange-200' :
                                             'bg-gray-50/50 border-gray-200'
                                         }`}>
                                             <div className="flex items-start gap-3">
@@ -889,7 +1172,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                                     )}
 
                                                     {/* Grade inputs */}
-                                                    {(e.estado === 'entregada' || e.estado === 'calificada') && devolviendo?.id !== e.id && (
+                                                    {(e.estado === 'entregada' || e.estado === 'atrasada' || e.estado === 'calificada') && devolviendo?.id !== e.id && (
                                                         <div className="mt-2 flex flex-col sm:flex-row gap-2">
                                                             <div className="flex items-center gap-2">
                                                                 <label className="text-[11px] text-gray-500 font-medium whitespace-nowrap">Nota:</label>
@@ -923,7 +1206,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
 
                                                 {/* Actions per entrega */}
                                                 <div className="flex flex-col gap-1 flex-shrink-0">
-                                                    {(e.estado === 'entregada' || e.estado === 'calificada') && devolviendo?.id !== e.id && (
+                                                    {(e.estado === 'entregada' || e.estado === 'atrasada' || e.estado === 'calificada') && devolviendo?.id !== e.id && (
                                                         <button
                                                             onClick={() => setDevolviendo({ id: e.id, nota: '' })}
                                                             className="px-2.5 py-1 bg-orange-100 text-orange-700 rounded-lg text-[10px] font-bold hover:bg-orange-200 transition-colors"
@@ -937,7 +1220,7 @@ export default function Actividades({ profesor, actividades, cursoMaterias }: Pr
                                                             onClick={() => handleReenviar(e.id)}
                                                             className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-200 transition-colors"
                                                         >
-                                                            Reenviar
+                                                            Reactivar
                                                         </button>
                                                     )}
                                                     {extendiendoInd?.id !== e.id && (

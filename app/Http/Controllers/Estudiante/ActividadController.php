@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Estudiante;
 use App\Http\Controllers\Controller;
 use App\Models\{Actividad, Entrega, Matricula, Pregunta};
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -38,9 +39,16 @@ class ActividadController extends Controller
         if ($entrega->estado === 'calificada') {
             return 'calificada';
         }
-        if ($entrega->estado === 'devuelta') {
+
+        // Compatibilidad: en BD se conserva estado "pendiente" al devolver,
+        // pero mostramos "devuelta" si hay nota de devolución sin nueva entrega.
+        if (
+            $entrega->estado === 'devuelta'
+            || ($entrega->estado === 'pendiente' && !empty($entrega->nota_devolucion) && $entrega->fecha_entrega === null)
+        ) {
             return 'devuelta';
         }
+
         if (in_array($entrega->estado, ['entregada', 'atrasada'])) {
             return 'entregada';
         }
@@ -56,14 +64,14 @@ class ActividadController extends Controller
     /**
      * Formatea una actividad + su entrega para enviar al frontend.
      */
-    private function formatActividad(Actividad $actividad, Entrega $entrega, bool $conPreguntas = false): array
+    private function formatActividad(Actividad $actividad, Entrega $entrega, bool $conPreguntas = false, ?array $ordenExamen = null): array
     {
         $estado = $this->estadoConsolidado($actividad, $entrega);
         $limite = $entrega->fechaLimiteEfectiva();
         $puedeEntregar = $estado !== 'calificada'
             && $actividad->activa
             && !$actividad->cerrada_manualmente
-            && ($limite === null || now()->lte($limite));
+            && ($limite === null || now()->lte($limite) || $actividad->permite_entrega_tardia);
 
         // Para quiz: ¿tiene intentos disponibles?
         $intentosDisponibles = null;
@@ -78,6 +86,7 @@ class ActividadController extends Controller
             'id'                      => $actividad->id,
             'titulo'                  => $actividad->titulo,
             'descripcion'             => $actividad->descripcion,
+            'archivoInstrucciones'    => $actividad->archivo_instrucciones ? Storage::url($actividad->archivo_instrucciones) : null,
             'tipo'                    => $actividad->tipo,
             'materia'                 => $actividad->cursoMateria?->materia?->nombre,
             'materiaColor'            => null, // se mapea en frontend
@@ -107,25 +116,90 @@ class ActividadController extends Controller
         ];
 
         if ($conPreguntas && $actividad->tiene_preguntas) {
-            $data['preguntas'] = $actividad->preguntas->map(fn($p) => [
+            $preguntas = $actividad->preguntas;
+
+            if ($ordenExamen && !empty($ordenExamen['preguntas']) && is_array($ordenExamen['preguntas'])) {
+                $ordenPreguntas = array_flip($ordenExamen['preguntas']);
+                $preguntas = $preguntas
+                    ->sortBy(fn(Pregunta $pregunta) => $ordenPreguntas[$pregunta->id] ?? PHP_INT_MAX)
+                    ->values();
+            }
+
+            $data['preguntas'] = $preguntas->map(function (Pregunta $p) use ($ordenExamen) {
+                $opciones = $p->opciones;
+
+                if (
+                    $ordenExamen
+                    && isset($ordenExamen['opciones'][(string) $p->id])
+                    && is_array($ordenExamen['opciones'][(string) $p->id])
+                ) {
+                    $ordenOpciones = array_flip($ordenExamen['opciones'][(string) $p->id]);
+                    $opciones = $opciones
+                        ->sortBy(fn($opcion) => $ordenOpciones[$opcion->id] ?? PHP_INT_MAX)
+                        ->values();
+                }
+
+                return [
                 'id'        => $p->id,
                 'enunciado' => $p->enunciado,
                 'imagen'    => $p->imagen ? Storage::url($p->imagen) : null,
                 'tipo'      => $p->tipo,
                 'puntos'    => (float) $p->puntos,
-                'opciones'  => $p->opciones->map(fn($o) => [
+                'opciones'  => $opciones->map(fn($o) => [
                     'id'    => $o->id,
                     'texto' => $o->texto,
                     'imagen'=> $o->imagen ? Storage::url($o->imagen) : null,
                     // NO enviamos es_correcta para no revelar respuestas
                 ])->toArray(),
-            ])->toArray();
+            ];
+            })->toArray();
 
             // Si ya tiene respuestas guardadas (último intento), enviarlas
             $data['respuestasGuardadas'] = $entrega->respuestas_quiz ?? null;
         }
 
         return $data;
+    }
+
+    private function resolverOrdenExamen(Request $request, Actividad $actividad, Entrega $entrega): array
+    {
+        $sessionKey = 'estudiante.examen.shuffle.' . $entrega->id;
+        $actualPreguntaIds = $actividad->preguntas->pluck('id')->values()->all();
+        $persistido = $request->session()->get($sessionKey);
+
+        $esValido = is_array($persistido)
+            && isset($persistido['preguntas'], $persistido['opciones'])
+            && is_array($persistido['preguntas'])
+            && is_array($persistido['opciones'])
+            && count($persistido['preguntas']) === count($actualPreguntaIds)
+            && empty(array_diff($persistido['preguntas'], $actualPreguntaIds));
+
+        if ($esValido) {
+            return $persistido;
+        }
+
+        $preguntasOrden = $actualPreguntaIds;
+        shuffle($preguntasOrden);
+
+        $opcionesOrden = [];
+        foreach ($actividad->preguntas as $pregunta) {
+            if ($pregunta->tipo === 'abierta') {
+                continue;
+            }
+
+            $opcionIds = $pregunta->opciones->pluck('id')->values()->all();
+            shuffle($opcionIds);
+            $opcionesOrden[(string) $pregunta->id] = $opcionIds;
+        }
+
+        $nuevo = [
+            'preguntas' => $preguntasOrden,
+            'opciones' => $opcionesOrden,
+        ];
+
+        $request->session()->put($sessionKey, $nuevo);
+
+        return $nuevo;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -164,7 +238,7 @@ class ActividadController extends Controller
     // ─────────────────────────────────────────────────────────────
     //  show — Página detalle de una actividad
     // ─────────────────────────────────────────────────────────────
-    public function show(Actividad $actividad): Response
+    public function show(Request $request, Actividad $actividad): Response
     {
         $user = auth()->user();
 
@@ -191,7 +265,12 @@ class ActividadController extends Controller
 
         $actividad->load(['cursoMateria.materia', 'cursoMateria.curso', 'cursoMateria.profesor', 'preguntas.opciones']);
 
-        $data = $this->formatActividad($actividad, $entrega, conPreguntas: true);
+        $ordenExamen = null;
+        if ($actividad->tipo === 'examen' && $actividad->tiene_preguntas) {
+            $ordenExamen = $this->resolverOrdenExamen($request, $actividad, $entrega);
+        }
+
+        $data = $this->formatActividad($actividad, $entrega, conPreguntas: true, ordenExamen: $ordenExamen);
 
         return Inertia::render('Estudiante/ActividadDetalle', [
             'actividad' => $data,
@@ -243,6 +322,7 @@ class ActividadController extends Controller
             'archivo'      => $archivoPath,
             'estado'       => $vencio ? 'atrasada' : 'entregada',
             'fecha_entrega'=> now(),
+            'nota_devolucion' => null,
         ]);
 
         return redirect()->route('estudiante.actividades.show', $actividad)
@@ -319,6 +399,7 @@ class ActividadController extends Controller
             'intentos_usados' => ($entrega->intentos_usados ?? 0) + 1,
             'fecha_entrega'   => now(),
             'estado'          => $vencio ? 'atrasada' : 'entregada',
+            'nota_devolucion' => null,
         ];
 
         // Si todas las preguntas son auto-calificables, guardar la nota

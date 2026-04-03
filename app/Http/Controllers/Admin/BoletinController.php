@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
-use App\Models\{Asistencia, Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Observacion, Sede, Actividad};
+use App\Models\{Asistencia, Boletin, Nota, User, Curso, Periodo, CursoMateria, Mensaje, Notificacion, Matricula, Observacion, Sede};
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -67,26 +67,15 @@ class BoletinController extends Controller
                     ->where('tipo', 'definitiva')
                     ->get();
 
-                // Indicadores (títulos de actividades) por cursoMateria para el período actual
-                $indicadoresPorCM = Actividad::whereIn('curso_materia_id', $cmsAll->keys())
-                    ->where('periodo_id', $b->periodo_id)
-                    ->orderBy('created_at')
-                    ->get()
-                    ->groupBy('curso_materia_id')
-                    ->map(fn($acts) => $acts->take(6)->pluck('titulo')->values());
-
                 // Agrupar notas por cursoMateria y luego por período
                 $notasPorCM = $todasNotas->groupBy('curso_materia_id');
 
                 // Construir filas por materia
-                $notas = $cmsAll->map(function ($cm) use ($todosPeriodos, $notasPorCM, $indicadoresPorCM, $b) {
+                $notas = $cmsAll->map(function ($cm) use ($todosPeriodos, $notasPorCM, $b) {
                     $notasMateria   = $notasPorCM->get($cm->id, collect());
                     $notasPorPeriodo = $notasMateria->keyBy('periodo_id');
 
                     $ihMateria = (int) ($cm->horas_semanales ?? $cm->materia?->horas_semanales ?? 0);
-
-                    // Indicadores de desempeño
-                    $indicadores = $indicadoresPorCM->get($cm->id, collect())->toArray();
 
                     // Notas por número de período: p1, p2, p3, p4
                     $notasPeriodos = [];
@@ -98,6 +87,8 @@ class BoletinController extends Controller
                     // Nota definitiva del período actual
                     $definitiva = $notasPorPeriodo->get($b->periodo_id);
                     $defVal = $definitiva ? round((float) $definitiva->valor, 1) : null;
+                    $indicadorTexto = trim((string) ($definitiva?->descripcion ?? ''));
+                    $indicadores = $indicadorTexto !== '' ? [$indicadorTexto] : [];
 
                     return [
                         'materia'    => $cm->materia?->nombre ?? 'Sin nombre',
@@ -534,8 +525,8 @@ class BoletinController extends Controller
         $inicio = $periodo->fecha_inicio;
         $fin = $periodo->fecha_fin;
 
-        $directorObs = is_string($observacionActual) ? trim($observacionActual) : '';
-        $tieneDirectorObs = $directorObs !== '' && stripos($directorObs, 'boletín generado automáticamente') === false;
+        $directorObs = $this->extractDirectorObservation($observacionActual);
+        $tieneDirectorObs = $directorObs !== '';
 
         $comentariosDocentes = Observacion::where('estudiante_id', $estudianteId)
             ->whereBetween('fecha', [$inicio, $fin])
@@ -569,12 +560,41 @@ class BoletinController extends Controller
         ];
     }
 
+    private function extractDirectorObservation(?string $observacionActual): string
+    {
+        $texto = trim((string) $observacionActual);
+        if ($texto === '') {
+            return '';
+        }
+
+        if (preg_match('/Director de grupo:\s*(.*?)(?:\n{2,}(?:Comentarios docentes|Observaciones de asistencia)\b|$)/isu', $texto, $matches)) {
+            $texto = trim((string) ($matches[1] ?? ''));
+        }
+
+        $texto = preg_replace('/^Director de grupo:\s*/iu', '', $texto) ?? $texto;
+        $texto = trim($texto);
+
+        if ($texto === '') {
+            return '';
+        }
+
+        if (preg_match('/^pendiente por completar\.?$/iu', $texto)) {
+            return '';
+        }
+
+        if (stripos($texto, 'boletín generado automáticamente') !== false) {
+            return '';
+        }
+
+        return $texto;
+    }
+
     private function buildBoletinObservationText(string $directorObs, array $obsSources): string
     {
         $secciones = [];
 
-        $directorLimpia = trim($directorObs);
-        if ($directorLimpia !== '' && stripos($directorLimpia, 'boletín generado automáticamente') === false) {
+        $directorLimpia = $this->extractDirectorObservation($directorObs);
+        if ($directorLimpia !== '') {
             $secciones[] = "Director de grupo:\n" . $directorLimpia;
         } else {
             $secciones[] = 'Director de grupo: Pendiente por completar.';

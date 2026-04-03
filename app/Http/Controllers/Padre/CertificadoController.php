@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Padre;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Certificado, ConceptoPago, Pago, TipoCertificado, User};
+use App\Models\{Certificado, ConceptoPago, Notificacion, Pago, TipoCertificado, User};
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -110,41 +111,83 @@ class CertificadoController extends Controller
 
         $tipo = TipoCertificado::query()->activo()->findOrFail($data['tipo_certificado_id']);
 
-        $certificado = Certificado::query()->create([
-            'estudiante_id' => (int) $data['hijo_id'],
-            'tipo_certificado_id' => $tipo->id,
-            'tipo' => $tipo->codigo,
-            'descripcion' => $data['descripcion'] ?? null,
-            'estado' => 'solicitado',
-            'fecha_solicitud' => now()->toDateString(),
-        ]);
-
-        if ((int) $tipo->precio > 0) {
-            $concepto = ConceptoPago::query()->firstOrCreate(
-                ['nombre' => 'Solicitud de Certificados'],
-                [
-                    'descripcion' => 'Pago de tramites de certificados solicitados por acudientes.',
-                    'monto' => (int) $tipo->precio,
-                    'periodicidad' => 'unico',
-                    'activo' => true,
-                ]
-            );
-
-            Pago::query()->create([
+        [$certificado, $pagoPendiente] = DB::transaction(function () use ($data, $tipo) {
+            $certificado = Certificado::query()->create([
                 'estudiante_id' => (int) $data['hijo_id'],
-                'concepto_pago_id' => $concepto->id,
-                'periodo_id' => null,
-                'monto' => (int) $tipo->precio,
-                'estado' => 'pendiente',
-                'metodo_pago' => null,
-                'referencia' => null,
-                'fecha_vencimiento' => now()->addDays(7)->toDateString(),
-                'fecha_pago' => null,
-                'notas' => 'certificado:' . $certificado->id . '|' . $tipo->nombre,
+                'tipo_certificado_id' => $tipo->id,
+                'tipo' => $tipo->codigo,
+                'descripcion' => $data['descripcion'] ?? null,
+                'estado' => 'solicitado',
+                'fecha_solicitud' => now()->toDateString(),
             ]);
+
+            $pagoPendiente = null;
+
+            if ((int) $tipo->precio > 0) {
+                $concepto = $this->conceptoCertificado($tipo);
+
+                $pagoPendiente = Pago::query()->create([
+                    'estudiante_id' => (int) $data['hijo_id'],
+                    'concepto_pago_id' => $concepto->id,
+                    'periodo_id' => null,
+                    'monto' => (int) $tipo->precio,
+                    'estado' => 'pendiente',
+                    'metodo_pago' => null,
+                    'referencia' => null,
+                    'fecha_vencimiento' => now()->addDays(7)->toDateString(),
+                    'fecha_pago' => null,
+                    'notas' => 'certificado:' . $certificado->id . '|' . $tipo->nombre,
+                ]);
+            }
+
+            return [$certificado, $pagoPendiente];
+        });
+
+        if ($pagoPendiente instanceof Pago) {
+            $this->notificarPagoPendiente($certificado, $pagoPendiente, $tipo);
+            return redirect()->back()->with('success', 'Solicitud registrada. Se generó el pago pendiente y se notificó al acudiente.');
         }
 
-        return redirect()->back()->with('success', 'Solicitud registrada. Si aplica costo, ya tienes el pago pendiente en el modulo de Pagos.');
+        return redirect()->back()->with('success', 'Solicitud registrada correctamente.');
+    }
+
+    private function conceptoCertificado(TipoCertificado $tipo): ConceptoPago
+    {
+        return ConceptoPago::query()->updateOrCreate(
+            ['tipo_certificado_id' => $tipo->id],
+            [
+                'nombre' => 'Solicitud certificado: ' . $tipo->nombre,
+                'descripcion' => 'Solicitud de ' . $tipo->nombre . ' generada desde el módulo de certificados.',
+                'monto' => (int) $tipo->precio,
+                'periodicidad' => 'unico',
+                'activo' => (bool) $tipo->activo,
+            ]
+        );
+    }
+
+    private function notificarPagoPendiente(Certificado $certificado, Pago $pago, TipoCertificado $tipo): void
+    {
+        $estudiante = User::query()
+            ->with('padres:id,name')
+            ->find($certificado->estudiante_id);
+
+        if (!$estudiante || $estudiante->padres->isEmpty()) {
+            return;
+        }
+
+        $monto = '$' . number_format((float) $pago->monto, 0, ',', '.');
+        $vencimiento = $pago->fecha_vencimiento?->format('Y-m-d') ?? now()->toDateString();
+        $mensaje = 'Se generó un pago pendiente por ' . $tipo->nombre . ' para ' . $estudiante->name . '. Valor: ' . $monto . '. Vence: ' . $vencimiento . '.';
+
+        foreach ($estudiante->padres as $padre) {
+            Notificacion::query()->create([
+                'user_id' => $padre->id,
+                'tipo' => 'pago',
+                'titulo' => 'Pago pendiente de certificado',
+                'mensaje' => $mensaje,
+                'leida' => false,
+            ]);
+        }
     }
 
     public function download(Request $request, Certificado $certificado)

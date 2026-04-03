@@ -225,7 +225,7 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
     doc.setFont('times', 'italic'); doc.setFontSize(9);
     doc.text('Ser, Saber y Emprender', TEXT_CX, 30, { align: 'center' });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
-    doc.text('Aprobado por Resolución No 3769 del 23 - 05 - 2023', TEXT_CX, 36, { align: 'center' });
+    doc.text('Aprobado por Resolución No 9385 del 10 - 11 - 2025', TEXT_CX, 36, { align: 'center' });
     doc.text('DANE 313001800093  –  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
 
     // ── Barra divisora navy ──

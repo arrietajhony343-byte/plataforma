@@ -3,6 +3,8 @@ import { Head } from '@inertiajs/react';
 import { useState, useMemo, useCallback } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Sede {
     id: number;
@@ -64,6 +66,11 @@ const fmt = (n: number) => new Intl.NumberFormat('es-CO', {
     currency: 'COP',
     minimumFractionDigits: 0,
 }).format(n || 0);
+
+const fmtFechaHora = () => new Intl.DateTimeFormat('es-CO', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+}).format(new Date());
 
 const normalizeNivel = (nivel?: string | null) => {
     if (!nivel) return 'sin_nivel';
@@ -192,66 +199,308 @@ export default function Contabilidad({
         return Math.round((resumen.totalRecaudado / resumen.totalGeneral) * 100);
     }, [resumen]);
 
-    const exportarVistaActiva = useCallback(() => {
-        let rows: Record<string, string | number>[] = [];
-        let sheetName = 'Resumen';
-
-        if (vistaActiva === 'movimientos') {
-            sheetName = 'Movimientos';
-            rows = ultimosPagosFiltrados.map(p => ({
-                Fecha: p.fecha ?? '',
-                Estudiante: p.estudiante,
-                Documento: p.documento ?? '',
-                Sede: p.sede ?? 'N/A',
-                Curso: p.curso ?? 'N/A',
-                Nivel: nivelLabel(p.nivel),
-                Concepto: p.concepto,
-                Metodo: p.metodo ?? '',
-                Referencia: p.referencia ?? '',
-                Monto: p.monto,
-            }));
+    const filtrosAplicados = useMemo(() => {
+        const items: string[] = [];
+        if (sedeSel !== 'todas') {
+            items.push(`Sede: ${sedes.find(s => s.id.toString() === sedeSel)?.nombre ?? sedeSel}`);
+        }
+        if (nivelSel !== 'todos') {
+            items.push(`Nivel: ${nivelLabel(nivelSel)}`);
+        }
+        if (cursoSel !== 'todos') {
+            items.push(`Curso: ${cursoSel}`);
+        }
+        if (metodoSel !== 'todos') {
+            items.push(`Metodo: ${metodoSel}`);
+        }
+        if (conceptoSel !== 'todos') {
+            items.push(`Concepto: ${conceptoSel}`);
+        }
+        if (deudaMin !== '') {
+            items.push(`Deuda minima: ${fmt(Number(deudaMin || 0))}`);
+        }
+        if (vencidosMin !== '') {
+            items.push(`Vencidos minimos: ${vencidosMin}`);
+        }
+        if (busqueda.trim() !== '') {
+            items.push(`Busqueda: ${busqueda.trim()}`);
         }
 
-        if (vistaActiva === 'deudores') {
-            sheetName = 'Deudores';
-            rows = deudoresFiltrados.map(m => ({
-                Estudiante: m.nombre,
-                Documento: m.documento ?? '',
-                Sede: m.sede ?? 'N/A',
-                Curso: m.curso,
-                Nivel: nivelLabel(m.nivel),
-                Acudiente: m.acudiente ?? '',
-                'Pagos vencidos': m.pagosVencidos,
-                'Deuda total': m.deudaTotal,
-            }));
-        }
+        return items.length > 0 ? items.join(' | ') : 'Sin filtros aplicados';
+    }, [sedeSel, nivelSel, cursoSel, metodoSel, conceptoSel, deudaMin, vencidosMin, busqueda, sedes]);
 
-        if (vistaActiva === 'conceptos') {
-            sheetName = 'Conceptos';
-            rows = conceptosFiltrados.map(c => ({
-                Concepto: c.concepto,
-                Pagado: c.pagado,
-                Pendiente: c.pendiente,
-                Vencido: c.vencido,
-                Total: c.total,
-            }));
-        }
-
-        if (vistaActiva === 'resumen') {
-            rows = [{
-                'Total recaudado': resumen.totalRecaudado,
-                'Total pendiente': resumen.totalPendiente,
-                'Total vencido': resumen.totalVencido,
-                'Total general': resumen.totalGeneral,
-                Cumplimiento: `${cumplimiento}%`,
-            }];
-        }
-
-        const ws = XLSX.utils.json_to_sheet(rows);
+    const exportarExcelDetallado = useCallback(() => {
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        XLSX.writeFile(wb, `Contabilidad_${sheetName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    }, [vistaActiva, ultimosPagosFiltrados, deudoresFiltrados, conceptosFiltrados, resumen, cumplimiento]);
+        const fechaGen = fmtFechaHora();
+
+        const wsResumen = XLSX.utils.aoa_to_sheet([
+            ['REPORTE DE CONTABILIDAD'],
+            ['Fecha de generacion', fechaGen],
+            ['Periodo activo', periodoActivo?.nombre ?? 'No definido'],
+            ['Vista activa', vistaActiva],
+            ['Filtros', filtrosAplicados],
+            [],
+            ['Indicador', 'Valor'],
+            ['Total recaudado', resumen.totalRecaudado],
+            ['Total pendiente', resumen.totalPendiente],
+            ['Total vencido', resumen.totalVencido],
+            ['Total general', resumen.totalGeneral],
+            ['Cumplimiento', `${cumplimiento}%`],
+        ]);
+        wsResumen['!cols'] = [{ wch: 30 }, { wch: 55 }];
+        XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+        const wsConceptos = XLSX.utils.json_to_sheet(
+            conceptosFiltrados.length > 0
+                ? conceptosFiltrados.map(c => ({
+                    Concepto: c.concepto,
+                    Pagado: c.pagado,
+                    Pendiente: c.pendiente,
+                    Vencido: c.vencido,
+                    Total: c.total,
+                }))
+                : [{ Concepto: 'Sin registros', Pagado: 0, Pendiente: 0, Vencido: 0, Total: 0 }]
+        );
+        wsConceptos['!cols'] = [{ wch: 40 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+        XLSX.utils.book_append_sheet(wb, wsConceptos, 'Conceptos');
+
+        const wsRegistros = XLSX.utils.json_to_sheet(
+            ultimosPagosFiltrados.length > 0
+                ? ultimosPagosFiltrados.map(p => ({
+                    Fecha: p.fecha ?? '',
+                    Estudiante: p.estudiante,
+                    Documento: p.documento ?? '',
+                    Telefono: p.telefono ?? '',
+                    Correo: p.email ?? '',
+                    Sede: p.sede ?? 'N/A',
+                    Curso: p.curso ?? 'N/A',
+                    Nivel: nivelLabel(p.nivel),
+                    Concepto: p.concepto,
+                    Metodo: p.metodo ?? '',
+                    Referencia: p.referencia ?? '',
+                    Monto: p.monto,
+                }))
+                : [{ Fecha: '', Estudiante: 'Sin registros', Documento: '', Telefono: '', Correo: '', Sede: '', Curso: '', Nivel: '', Concepto: '', Metodo: '', Referencia: '', Monto: 0 }]
+        );
+        wsRegistros['!cols'] = [
+            { wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 18 },
+            { wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 18 }, { wch: 14 },
+        ];
+        XLSX.utils.book_append_sheet(wb, wsRegistros, 'Registros');
+
+        const wsDeudores = XLSX.utils.json_to_sheet(
+            deudoresFiltrados.length > 0
+                ? deudoresFiltrados.map(m => ({
+                    Estudiante: m.nombre,
+                    Documento: m.documento ?? '',
+                    Correo: m.email ?? '',
+                    Telefono: m.telefono ?? '',
+                    Sede: m.sede ?? 'N/A',
+                    Curso: m.curso,
+                    Nivel: nivelLabel(m.nivel),
+                    Acudiente: m.acudiente ?? '',
+                    'Documento acudiente': m.acudiente_doc ?? '',
+                    'Telefono acudiente': m.acudiente_tel ?? '',
+                    'Pagos vencidos': m.pagosVencidos,
+                    'Deuda total': m.deudaTotal,
+                }))
+                : [{ Estudiante: 'Sin deudores', Documento: '', Correo: '', Telefono: '', Sede: '', Curso: '', Nivel: '', Acudiente: '', 'Documento acudiente': '', 'Telefono acudiente': '', 'Pagos vencidos': 0, 'Deuda total': 0 }]
+        );
+        wsDeudores['!cols'] = [
+            { wch: 28 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 18 }, { wch: 14 },
+            { wch: 14 }, { wch: 26 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
+        ];
+        XLSX.utils.book_append_sheet(wb, wsDeudores, 'Deudores');
+
+        XLSX.writeFile(wb, `Contabilidad_Detallada_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }, [
+        periodoActivo,
+        vistaActiva,
+        filtrosAplicados,
+        resumen,
+        cumplimiento,
+        conceptosFiltrados,
+        ultimosPagosFiltrados,
+        deudoresFiltrados,
+    ]);
+
+    const exportarPDFDetallado = useCallback(() => {
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
+        const M = 12;
+        const fechaGen = fmtFechaHora();
+
+        const drawHeader = (title: string, subtitle: string) => {
+            doc.setFillColor(29, 43, 107);
+            doc.rect(0, 0, W, 23, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.text(title, M, 10);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(subtitle, M, 16);
+            doc.text(`Generado: ${fechaGen}`, W - M, 16, { align: 'right' });
+        };
+
+        const drawFooter = () => {
+            const pages = doc.getNumberOfPages();
+            for (let i = 1; i <= pages; i += 1) {
+                doc.setPage(i);
+                doc.setDrawColor(226, 232, 240);
+                doc.line(M, H - 9, W - M, H - 9);
+                doc.setTextColor(100, 116, 139);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+                doc.text(`Pagina ${i} de ${pages}`, W - M, H - 5.5, { align: 'right' });
+                doc.text('Contabilidad - Instituto Pedagogico Emprendedores del Saber', M, H - 5.5);
+            }
+        };
+
+        drawHeader('Reporte de Contabilidad', 'Resumen ejecutivo de recaudo, cartera y movimientos');
+
+        doc.setTextColor(51, 65, 85);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(`Periodo activo: ${periodoActivo?.nombre ?? 'No definido'}`, M, 30);
+        doc.text(`Filtros: ${filtrosAplicados}`, M, 35);
+
+        const summaryY = 41;
+        const gap = 4;
+        const cardW = (W - M * 2 - gap * 3) / 4;
+        const cardH = 17;
+        const cards = [
+            { title: 'Recaudado', value: fmt(resumen.totalRecaudado), color: [5, 150, 105] as [number, number, number], bg: [236, 253, 245] as [number, number, number] },
+            { title: 'Pendiente', value: fmt(resumen.totalPendiente), color: [217, 119, 6] as [number, number, number], bg: [255, 251, 235] as [number, number, number] },
+            { title: 'Vencido', value: fmt(resumen.totalVencido), color: [220, 38, 38] as [number, number, number], bg: [254, 242, 242] as [number, number, number] },
+            { title: 'Total general', value: fmt(resumen.totalGeneral), color: [37, 99, 235] as [number, number, number], bg: [239, 246, 255] as [number, number, number] },
+        ];
+
+        cards.forEach((card, idx) => {
+            const x = M + idx * (cardW + gap);
+            doc.setFillColor(...card.bg);
+            doc.setDrawColor(203, 213, 225);
+            doc.roundedRect(x, summaryY, cardW, cardH, 2, 2, 'FD');
+            doc.setTextColor(...card.color);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text(card.title.toUpperCase(), x + 2.5, summaryY + 5.2);
+            doc.setFontSize(11);
+            doc.text(card.value, x + 2.5, summaryY + 12.4);
+        });
+
+        doc.setTextColor(41, 53, 119);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.text(`Cumplimiento de recaudo: ${cumplimiento}%`, M, summaryY + cardH + 6.5);
+
+        autoTable(doc, {
+            startY: summaryY + cardH + 10,
+            margin: { left: M, right: M },
+            head: [['Concepto', 'Pagado', 'Pendiente', 'Vencido', 'Total']],
+            body: conceptosFiltrados.length > 0
+                ? conceptosFiltrados.map(c => [
+                    c.concepto,
+                    fmt(c.pagado),
+                    fmt(c.pendiente),
+                    fmt(c.vencido),
+                    fmt(c.total),
+                ])
+                : [['Sin registros', fmt(0), fmt(0), fmt(0), fmt(0)]],
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2, textColor: [30, 41, 59] },
+            headStyles: { fillColor: [41, 53, 119], textColor: [255, 255, 255], fontStyle: 'bold' },
+            columnStyles: {
+                0: { cellWidth: 120 },
+                1: { halign: 'right', cellWidth: 36 },
+                2: { halign: 'right', cellWidth: 36 },
+                3: { halign: 'right', cellWidth: 36 },
+                4: { halign: 'right', cellWidth: 36 },
+            },
+        });
+
+        doc.addPage('a4', 'landscape');
+        drawHeader('Reporte de Contabilidad', 'Registros de movimientos pagados');
+        autoTable(doc, {
+            startY: 30,
+            margin: { left: M, right: M },
+            head: [['Fecha', 'Estudiante', 'Documento', 'Sede', 'Curso', 'Nivel', 'Concepto', 'Metodo', 'Referencia', 'Monto']],
+            body: ultimosPagosFiltrados.length > 0
+                ? ultimosPagosFiltrados.map(p => [
+                    p.fecha ?? 'N/A',
+                    p.estudiante,
+                    p.documento ?? 'N/A',
+                    p.sede ?? 'N/A',
+                    p.curso ?? 'N/A',
+                    nivelLabel(p.nivel),
+                    p.concepto,
+                    p.metodo ?? 'N/A',
+                    p.referencia ?? 'N/A',
+                    fmt(p.monto),
+                ])
+                : [['Sin registros', '-', '-', '-', '-', '-', '-', '-', '-', fmt(0)]],
+            theme: 'grid',
+            styles: { fontSize: 7.4, cellPadding: 1.8, textColor: [30, 41, 59] },
+            headStyles: { fillColor: [41, 53, 119], textColor: [255, 255, 255], fontStyle: 'bold' },
+            columnStyles: {
+                0: { cellWidth: 18 },
+                1: { cellWidth: 43 },
+                2: { cellWidth: 20 },
+                3: { cellWidth: 28 },
+                4: { cellWidth: 18 },
+                5: { cellWidth: 20 },
+                6: { cellWidth: 42 },
+                7: { cellWidth: 20 },
+                8: { cellWidth: 28 },
+                9: { cellWidth: 20, halign: 'right' },
+            },
+        });
+
+        doc.addPage('a4', 'landscape');
+        drawHeader('Reporte de Contabilidad', 'Cartera y deudores');
+        autoTable(doc, {
+            startY: 30,
+            margin: { left: M, right: M },
+            head: [['Estudiante', 'Documento', 'Sede', 'Curso', 'Nivel', 'Acudiente', 'Vencidos', 'Deuda total']],
+            body: deudoresFiltrados.length > 0
+                ? deudoresFiltrados.map(d => [
+                    d.nombre,
+                    d.documento ?? 'N/A',
+                    d.sede ?? 'N/A',
+                    d.curso,
+                    nivelLabel(d.nivel),
+                    d.acudiente ?? 'N/A',
+                    String(d.pagosVencidos),
+                    fmt(d.deudaTotal),
+                ])
+                : [['Sin deudores', '-', '-', '-', '-', '-', '0', fmt(0)]],
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2, textColor: [30, 41, 59] },
+            headStyles: { fillColor: [41, 53, 119], textColor: [255, 255, 255], fontStyle: 'bold' },
+            columnStyles: {
+                0: { cellWidth: 56 },
+                1: { cellWidth: 24 },
+                2: { cellWidth: 34 },
+                3: { cellWidth: 22 },
+                4: { cellWidth: 24 },
+                5: { cellWidth: 56 },
+                6: { cellWidth: 18, halign: 'center' },
+                7: { cellWidth: 24, halign: 'right' },
+            },
+        });
+
+        drawFooter();
+        doc.save(`Contabilidad_Detallada_${new Date().toISOString().slice(0, 10)}.pdf`);
+    }, [
+        periodoActivo,
+        filtrosAplicados,
+        resumen,
+        cumplimiento,
+        conceptosFiltrados,
+        ultimosPagosFiltrados,
+        deudoresFiltrados,
+    ]);
 
     const hayFiltros = (
         sedeSel !== 'todas' ||
@@ -288,16 +537,16 @@ export default function Contabilidad({
                         </div>
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={exportarVistaActiva}
+                                onClick={exportarExcelDetallado}
                                 className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#1f2b64] hover:bg-blue-50 transition-colors"
                             >
                                 Exportar Excel
                             </button>
                             <button
-                                onClick={() => window.print()}
+                                onClick={exportarPDFDetallado}
                                 className="px-4 py-2 rounded-xl text-sm font-semibold bg-blue-100/25 text-white hover:bg-blue-100/35 transition-colors"
                             >
-                                Imprimir
+                                Exportar PDF
                             </button>
                         </div>
                     </div>
@@ -599,7 +848,7 @@ export default function Contabilidad({
                 {vistaActiva === 'movimientos' && (
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                            <h3 className="font-semibold text-gray-800">Ultimos Pagos ({ultimosPagosFiltrados.length})</h3>
+                            <h3 className="font-semibold text-gray-800">Registros de pagos ({ultimosPagosFiltrados.length})</h3>
                         </div>
                         {ultimosPagosFiltrados.length === 0 ? (
                             <div className="p-10 text-center text-gray-400 text-sm">No hay movimientos para estos filtros</div>

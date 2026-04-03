@@ -163,6 +163,75 @@ const dias: { key: DiaKey; label: string }[] = [
 
 const EMPTY_FORM = { curso_materia_id: '', dia: 'lunes' as string, hora_inicio: '7:00', hora_fin: '7:50', salon: '' };
 
+const HORARIO_LOGO_CANDIDATES = [
+    '/storage/logo-certificados.png',
+    '/storage/logo-certificados.jpg',
+    '/storage/logo.png',
+    '/logo-certificados.png',
+    '/logo-certificados.jpg',
+    '/logo-certificados.jpeg',
+    '/images/logo-certificados.png',
+    '/images/logo-certificados.jpg',
+    '/images/logo.png',
+    '/img/logo.png',
+    '/logo.png',
+];
+
+const cargarImagenHorario = async (src: string, maxPx = 500): Promise<string | null> => {
+    const url = src.startsWith('http') ? src : window.location.origin + src;
+
+    try {
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) return null;
+
+        const blob = await resp.blob();
+        const base64: string = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onloadend = () => res(reader.result as string);
+            reader.onerror = () => rej(new Error('FileReader error'));
+            reader.readAsDataURL(blob);
+        });
+
+        return await new Promise((res) => {
+            const img = new Image();
+            img.onload = () => {
+                const origW = img.naturalWidth || img.width || maxPx;
+                const origH = img.naturalHeight || img.height || maxPx;
+                const scale = Math.min(1, maxPx / Math.max(origW, origH));
+                const cW = Math.max(1, Math.round(origW * scale));
+                const cH = Math.max(1, Math.round(origH * scale));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = cW;
+                canvas.height = cH;
+
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    res(null);
+                    return;
+                }
+
+                ctx.clearRect(0, 0, cW, cH);
+                ctx.drawImage(img, 0, 0, cW, cH);
+                res(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => res(null);
+            img.src = base64;
+        });
+    } catch {
+        return null;
+    }
+};
+
+const cargarLogoHorario = async (): Promise<string | null> => {
+    for (const candidate of HORARIO_LOGO_CANDIDATES) {
+        const logo = await cargarImagenHorario(candidate);
+        if (logo) return logo;
+    }
+
+    return null;
+};
+
 const SearchIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -267,6 +336,17 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         if (n === 'primaria') return 'primaria';
         if (n === 'bachillerato' || n === 'secundaria' || n === 'media') return 'bachillerato';
         return 'general';
+    };
+
+    const esNivelInicial = (nivel?: string | null) => {
+        const n = (nivel ?? '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        return ['prejardin', 'pre jardin', 'jardin', 'preescolar', 'transicion'].includes(n);
     };
 
     /** Jornada activa: en "Por Curso" usa el nivel del curso seleccionado, en el resto usa 'general' */
@@ -579,16 +659,30 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
             }
 
             // 2) Mismo profesor, mismo día, misma hora
-            const conflictoProfesor = allClases.find(c =>
+            const conflictosProfesor = allClases.filter(c =>
                 c.profesor_id === cm.profesor_id &&
                 c.dia === payload.dia &&
                 normalizeHora(c.hora) === horaNorm &&
                 c.id !== editingClase?.id
             );
-            if (conflictoProfesor) {
-                setFormErrors({ hora_inicio: `El profesor ya tiene "${conflictoProfesor.materia}" en ${conflictoProfesor.curso} el ${payload.dia} a las ${horaNorm}.` });
-                setProcessing(false);
-                return;
+
+            if (conflictosProfesor.length > 0) {
+                const nivelActual = cursos.find(c => c.id === cm.curso_id)?.nivel ?? null;
+                const cursoActualInicial = esNivelInicial(nivelActual);
+                const todosIniciales = conflictosProfesor.every(c => esNivelInicial(cursos.find(cur => cur.id === c.curso_id)?.nivel ?? null));
+                const cursosSimultaneos = new Set([cm.curso_id, ...conflictosProfesor.map(c => c.curso_id)]).size;
+                const permiteSimultaneoInicial = cursoActualInicial && todosIniciales && cursosSimultaneos <= 2;
+
+                if (!permiteSimultaneoInicial) {
+                    const conflictoProfesor = conflictosProfesor[0];
+                    const msg = cursoActualInicial && todosIniciales && cursosSimultaneos > 2
+                        ? `En pre-jardín, jardín y preescolar solo se permiten 2 cursos simultáneos por profesor en la misma franja.`
+                        : `El profesor ya tiene "${conflictoProfesor.materia}" en ${conflictoProfesor.curso} el ${payload.dia} a las ${horaNorm}.`;
+
+                    setFormErrors({ hora_inicio: msg });
+                    setProcessing(false);
+                    return;
+                }
             }
         }
         // ──────────────────────────────────────────────────────────────
@@ -882,46 +976,176 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         const pageW = doc.internal.pageSize.getWidth();
         const primary = [41, 53, 119] as [number, number, number]; // #293577
         const dark = [24, 27, 73] as [number, number, number]; // #181b49
+        const logoHeader = await cargarLogoHorario();
+        const tableStartY = 46;
 
         const addHeader = (title: string, subtitle: string) => {
+            const logoX = 8;
+            const logoY = 2.5;
+            const logoW = 26;
+            const logoH = 27.5;
+            const triangMax = 38;
+            const triangMid = 25;
+            const triangMin = 13;
+            const textLeft = logoX + logoW + 6;
+            const textRight = pageW - triangMax - 3;
+            const textCx = (textLeft + textRight) / 2;
+
+            doc.setFillColor(255, 255, 255);
+            doc.rect(0, 0, pageW, 35, 'F');
+
+            doc.setFillColor(188, 214, 242);
+            doc.triangle(pageW - triangMax, 0, pageW, 0, pageW, triangMax, 'F');
+            doc.setFillColor(80, 130, 205);
+            doc.triangle(pageW - triangMid, 0, pageW, 0, pageW, triangMid, 'F');
+            doc.setFillColor(22, 55, 148);
+            doc.triangle(pageW - triangMin, 0, pageW, 0, pageW, triangMin, 'F');
+
+            if (logoHeader) {
+                doc.addImage(logoHeader, 'PNG', logoX, logoY, logoW, logoH);
+            }
+
+            doc.setTextColor(10, 35, 90);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(13);
+            doc.text('INSTITUTO PEDAGOGICO', textCx, 10, { align: 'center' });
+            doc.setFontSize(16);
+            doc.text('EMPRENDEDORES DEL SABER', textCx, 17.5, { align: 'center' });
+
+            doc.setTextColor(25, 25, 25);
+            doc.setFont('times', 'italic');
+            doc.setFontSize(7.6);
+            doc.text('Ser, Saber y Emprender', textCx, 22.8, { align: 'center' });
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.2);
+            doc.text('Aprobado por Resolucion No 9385 del 10 - 11 - 2025', textCx, 26.5, { align: 'center' });
+            doc.text('DANE 313001800093  -  NIT 73143410 - 6', textCx, 29.8, { align: 'center' });
+
+            doc.setFillColor(10, 35, 90);
+            doc.rect(textLeft, 31.5, Math.max(70, textRight - textLeft), 1.8, 'F');
+
             doc.setFillColor(...dark);
-            doc.rect(0, 0, pageW, 22, 'F');
-            doc.setFillColor(...primary);
-            doc.rect(0, 17, pageW, 5, 'F');
+            doc.rect(0, 35, pageW, 10, 'F');
 
             doc.setTextColor(255, 255, 255);
-            doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
-            doc.text('EMPRENDEDORES DEL SABER', pageW / 2, 10, { align: 'center' });
-            doc.setFontSize(9);
+            doc.setFontSize(10);
+            doc.text(title, pageW / 2, 39.6, { align: 'center' });
             doc.setFont('helvetica', 'normal');
-            doc.text(title, pageW / 2, 15, { align: 'center' });
-            doc.setFontSize(7);
-            doc.text(subtitle, pageW / 2, 20.5, { align: 'center' });
+            doc.setFontSize(7.2);
+            doc.text(subtitle, pageW / 2, 43.1, { align: 'center' });
         };
+
+        const claseMergeKey = (c: Clase) =>
+            [
+                (c.materia ?? '').trim().toLowerCase(),
+                (c.profesor ?? '').trim().toLowerCase(),
+                (c.curso ?? '').trim().toLowerCase(),
+                (c.aula ?? '').trim().toLowerCase(),
+            ].join('|');
 
         const addGrid = (data: HorarioSlot[], startY: number, showCurso = false) => {
             const head = [['Hora', ...dias.map(d => d.label)]];
             const body: (string | { content: string; styles?: Record<string, unknown> })[][] = [];
 
-            data.forEach(slot => {
+            const mergeMeta = new Map<string, { esInicio: boolean; esFin: boolean; rangoInicio: string; rangoFin: string }>();
+
+            dias.forEach((d) => {
+                let i = 0;
+
+                while (i < data.length) {
+                    const slot = data[i];
+                    const actual = !slot.esDescanso ? slot.clases[d.key] : undefined;
+
+                    if (!actual) {
+                        i += 1;
+                        continue;
+                    }
+
+                    const key = claseMergeKey(actual);
+                    let j = i + 1;
+
+                    while (j < data.length) {
+                        const nextSlot = data[j];
+                        if (nextSlot.esDescanso) break;
+
+                        const next = nextSlot.clases[d.key];
+                        if (!next || claseMergeKey(next) !== key) break;
+
+                        j += 1;
+                    }
+
+                    if (j - i > 1) {
+                        const rangoInicio = data[i].hora;
+                        const rangoFin = data[j - 1].horaFin;
+
+                        for (let k = i; k < j; k += 1) {
+                            mergeMeta.set(`${k}-${d.key}`, {
+                                esInicio: k === i,
+                                esFin: k === j - 1,
+                                rangoInicio,
+                                rangoFin,
+                            });
+                        }
+                    }
+
+                    i = j;
+                }
+            });
+
+            data.forEach((slot, rowIndex) => {
                 if (slot.esDescanso) {
                     body.push([{ content: `${slot.hora} - ${slot.horaFin}`, styles: { fontStyle: 'bold' as const, fillColor: [240, 240, 240] as [number, number, number] } },
                         { content: 'DESCANSO', styles: { halign: 'center' as const, colSpan: 5, fillColor: [240, 240, 240] as [number, number, number], fontStyle: 'italic' as const, textColor: [150, 150, 150] as [number, number, number] } }, '', '', '', '']);
                 } else {
-                    const row: string[] = [`${slot.hora} - ${slot.horaFin}`];
+                    const row: (string | { content: string; styles?: Record<string, unknown> })[] = [`${slot.hora} - ${slot.horaFin}`];
+
                     dias.forEach(d => {
                         const c = slot.clases[d.key];
+
                         if (c) {
                             const lineas = [c.materia];
                             if (showCurso) lineas.push(c.curso);
                             lineas.push(c.profesor);
                             if (c.aula) lineas.push('Aula: ' + c.aula);
-                            row.push(lineas.join('\n'));
+
+                            const merge = mergeMeta.get(`${rowIndex}-${d.key}`);
+
+                            if (merge && !merge.esInicio) {
+                                row.push({
+                                    content: '',
+                                    styles: {
+                                        fillColor: [235, 245, 255] as [number, number, number],
+                                        lineWidth: {
+                                            top: 0,
+                                            right: 0.1,
+                                            bottom: merge.esFin ? 0.1 : 0,
+                                            left: 0.1,
+                                        },
+                                    },
+                                });
+                            } else if (merge && merge.esInicio) {
+                                row.push({
+                                    content: `${lineas.join('\n')}\nHora: ${merge.rangoInicio} - ${merge.rangoFin}`,
+                                    styles: {
+                                        fillColor: [235, 245, 255] as [number, number, number],
+                                        lineWidth: {
+                                            top: 0.1,
+                                            right: 0.1,
+                                            bottom: merge.esFin ? 0.1 : 0,
+                                            left: 0.1,
+                                        },
+                                    },
+                                });
+                            } else {
+                                row.push(lineas.join('\n'));
+                            }
                         } else {
                             row.push('');
                         }
                     });
+
                     body.push(row);
                 }
             });
@@ -981,13 +1205,13 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         if (_vista === 'profesor' && _profSel) {
             const prof = profesores.find(p => p.nombre === _profSel);
             addHeader('HORARIO DEL PROFESOR', `${_profSel} · ${prof?.especialidad ?? ''} · ${prof?.horasSemanales ?? 0}h semanales`);
-            addGrid(getHorarioProfesor(_profSel), 26, true); // showCurso=true
+            addGrid(getHorarioProfesor(_profSel), tableStartY, true); // showCurso=true
             addFooter();
         } else if (_vista === 'curso' && _cursoSel) {
             const clasesCount = allClases.filter(c => c.curso === _cursoSel).length;
             const profsCount = [...new Set(allClases.filter(c => c.curso === _cursoSel).map(c => c.profesor))].length;
             addHeader('HORARIO DEL CURSO', `${_cursoSel} · ${clasesCount} clases · ${profsCount} profesores`);
-            addGrid(getHorarioCurso(_cursoSel), 26, false); // showCurso=false (ya es el curso)
+            addGrid(getHorarioCurso(_cursoSel), tableStartY, false); // showCurso=false (ya es el curso)
             addFooter();
         } else if (_vista === 'profesor') {
             // Por Profesor (todos) — una página por cada profesor con clases
@@ -998,7 +1222,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 if (paginaIniciada) doc.addPage();
                 paginaIniciada = true;
                 addHeader('HORARIO DEL PROFESOR', `${p.nombre} · ${p.especialidad} · ${p.horasSemanales}h semanales`);
-                addGrid(getHorarioProfesor(p.nombre), 26, true);
+                addGrid(getHorarioProfesor(p.nombre), tableStartY, true);
                 addFooter();
             });
             if (!paginaIniciada) {
@@ -1014,7 +1238,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 if (paginaIniciada) doc.addPage();
                 paginaIniciada = true;
                 addHeader(`HORARIO — ${c.nombre.toUpperCase()}`, `${cursoClases.length} clases · ${[...new Set(cursoClases.map(cl => cl.profesor))].length} profesores`);
-                addGrid(getHorarioCurso(c.nombre), 26, false);
+                addGrid(getHorarioCurso(c.nombre), tableStartY, false);
                 addFooter();
             });
             if (!paginaIniciada) {
@@ -1024,7 +1248,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
         } else {
             // General: resumen primero, luego uno por curso
             addHeader('HORARIO GENERAL', `${allClases.length} clases · ${profesores.length} profesores · ${stats.cursosConClases}/${stats.totalCursos} cursos con horario`);
-            addGridGeneral(26);
+            addGridGeneral(tableStartY);
             addFooter();
 
             // Páginas adicionales: un curso por página
@@ -1033,7 +1257,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 if (cursoClases.length === 0) return;
                 doc.addPage();
                 addHeader(`HORARIO — ${c.nombre.toUpperCase()}`, `${cursoClases.length} clases · ${[...new Set(cursoClases.map(cl => cl.profesor))].length} profesores`);
-                addGrid(getHorarioCurso(c.nombre), 26, false);
+                addGrid(getHorarioCurso(c.nombre), tableStartY, false);
                 addFooter();
             });
 
@@ -1043,7 +1267,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                 if (profClases.length === 0) return;
                 doc.addPage();
                 addHeader(`HORARIO DEL PROFESOR`, `${p.nombre} · ${p.especialidad} · ${p.horasSemanales}h semanales`);
-                addGrid(getHorarioProfesor(p.nombre), 26, true);
+                addGrid(getHorarioProfesor(p.nombre), tableStartY, true);
                 addFooter();
             });
         }

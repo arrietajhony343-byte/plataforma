@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Estudiante;
 
 use App\Http\Controllers\Controller;
-use App\Models\{CursoMateria, Entrega, Matricula, Nota};
+use App\Models\{Actividad, CursoMateria, Entrega, Matricula, Nota};
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,25 +43,53 @@ class MateriaController extends Controller
             $entregas = Entrega::with('actividad')
                 ->where('estudiante_id', $user->id)
                 ->whereHas('actividad', fn($q) => $q->where('curso_materia_id', $cm->id))
-                ->get();
+                ->get()
+                ->keyBy('actividad_id');
 
-            $actividades = $entregas->map(function ($e) {
-                $actividad = $e->actividad;
-                $estado = $this->estadoConsolidado($actividad?->fecha_entrega, $e);
+            // Se listan desde actividades para no perder registros históricos si faltó crear una entrega.
+            $actividades = $cm->actividades
+                ->sortByDesc(fn(Actividad $actividad) => $actividad->fecha_entrega?->timestamp ?? 0)
+                ->map(function (Actividad $actividad) use ($entregas) {
+                    /** @var Entrega|null $entrega */
+                    $entrega = $entregas->get($actividad->id);
+                    $estado = $entrega
+                        ? $this->estadoConsolidado($actividad->fecha_entrega, $entrega)
+                        : $this->estadoSinEntrega($actividad);
 
-                return [
-                    'id'               => $actividad?->id,
-                    'titulo'           => $actividad?->titulo,
-                    'descripcion'      => $actividad?->descripcion ?? 'Sin descripcion',
-                    'tipo'             => ucfirst((string)($actividad?->tipo ?? 'Actividad')),
-                    'fechaAsignada'    => $actividad?->fecha_asignacion?->format('d M Y') ?? '-',
-                    'fechaEntrega'     => $actividad?->fecha_entrega?->format('d M Y H:i') ?? '-',
-                    'estado'           => $estado,
-                    'nota'             => $e->calificacion !== null ? (float)$e->calificacion : null,
-                    'peso'             => (float)($actividad?->porcentaje ?? 0),
-                    'retroalimentacion'=> $e->retroalimentacion,
-                ];
-            })->sortByDesc('fechaEntrega')->values();
+                    $limite = $entrega
+                        ? ($entrega->fechaLimiteEfectiva() ?? $actividad->fecha_entrega)
+                        : $actividad->fecha_entrega;
+
+                    $puedeEntregar = $actividad->activa
+                        && !$actividad->cerrada_manualmente
+                        && $estado !== 'calificada'
+                        && ($limite === null || now()->lte($limite) || $actividad->permite_entrega_tardia);
+
+                    if ($actividad->max_intentos !== null && $entrega && ($entrega->intentos_usados ?? 0) >= $actividad->max_intentos) {
+                        $puedeEntregar = false;
+                    }
+
+                    return [
+                        'id'                 => $actividad->id,
+                        'titulo'             => $actividad->titulo,
+                        'descripcion'        => $actividad->descripcion ?? 'Sin descripcion',
+                        'tipo'               => (string) $actividad->tipo,
+                        'tienePreguntas'     => (bool) $actividad->tiene_preguntas,
+                        'fechaAsignada'      => $actividad->fecha_asignacion?->format('d M Y') ?? '-',
+                        'fechaEntrega'       => $actividad->fecha_entrega?->format('d M Y H:i') ?? '-',
+                        'fechaLimiteIndividual' => $entrega?->fecha_limite_individual?->format('d M Y H:i'),
+                        'estado'             => $estado,
+                        'puedeEntregar'      => $puedeEntregar,
+                        'permiteEntregaTardia' => (bool) $actividad->permite_entrega_tardia,
+                        'maxIntentos'        => $actividad->max_intentos !== null ? (int) $actividad->max_intentos : null,
+                        'intentosUsados'     => (int) ($entrega?->intentos_usados ?? 0),
+                        'nota'               => $entrega && $entrega->calificacion !== null ? (float) $entrega->calificacion : null,
+                        'peso'               => (float) $actividad->porcentaje,
+                        'retroalimentacion'  => $entrega?->retroalimentacion,
+                        'notaDevolucion'     => $entrega?->nota_devolucion,
+                    ];
+                })
+                ->values();
 
             $promedio = Nota::where('estudiante_id', $user->id)
                 ->where('curso_materia_id', $cm->id)
@@ -127,15 +155,32 @@ class MateriaController extends Controller
 
     private function estadoConsolidado($fechaEntregaActividad, Entrega $entrega): string
     {
+        if (
+            $entrega->estado === 'devuelta'
+            || ($entrega->estado === 'pendiente' && !empty($entrega->nota_devolucion) && $entrega->fecha_entrega === null)
+        ) {
+            return 'devuelta';
+        }
+
         if ($entrega->estado === 'calificada') {
             return 'calificada';
         }
+
         if (in_array($entrega->estado, ['entregada', 'atrasada'])) {
             return 'entregada';
         }
 
         $limite = $entrega->fechaLimiteEfectiva() ?? $fechaEntregaActividad;
         if ($limite && now()->gt($limite)) {
+            return 'vencida';
+        }
+
+        return 'pendiente';
+    }
+
+    private function estadoSinEntrega(Actividad $actividad): string
+    {
+        if ($actividad->fecha_entrega && now()->gt($actividad->fecha_entrega)) {
             return 'vencida';
         }
 

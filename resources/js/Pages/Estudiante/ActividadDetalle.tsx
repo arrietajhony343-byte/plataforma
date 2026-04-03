@@ -1,7 +1,7 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { estudianteMenuItems } from '@/Config/estudianteMenu';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,7 @@ interface ActividadDetalle {
     id: number;
     titulo: string;
     descripcion: string | null;
+    archivoInstrucciones: string | null;
     tipo: string;
     materia: string;
     curso: string;
@@ -58,6 +59,15 @@ interface Props {
     actividad: ActividadDetalle;
 }
 
+interface ActividadDetalleDraft {
+    version: number;
+    actividadId: number;
+    paso: 'detalle' | 'entregar' | 'quiz';
+    contenido: string;
+    respuestas: Record<string, number | string>;
+    savedAt: string;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const TIPO_LABEL: Record<string, string> = {
@@ -80,6 +90,9 @@ const ESTADO_CONFIG: Record<string, { label: string; color: string; icon: string
     devuelta:  { label: 'Devuelta',  color: 'bg-orange-100 text-orange-700 border-orange-200', icon: '↩️' },
     calificada:{ label: 'Calificada',color: 'bg-green-100 text-green-700 border-green-200', icon: '🏆' },
 };
+
+const DRAFT_VERSION = 1;
+const DRAFT_PREFIX = 'estudiante.actividad.autosave';
 
 function NotaCircle({ nota }: { nota: number }) {
     const color = nota >= 4 ? '#16a34a' : nota >= 3 ? '#d97706' : '#dc2626';
@@ -120,9 +133,124 @@ export default function ActividadDetalle({ actividad }: Props) {
     );
     const [enviando, setEnviando] = useState(false);
 
+    const draftKey = `${DRAFT_PREFIX}.${actividad.id}`;
+    const [autosaveReady, setAutosaveReady] = useState(false);
+    const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [autosaveSavedAt, setAutosaveSavedAt] = useState<string | null>(null);
+    const [draftRestored, setDraftRestored] = useState(false);
+
     const estadoConf = ESTADO_CONFIG[actividad.estado] ?? ESTADO_CONFIG.pendiente;
     const esQuiz = actividad.tienePreguntas && ['quiz', 'examen'].includes(actividad.tipo);
     const isEntregado = ['entregada', 'calificada'].includes(actividad.estado);
+
+    const clearAutosaveDraft = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.removeItem(draftKey);
+        setAutosaveStatus('idle');
+        setAutosaveSavedAt(null);
+        setDraftRestored(false);
+    }, [draftKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            setAutosaveReady(true);
+            return;
+        }
+
+        const actividadCerrada = isEntregado && !actividad.puedeEntregar;
+        if (actividadCerrada) {
+            window.localStorage.removeItem(draftKey);
+            setAutosaveReady(true);
+            return;
+        }
+
+        try {
+            const raw = window.localStorage.getItem(draftKey);
+            if (!raw) {
+                setAutosaveReady(true);
+                return;
+            }
+
+            const parsed = JSON.parse(raw) as ActividadDetalleDraft;
+            if (parsed?.version !== DRAFT_VERSION || parsed.actividadId !== actividad.id) {
+                window.localStorage.removeItem(draftKey);
+                setAutosaveReady(true);
+                return;
+            }
+
+            setContenido(parsed.contenido ?? '');
+
+            if (parsed.respuestas && typeof parsed.respuestas === 'object') {
+                const restauradas = Object.entries(parsed.respuestas).reduce<Record<number, number | string>>((acc, [preguntaId, valor]) => {
+                    const id = Number.parseInt(preguntaId, 10);
+                    if (!Number.isNaN(id)) {
+                        acc[id] = valor;
+                    }
+                    return acc;
+                }, {});
+
+                setRespuestas(restauradas);
+            }
+
+            if (parsed.paso === 'quiz' && esQuiz) {
+                setPaso('quiz');
+            } else if (parsed.paso === 'entregar' && !esQuiz) {
+                setPaso('entregar');
+            }
+
+            setAutosaveSavedAt(parsed.savedAt ?? null);
+            setAutosaveStatus(parsed.savedAt ? 'saved' : 'idle');
+            setDraftRestored(true);
+        } catch {
+            setAutosaveStatus('error');
+        } finally {
+            setAutosaveReady(true);
+        }
+    }, [actividad.id, actividad.puedeEntregar, draftKey, esQuiz, isEntregado]);
+
+    const draftSnapshot = useMemo<ActividadDetalleDraft>(() => ({
+        version: DRAFT_VERSION,
+        actividadId: actividad.id,
+        paso,
+        contenido,
+        respuestas: Object.fromEntries(
+            Object.entries(respuestas).map(([preguntaId, valor]) => [preguntaId, valor])
+        ),
+        savedAt: new Date().toISOString(),
+    }), [actividad.id, contenido, paso, respuestas]);
+
+    useEffect(() => {
+        if (!autosaveReady || typeof window === 'undefined') {
+            return;
+        }
+
+        if (isEntregado && !actividad.puedeEntregar) {
+            return;
+        }
+
+        setAutosaveStatus('saving');
+
+        const timer = window.setTimeout(() => {
+            try {
+                window.localStorage.setItem(draftKey, JSON.stringify(draftSnapshot));
+                setAutosaveSavedAt(draftSnapshot.savedAt);
+                setAutosaveStatus('saved');
+            } catch {
+                setAutosaveStatus('error');
+            }
+        }, 500);
+
+        return () => window.clearTimeout(timer);
+    }, [actividad.puedeEntregar, autosaveReady, draftKey, draftSnapshot, isEntregado]);
+
+    const autosaveText = useMemo(() => {
+        if (autosaveStatus === 'saving') return 'guardando...';
+        if (autosaveStatus === 'error') return 'error de guardado local';
+        if (autosaveSavedAt) {
+            return `guardado: ${new Date(autosaveSavedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+        }
+        return 'sin cambios guardados';
+    }, [autosaveSavedAt, autosaveStatus]);
 
     // Determinar qué fecha límite mostrar
     const fechaLimite = actividad.fechaLimiteIndividual ?? actividad.fechaEntrega;
@@ -147,6 +275,7 @@ export default function ActividadDetalle({ actividad }: Props) {
         if (archivo) formData.append('archivo', archivo);
         router.post(route('estudiante.actividades.entregar', actividad.id), formData as any, {
             forceFormData: true,
+            onSuccess: () => clearAutosaveDraft(),
             onFinish: () => setEnviando(false),
         });
     };
@@ -158,6 +287,7 @@ export default function ActividadDetalle({ actividad }: Props) {
         if (enviando) return;
         setEnviando(true);
         router.post(route('estudiante.actividades.quiz', actividad.id), { respuestas }, {
+            onSuccess: () => clearAutosaveDraft(),
             onFinish: () => setEnviando(false),
         });
     };
@@ -202,6 +332,30 @@ export default function ActividadDetalle({ actividad }: Props) {
                 </div>
             )}
 
+            <div className="mb-4 bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                    <p className="text-sm text-gray-700">
+                        <span className="font-semibold">Guardado automático:</span> {autosaveText}
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                        Se guarda localmente con cada cambio. Si adjuntas archivo y recargas, deberás seleccionarlo de nuevo.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={clearAutosaveDraft}
+                    className="w-fit px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                    Limpiar borrador local
+                </button>
+            </div>
+
+            {draftRestored && (
+                <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700">
+                    Se recuperó un borrador guardado automáticamente para que continúes donde habías quedado.
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
                 {/* ── Panel izquierdo: DETALLES ──────────────────────────── */}
@@ -239,6 +393,20 @@ export default function ActividadDetalle({ actividad }: Props) {
                                 <div className="mt-4 p-4 bg-gray-50 rounded-xl text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                                     {actividad.descripcion}
                                 </div>
+                            )}
+
+                            {actividad.archivoInstrucciones && (
+                                <a
+                                    href={actividad.archivoInstrucciones}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[#293577] hover:text-[#181b49]"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V3m0 13.5 4.5-4.5M12 16.5 7.5 12m-3.75 7.5h16.5" />
+                                    </svg>
+                                    Ver archivo de instrucciones
+                                </a>
                             )}
                         </div>
                     </div>
@@ -448,6 +616,11 @@ export default function ActividadDetalle({ actividad }: Props) {
                                 <h2 className="text-base font-bold text-gray-900">
                                     {TIPO_LABEL[actividad.tipo] ?? 'Quiz'}
                                 </h2>
+                                {actividad.tipo === 'examen' && (
+                                    <span className="text-[11px] px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        Orden aleatorio por estudiante
+                                    </span>
+                                )}
                                 <button onClick={() => setPaso('detalle')} className="text-sm text-gray-400 hover:text-gray-700">
                                     ← Volver
                                 </button>

@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ScopesBySede;
-use App\Models\{Certificado, Pago, ConceptoPago, User, Periodo, Matricula, Curso, Sede};
+use App\Models\{Certificado, ConceptoPago, Notificacion, Pago, Periodo, Sede, TipoCertificado, User};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,10 +16,17 @@ class PagoController extends Controller
 
     public function index(): Response
     {
+        $this->sincronizarConceptosCertificados();
+
         $periodoActivo = Periodo::where('activo', true)->first();
         $sedeId = $this->sedeId();
 
-        $pagos = Pago::with(['estudiante.matriculas' => fn($q) => $q->where('estado', 'activa')->latest()->limit(1)->with('curso'), 'conceptoPago', 'periodo', 'comprobantes'])
+        $pagos = Pago::with([
+            'estudiante.matriculas' => fn($q) => $q->where('estado', 'activa')->latest()->limit(1)->with('curso'),
+            'conceptoPago.tipoCertificado',
+            'periodo',
+            'comprobantes',
+        ])
             ->when($sedeId, fn($q) =>
                 $q->whereHas('estudiante.matriculas', fn($mq) =>
                     $mq->where('estado', 'activa')
@@ -38,7 +46,7 @@ class PagoController extends Controller
                     'nivel'             => $matricula?->curso?->nivel ?? '',
                     'sede_id'           => $matricula?->curso?->sede_id,
                     'concepto_pago_id'  => $p->concepto_pago_id,
-                    'concepto'          => $p->conceptoPago->nombre,
+                    'concepto'          => $this->nombreConceptoVisible($p),
                     'periodo_id'        => $p->periodo_id,
                     'periodo'           => $p->periodo?->nombre ?? '—',
                     'monto'             => (float) $p->monto,
@@ -52,11 +60,16 @@ class PagoController extends Controller
                 ];
             });
 
-        $conceptos = ConceptoPago::orderBy('nombre')
+        $conceptos = ConceptoPago::query()
+            ->with('tipoCertificado:id,nombre,precio,activo')
+            ->orderBy('nombre')
             ->withCount('pagos')
             ->get()
             ->map(fn(ConceptoPago $c) => [
                 'id'           => $c->id,
+                'tipo_certificado_id' => $c->tipo_certificado_id,
+                'tipo_certificado_nombre' => $c->tipoCertificado?->nombre,
+                'es_certificado' => (bool) $c->tipo_certificado_id,
                 'nombre'       => $c->nombre,
                 'descripcion'  => $c->descripcion,
                 'monto'        => (float) $c->monto,
@@ -85,6 +98,17 @@ class PagoController extends Controller
             ->get()
             ->map(fn($p) => ['id' => $p->id, 'nombre' => $p->nombre, 'anio' => $p->anio, 'activo' => $p->activo]);
 
+        $tiposCertificado = TipoCertificado::query()
+            ->orderBy('nombre')
+            ->get()
+            ->map(fn(TipoCertificado $t) => [
+                'id' => $t->id,
+                'nombre' => $t->nombre,
+                'precio' => (int) $t->precio,
+                'activo' => (bool) $t->activo,
+            ])
+            ->values();
+
         $sedes = Sede::where('activa', true)->orderBy('nombre')
             ->when($sedeId, fn($q) => $q->where('id', $sedeId))
             ->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
@@ -92,6 +116,7 @@ class PagoController extends Controller
         return Inertia::render('Admin/Pagos', [
             'pagos'        => $pagos,
             'conceptos'    => $conceptos,
+            'tiposCertificado' => $tiposCertificado,
             'estudiantes'  => $estudiantes,
             'periodos'     => $periodos,
             'sedes'        => $sedes,
@@ -111,18 +136,84 @@ class PagoController extends Controller
             'estado'            => 'required|in:pendiente,pagado',
             'metodo_pago'       => 'nullable|string|max:50',
             'referencia'        => 'nullable|string|max:100',
-            'fecha_vencimiento' => 'required|date',
+            'fecha_vencimiento' => 'nullable|date|required_if:estado,pendiente',
             'fecha_pago'        => 'nullable|date',
             'notas'             => 'nullable|string|max:500',
+            'tipo_certificado_id' => 'nullable|exists:tipo_certificados,id',
+            'descripcion_solicitud' => 'nullable|string|max:500',
         ]);
 
-        if ($data['estado'] === 'pagado' && empty($data['fecha_pago'])) {
-            $data['fecha_pago'] = now()->toDateString();
+        $concepto = ConceptoPago::query()
+            ->with('tipoCertificado')
+            ->findOrFail((int) $data['concepto_pago_id']);
+
+        $tipoCertificado = $this->resolverTipoCertificado(
+            $concepto,
+            isset($data['tipo_certificado_id']) ? (int) $data['tipo_certificado_id'] : null
+        );
+
+        if ($tipoCertificado && !$tipoCertificado->activo) {
+            return redirect()->back()->with('error', 'El tipo de certificado seleccionado está inactivo.');
         }
 
-        $pago = Pago::create($data);
+        [$pago, $esSolicitudCertificado] = DB::transaction(function () use ($data, $tipoCertificado) {
+            $notasSistema = null;
+
+            if ($tipoCertificado instanceof TipoCertificado) {
+                $certificado = Certificado::query()->create([
+                    'estudiante_id' => (int) $data['estudiante_id'],
+                    'tipo_certificado_id' => $tipoCertificado->id,
+                    'tipo' => $tipoCertificado->codigo,
+                    'descripcion' => $data['descripcion_solicitud'] ?? ($data['notas'] ?? null),
+                    'estado' => 'solicitado',
+                    'fecha_solicitud' => now()->toDateString(),
+                ]);
+
+                $data['periodo_id'] = null;
+                $data['monto'] = (int) $tipoCertificado->precio;
+                $notasSistema = 'certificado:' . $certificado->id . '|' . $tipoCertificado->nombre;
+            }
+
+            if ($data['estado'] === 'pagado' && empty($data['fecha_pago'])) {
+                $data['fecha_pago'] = now()->toDateString();
+            }
+
+            if ($data['estado'] === 'pagado' && empty($data['fecha_vencimiento'])) {
+                // La tabla requiere fecha_vencimiento; para pagos ya cancelados se iguala a fecha de pago.
+                $data['fecha_vencimiento'] = $data['fecha_pago'] ?? now()->toDateString();
+            }
+
+            $notaLibre = trim((string) ($data['notas'] ?? ''));
+            $notasFinales = $notasSistema
+                ? ($notaLibre ? ($notasSistema . ' || ' . $notaLibre) : $notasSistema)
+                : ($notaLibre !== '' ? $notaLibre : null);
+
+            $pago = Pago::query()->create([
+                'estudiante_id' => (int) $data['estudiante_id'],
+                'concepto_pago_id' => (int) $data['concepto_pago_id'],
+                'periodo_id' => $data['periodo_id'] ?? null,
+                'monto' => (float) $data['monto'],
+                'estado' => $data['estado'],
+                'metodo_pago' => $data['metodo_pago'] ?? null,
+                'referencia' => $data['referencia'] ?? null,
+                'fecha_vencimiento' => $data['fecha_vencimiento'] ?? null,
+                'fecha_pago' => $data['fecha_pago'] ?? null,
+                'notas' => $notasFinales,
+            ]);
+
+            return [$pago, $tipoCertificado instanceof TipoCertificado];
+        });
+
         if (($pago->estado ?? null) === 'pagado') {
             $this->marcarCertificadoEnGestion($pago);
+        }
+
+        if (($pago->estado ?? null) === 'pendiente') {
+            $this->notificarAcudientesPagoPendiente($pago);
+        }
+
+        if ($esSolicitudCertificado) {
+            return redirect()->back()->with('success', 'Pago registrado y solicitud de certificado creada correctamente.');
         }
 
         return redirect()->back()->with('success', 'Pago registrado correctamente.');
@@ -148,6 +239,10 @@ class PagoController extends Controller
 
         if (($data['estado'] ?? null) === 'pagado' && $estadoPrevio !== 'pagado') {
             $this->marcarCertificadoEnGestion($pago);
+        }
+
+        if (($data['estado'] ?? null) === 'pendiente' && $estadoPrevio !== 'pendiente') {
+            $this->notificarAcudientesPagoPendiente($pago);
         }
 
         return redirect()->back()->with('success', 'Pago actualizado.');
@@ -204,6 +299,10 @@ class PagoController extends Controller
 
     public function updateConcepto(Request $request, ConceptoPago $concepto)
     {
+        if ($concepto->tipo_certificado_id) {
+            return redirect()->back()->with('error', 'Los conceptos asociados a tipos de certificado se administran desde el módulo de Certificados.');
+        }
+
         $data = $request->validate([
             'nombre'       => 'required|string|max:100',
             'descripcion'  => 'nullable|string|max:255',
@@ -218,9 +317,115 @@ class PagoController extends Controller
 
     public function toggleConcepto(ConceptoPago $concepto)
     {
+        if ($concepto->tipo_certificado_id) {
+            return redirect()->back()->with('error', 'Los conceptos asociados a tipos de certificado se administran desde el módulo de Certificados.');
+        }
+
         $concepto->update(['activo' => !$concepto->activo]);
 
         return redirect()->back()->with('success', $concepto->activo ? 'Concepto activado.' : 'Concepto desactivado.');
+    }
+
+    private function sincronizarConceptosCertificados(): void
+    {
+        $tipos = TipoCertificado::query()->get();
+
+        foreach ($tipos as $tipo) {
+            ConceptoPago::query()->updateOrCreate(
+                ['tipo_certificado_id' => $tipo->id],
+                [
+                    'nombre' => $this->nombreConceptoCertificado($tipo->nombre),
+                    'descripcion' => 'Solicitud de ' . $tipo->nombre . ' creada desde certificados o control de pagos.',
+                    'monto' => (int) $tipo->precio,
+                    'periodicidad' => 'unico',
+                    'activo' => (bool) $tipo->activo,
+                ]
+            );
+        }
+
+        ConceptoPago::query()
+            ->whereNull('tipo_certificado_id')
+            ->where('nombre', 'Solicitud de Certificados')
+            ->update(['activo' => false]);
+    }
+
+    private function resolverTipoCertificado(ConceptoPago $concepto, ?int $tipoCertificadoId): ?TipoCertificado
+    {
+        if ($concepto->tipo_certificado_id) {
+            return TipoCertificado::query()->find($concepto->tipo_certificado_id);
+        }
+
+        if ($tipoCertificadoId) {
+            return TipoCertificado::query()->find($tipoCertificadoId);
+        }
+
+        return null;
+    }
+
+    private function nombreConceptoVisible(Pago $pago): string
+    {
+        $tipoDesdeNotas = $this->extractTipoCertificadoFromNotas($pago->notas);
+        if ($tipoDesdeNotas) {
+            return $this->nombreConceptoCertificado($tipoDesdeNotas);
+        }
+
+        $tipoRelacion = $pago->conceptoPago?->tipoCertificado?->nombre;
+        if ($tipoRelacion) {
+            return $this->nombreConceptoCertificado($tipoRelacion);
+        }
+
+        return $pago->conceptoPago?->nombre ?? 'Concepto';
+    }
+
+    private function nombreConceptoCertificado(string $tipoNombre): string
+    {
+        return 'Solicitud certificado: ' . trim($tipoNombre);
+    }
+
+    private function extractTipoCertificadoFromNotas(?string $notas): ?string
+    {
+        if (!$notas) {
+            return null;
+        }
+
+        if (!preg_match('/certificado:\d+\|([^|]+)/', $notas, $matches)) {
+            return null;
+        }
+
+        $tipo = trim((string) ($matches[1] ?? ''));
+        return $tipo !== '' ? $tipo : null;
+    }
+
+    private function notificarAcudientesPagoPendiente(Pago $pago): void
+    {
+        if ($pago->estado !== 'pendiente') {
+            return;
+        }
+
+        $pago->loadMissing([
+            'estudiante.padres:id,name',
+            'conceptoPago.tipoCertificado',
+        ]);
+
+        $estudiante = $pago->estudiante;
+        if (!$estudiante || $estudiante->padres->isEmpty()) {
+            return;
+        }
+
+        $concepto = $this->nombreConceptoVisible($pago);
+        $monto = '$' . number_format((float) $pago->monto, 0, ',', '.');
+        $vencimiento = $pago->fecha_vencimiento?->format('Y-m-d') ?? 'sin fecha';
+        $mensaje = 'Se generó un pago pendiente de ' . $concepto . ' para ' . $estudiante->name . '. Valor: ' . $monto . '. Vence: ' . $vencimiento . '.';
+
+        foreach ($estudiante->padres as $padre) {
+            Notificacion::query()->create([
+                'user_id' => $padre->id,
+                'tipo' => 'pago',
+                'titulo' => 'Nuevo pago pendiente',
+                'mensaje' => $mensaje,
+                'leida' => false,
+            ]);
+        }
     }
 
     private function marcarCertificadoEnGestion(Pago $pago): void

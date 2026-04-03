@@ -107,6 +107,15 @@ interface Props {
     boletinObservaciones: BoletinObservacionItem[];
 }
 
+type ComentarioConsolidadoItem = {
+    id: string;
+    origen: string;
+    tipo: string;
+    categoria: string;
+    descripcion: string;
+    fecha: string;
+};
+
 type TipoObservacion = 'positiva' | 'negativa';
 
 interface Etiqueta {
@@ -139,7 +148,7 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         afinidad_plan_mejora: '',
         compromiso_detalle: '',
     });
-    const [comentariosConsolidados, setComentariosConsolidados] = useState<Array<{ id: string; origen: string; tipo: string; categoria: string; descripcion: string; fecha: string }>>([]);
+    const [comentariosConsolidados, setComentariosConsolidados] = useState<ComentarioConsolidadoItem[]>([]);
     const [cargandoConsolidados, setCargandoConsolidados] = useState(false);
     const [guardandoBoletin, setGuardandoBoletin] = useState(false);
     const [guardandoObservador, setGuardandoObservador] = useState(false);
@@ -368,18 +377,26 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         setBoletinGuardado(texto);
     }, [registroBoletinActual]);
 
+    const fetchComentariosConsolidados = async (): Promise<ComentarioConsolidadoItem[]> => {
+        if (!directorEstudianteId || !directorCursoId || !directorPeriodoId) return [];
+
+        try {
+            const r = await fetch(`/profesor/observador/comentarios-consolidados?estudiante_id=${directorEstudianteId}&curso_id=${directorCursoId}&periodo_id=${directorPeriodoId}`);
+            const data = await r.json();
+            const docentes = (data.comentarios_docentes ?? []) as ComentarioConsolidadoItem[];
+            const asistencia = (data.comentarios_asistencia ?? []) as ComentarioConsolidadoItem[];
+            return [...docentes, ...asistencia].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+        } catch {
+            return [];
+        }
+    };
+
     const cargarComentariosConsolidados = async () => {
         if (!directorEstudianteId || !directorCursoId || !directorPeriodoId) return;
         setCargandoConsolidados(true);
         try {
-            const r = await fetch(`/profesor/observador/comentarios-consolidados?estudiante_id=${directorEstudianteId}&curso_id=${directorCursoId}&periodo_id=${directorPeriodoId}`);
-            const data = await r.json();
-            const docentes = (data.comentarios_docentes ?? []) as Array<{ id: string; origen: string; tipo: string; categoria: string; descripcion: string; fecha: string }>;
-            const asistencia = (data.comentarios_asistencia ?? []) as Array<{ id: string; origen: string; tipo: string; categoria: string; descripcion: string; fecha: string }>;
-            const merged = [...docentes, ...asistencia].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+            const merged = await fetchComentariosConsolidados();
             setComentariosConsolidados(merged);
-        } catch {
-            setComentariosConsolidados([]);
         } finally {
             setCargandoConsolidados(false);
         }
@@ -523,37 +540,149 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         }
     };
 
+    const LOGO_CANDIDATES_OBSERVADOR = [
+        '/storage/logo-certificados.png',
+        '/storage/logo-certificados.jpg',
+        '/storage/logo.png',
+        '/logo-certificados.png',
+        '/logo-certificados.jpg',
+        '/logo-certificados.jpeg',
+        '/images/logo-certificados.png',
+        '/images/logo-certificados.jpg',
+        '/images/logo.png',
+        '/img/logo.png',
+        '/logo.png',
+    ];
+
+    const cargarLogoObservador = async (): Promise<string | null> => {
+        for (const candidate of LOGO_CANDIDATES_OBSERVADOR) {
+            const logo = await cargarImagen(candidate);
+            if (logo) return logo;
+        }
+        return null;
+    };
+
+    const dibujarEncabezadoObservador = (
+        doc: jsPDF,
+        logoHeader: string | null,
+        rightTop: string,
+        rightBottom: string,
+        titulo: string,
+    ) => {
+        const W = 210;
+        const LOGO_X = 7.5;
+        const LOGO_Y = 2.5;
+        const LOGO_W = 38;
+        const LOGO_H = 41;
+        const TRIANG_MAX = 50;
+        const TRIANG_MID = 33;
+        const TRIANG_MIN = 16;
+        const TEXT_LEFT = LOGO_X + LOGO_W + 6;
+        const TEXT_RIGHT = W - TRIANG_MAX - 3;
+        const TEXT_CX = (TEXT_LEFT + TEXT_RIGHT) / 2;
+
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, W, 60, 'F');
+
+        doc.setFillColor(188, 214, 242);
+        doc.triangle(W - TRIANG_MAX, 0, W, 0, W, TRIANG_MAX, 'F');
+        doc.setFillColor(80, 130, 205);
+        doc.triangle(W - TRIANG_MID, 0, W, 0, W, TRIANG_MID, 'F');
+        doc.setFillColor(22, 55, 148);
+        doc.triangle(W - TRIANG_MIN, 0, W, 0, W, TRIANG_MIN, 'F');
+
+        if (logoHeader) {
+            const tipo = logoHeader.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+            doc.addImage(logoHeader, tipo, LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
+        }
+
+        doc.setTextColor(10, 35, 90);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('INSTITUTO PEDAGOGICO', TEXT_CX, 13, { align: 'center' });
+        doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 22.5, { align: 'center' });
+        doc.setTextColor(25, 25, 25);
+        doc.setFont('times', 'italic');
+        doc.setFontSize(8.5);
+        doc.text('Ser, Saber y Emprender', TEXT_CX, 29.5, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.2);
+        doc.text('Aprobado por Resolucion No 9385 del 10 - 11 - 2025', TEXT_CX, 35.5, { align: 'center' });
+        doc.text('DANE 313001800093  -  NIT 73143410 - 6', TEXT_CX, 40.2, { align: 'center' });
+
+        doc.setFillColor(10, 35, 90);
+        doc.rect(TEXT_LEFT, 46, Math.max(70, TEXT_RIGHT - TEXT_LEFT), 2.1, 'F');
+
+        doc.setFillColor(24, 31, 84);
+        doc.rect(0, 50, W, 10, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.text(titulo, TEXT_CX, 54.6, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.3);
+        doc.text(`${rightTop}  ·  ${rightBottom}`, TEXT_CX, 58.2, { align: 'center' });
+
+        doc.setTextColor(30, 41, 59);
+    };
+
     const exportarObservadorPdf = async () => {
         if (!estudianteDirectorActual || !directorPeriodoId) {
             alert('Selecciona curso, período y estudiante para generar el observador.');
             return;
         }
 
+        let comentariosPdf = comentariosConsolidados;
+        if (comentariosPdf.length === 0) {
+            comentariosPdf = await fetchComentariosConsolidados();
+        }
+
+        if (comentariosPdf.length > 0 && comentariosConsolidados.length === 0) {
+            setComentariosConsolidados(comentariosPdf);
+        }
+
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const foto = await cargarImagen(estudianteDirectorActual.foto);
 
+        const logoHeader = await cargarLogoObservador();
+        const periodoNombre = periodos.find(p => p.id === Number(directorPeriodoId))?.nombre || 'PERIODO';
+        const generadoEn = new Date().toLocaleString('es-CO');
+
+        const drawHeader = (titulo: string, rightBottom: string) => {
+            dibujarEncabezadoObservador(
+                doc,
+                logoHeader,
+                `Generado: ${generadoEn}`,
+                rightBottom,
+                titulo,
+            );
+        };
+
+        drawHeader('OBSERVADOR ACADEMICO INTEGRAL', `Periodo: ${periodoNombre}`);
+
         doc.setFont('times', 'bold');
-        doc.setFontSize(12);
-        doc.text('INFORMACIÓN DEL ESTUDIANTE', 12, 12);
-        doc.text(`AÑO LECTIVO - ${new Date().getFullYear()}`, 140, 12);
+        doc.setFontSize(11.5);
+        doc.text('INFORMACION DEL ESTUDIANTE', 12, 66);
+        doc.text(`ANO LECTIVO - ${new Date().getFullYear()}`, 198, 66, { align: 'right' });
 
         if (foto) {
-            doc.addImage(foto, 'JPEG', 12, 16, 36, 44);
+            const tipoFoto = foto.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+            doc.addImage(foto, tipoFoto, 12, 70, 32, 36);
         } else {
-            doc.rect(12, 16, 36, 44);
+            doc.rect(12, 70, 32, 36);
             doc.setFontSize(8);
-            doc.text('Sin foto', 24, 40);
+            doc.text('Sin foto', 22, 89);
         }
 
         doc.setFont('times', 'normal');
-        doc.setFontSize(10);
-        let y = 72;
+        doc.setFontSize(9.5);
+        let y = 112;
         const fila = (label: string, value?: string | null) => {
             doc.setFont('times', 'bold');
             doc.text(`${label}:`, 12, y);
             doc.setFont('times', 'normal');
             doc.text(value && value.trim() !== '' ? value : '____________________', 58, y);
-            y += 7;
+            y += 6.2;
         };
 
         fila('NOMBRE Y APELLIDOS', estudianteDirectorActual.estudiante);
@@ -566,13 +695,13 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         fila('GRADO EN CURSO', `${estudianteDirectorActual.grado ?? ''} ${estudianteDirectorActual.grupo ?? ''}`.trim());
         fila('DIRECTOR DE GRUPO', estudianteDirectorActual.director_grupo);
 
-        y += 3;
+        y += 2;
         doc.setFont('times', 'bold');
         doc.setFontSize(11);
-        doc.text('VALORACIÓN INTEGRAL DEL ESTUDIANTE', 12, y);
-        y += 5;
+        doc.text('VALORACION INTEGRAL DEL ESTUDIANTE', 12, y);
+        y += 4;
 
-        const drawBox = (titulo: string, contenido: string, h = 20) => {
+        const drawBox = (titulo: string, contenido: string, h = 18) => {
             doc.rect(12, y, 186, h);
             doc.setFont('times', 'bold');
             doc.setFontSize(9);
@@ -583,28 +712,29 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
             y += h + 2;
         };
 
-        drawBox('Social y Afectivo', ficha.social_afectivo, 24);
-        drawBox('Comunicación y Seguimiento a la norma', ficha.comunicacion_norma, 24);
-        drawBox('Conductual y Académico', ficha.conductual_academico, 24);
-        drawBox('Asignaturas con Afinidad y Plan de mejora', ficha.afinidad_plan_mejora, 24);
-        drawBox('Compromiso', ficha.compromiso_detalle, 20);
+        drawBox('Social y Afectivo', ficha.social_afectivo, 18);
+        drawBox('Comunicacion y Seguimiento a la norma', ficha.comunicacion_norma, 18);
+        drawBox('Conductual y Academico', ficha.conductual_academico, 18);
+        drawBox('Asignaturas con Afinidad y Plan de mejora', ficha.afinidad_plan_mejora, 18);
+        drawBox('Compromiso', ficha.compromiso_detalle, 16);
 
         doc.addPage();
+        drawHeader(`${periodoNombre} ACADEMICO`, `Periodo: ${periodoNombre}`);
         doc.setFont('times', 'bold');
-        doc.setFontSize(13);
-        doc.text(`${periodos.find(p => p.id === Number(directorPeriodoId))?.nombre || 'PERÍODO'} ACADÉMICO`, 105, 16, { align: 'center' });
+        doc.setFontSize(12.5);
+        doc.text(`${periodoNombre} ACADEMICO`, 105, 66, { align: 'center' });
 
         doc.setFont('times', 'normal');
         doc.setFontSize(10);
-        doc.text(`Nombre completo del estudiante: ${estudianteDirectorActual.estudiante}`, 12, 28);
-        doc.text(`Director de grupo: ${estudianteDirectorActual.director_grupo ?? ''}`, 12, 34);
-        doc.text(`Fecha de realización: ${new Date().toLocaleDateString('es-CO')}`, 12, 40);
-        doc.text(`Grado: ${(estudianteDirectorActual.grado ?? '') + ' ' + (estudianteDirectorActual.grupo ?? '')}`, 12, 46);
+        doc.text(`Nombre completo del estudiante: ${estudianteDirectorActual.estudiante}`, 12, 76);
+        doc.text(`Director de grupo: ${estudianteDirectorActual.director_grupo ?? ''}`, 12, 82);
+        doc.text(`Fecha de realizacion: ${new Date().toLocaleDateString('es-CO')}`, 12, 88);
+        doc.text(`Grado: ${(estudianteDirectorActual.grado ?? '') + ' ' + (estudianteDirectorActual.grupo ?? '')}`, 12, 94);
 
         doc.setFont('times', 'bold');
-        doc.rect(12, 52, 62, 8); doc.text('FORTALEZAS', 43, 57, { align: 'center' });
-        doc.rect(74, 52, 62, 8); doc.text('DIFICULTADES', 105, 57, { align: 'center' });
-        doc.rect(136, 52, 62, 8); doc.text('COMPROMISOS', 167, 57, { align: 'center' });
+        doc.rect(12, 100, 62, 8); doc.text('FORTALEZAS', 43, 105, { align: 'center' });
+        doc.rect(74, 100, 62, 8); doc.text('DIFICULTADES', 105, 105, { align: 'center' });
+        doc.rect(136, 100, 62, 8); doc.text('COMPROMISOS', 167, 105, { align: 'center' });
 
         const linesF = doc.splitTextToSize(fortalezas || '-', 58);
         const linesD = doc.splitTextToSize(dificultades || '-', 58);
@@ -612,13 +742,55 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         const maxLines = Math.max(linesF.length, linesD.length, linesC.length, 8);
         const boxH = Math.max(70, maxLines * 4 + 10);
 
-        doc.rect(12, 60, 62, boxH);
-        doc.rect(74, 60, 62, boxH);
-        doc.rect(136, 60, 62, boxH);
+        doc.rect(12, 108, 62, boxH);
+        doc.rect(74, 108, 62, boxH);
+        doc.rect(136, 108, 62, boxH);
         doc.setFont('times', 'normal');
-        doc.text(linesF, 14, 66);
-        doc.text(linesD, 76, 66);
-        doc.text(linesC, 138, 66);
+        doc.text(linesF, 14, 114);
+        doc.text(linesD, 76, 114);
+        doc.text(linesC, 138, 114);
+
+        if (comentariosPdf.length > 0) {
+            doc.addPage();
+            drawHeader('COMENTARIOS CONSOLIDADOS DEL PERIODO', `Periodo: ${periodoNombre}`);
+            doc.setFont('times', 'bold');
+            doc.setFontSize(13);
+            doc.text('COMENTARIOS CONSOLIDADOS DEL PERIODO', 105, 66, { align: 'center' });
+
+            doc.setFont('times', 'normal');
+            doc.setFontSize(10);
+            doc.text(`Estudiante: ${estudianteDirectorActual.estudiante}`, 12, 78);
+            doc.text(`Periodo: ${periodoNombre || 'N/A'}`, 12, 84);
+            doc.text(`Total de comentarios: ${comentariosPdf.length}`, 12, 90);
+
+            let yComentarios = 98;
+            comentariosPdf.forEach((item, index) => {
+                const encabezado = `${index + 1}. ${item.fecha || 'N/A'} · ${item.origen.toUpperCase()} · ${item.categoria || 'General'} (${item.tipo || 'N/A'})`;
+                const cuerpo = doc.splitTextToSize(item.descripcion || '-', 180);
+                const lineas = 1 + cuerpo.length;
+                const altoBloque = Math.max(10, lineas * 4 + 3);
+
+                if (yComentarios + altoBloque > 280) {
+                    doc.addPage();
+                    drawHeader('COMENTARIOS CONSOLIDADOS (continuacion)', `Periodo: ${periodoNombre}`);
+                    doc.setFont('times', 'bold');
+                    doc.setFontSize(11);
+                    doc.text('COMENTARIOS CONSOLIDADOS (continuacion)', 105, 66, { align: 'center' });
+                    yComentarios = 74;
+                }
+
+                doc.setDrawColor(120, 120, 120);
+                doc.rect(12, yComentarios, 186, altoBloque);
+                doc.setFont('times', 'bold');
+                doc.setFontSize(8.8);
+                doc.text(encabezado, 14, yComentarios + 4.5);
+                doc.setFont('times', 'normal');
+                doc.setFontSize(9);
+                doc.text(cuerpo, 14, yComentarios + 9);
+
+                yComentarios += altoBloque + 2;
+            });
+        }
 
         doc.save(`Observador_${estudianteDirectorActual.estudiante.replace(/\s+/g, '_')}.pdf`);
     };

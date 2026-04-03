@@ -31,7 +31,9 @@ use App\Http\Controllers\Estudiante\SeguimientoController as EstudianteSeguimien
 use App\Http\Controllers\Padre\DashboardController as PadreDashboardController;
 use App\Http\Controllers\Padre\BoletinController as PadreBoletinController;
 use App\Http\Controllers\Padre\CalendarioController as PadreCalendarioController;
+use App\Http\Controllers\Padre\HorarioController as PadreHorarioController;
 use App\Http\Controllers\Padre\SeguimientoController as PadreSeguimientoController;
+use App\Http\Controllers\Padre\ObservadorController as PadreObservadorController;
 use App\Http\Controllers\Padre\NotificacionController as PadreNotificacionController;
 use App\Http\Controllers\Padre\CertificadoController as PadreCertificadoController;
 use App\Http\Controllers\Padre\PagoController as PadrePagoController;
@@ -269,7 +271,11 @@ Route::middleware(['auth', 'verified', 'role:padre'])->prefix('padre')->name('pa
 
     Route::get('/calendario', [PadreCalendarioController::class, 'index'])->name('calendario');
 
+    Route::get('/horario', [PadreHorarioController::class, 'index'])->name('horario');
+
     Route::get('/seguimiento', [PadreSeguimientoController::class, 'index'])->name('seguimiento');
+
+    Route::get('/observador', [PadreObservadorController::class, 'index'])->name('observador');
 
     Route::get('/notificaciones', [PadreNotificacionController::class, 'index'])->name('notificaciones');
 

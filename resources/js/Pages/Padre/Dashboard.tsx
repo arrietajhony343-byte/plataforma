@@ -197,7 +197,7 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
                                             ))}
                                         </div>
                                     </div>
-                                    <Link href="/padre/seguimiento" className="text-red-700 hover:text-red-900 text-sm font-semibold whitespace-nowrap">
+                                    <Link href="/padre/observador" className="text-red-700 hover:text-red-900 text-sm font-semibold whitespace-nowrap">
                                         Ver detalle →
                                     </Link>
                                 </div>

@@ -29,12 +29,40 @@ export interface MessageItem {
     archivo?: MessageAttachment | null;
 }
 
+export interface MessageContactChild {
+    id: number;
+    nombre: string;
+    documento?: string | null;
+    curso?: string | null;
+}
+
+export interface MessageContactGuardian {
+    id: number;
+    nombre: string;
+    documento?: string | null;
+    telefono?: string | null;
+}
+
+export interface MessageContactProfile {
+    documento?: string | null;
+    email?: string | null;
+    telefono?: string | null;
+    direccion?: string | null;
+    sede?: string | null;
+    curso_actual?: string | null;
+    hijos?: MessageContactChild[];
+    materias?: string[];
+    cursos_direccion?: string[];
+    acudientes?: MessageContactGuardian[];
+}
+
 export interface MessageContact {
     id: number;
     nombre: string;
     rol: string;
     avatar: string;
     subtitle: string;
+    perfil?: MessageContactProfile;
     ultimoMensaje?: string | null;
     ultimoMensajeFecha?: string | null;
     noLeidos: number;
@@ -48,6 +76,7 @@ export interface MessageOption {
     rol: string;
     avatar: string;
     subtitle: string;
+    perfil?: MessageContactProfile;
 }
 
 export interface MessagePageProps {
@@ -258,6 +287,7 @@ export default function MessageCenter({
     const [error, setError] = useState<string | null>(null);
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [filePreview, setFilePreview] = useState<string | null>(null);
+    const [showProfile, setShowProfile] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -271,6 +301,7 @@ export default function MessageCenter({
     // Scroll al fondo solo al cambiar de contacto
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'instant' });
+        setShowProfile(false);
     }, [selectedId]);
 
     const isNearBottom = () => {
@@ -393,6 +424,7 @@ export default function MessageCenter({
     const handleSelectContact = (contactId: number) => {
         setSelectedId(contactId);
         setShowMobileList(false);
+        setShowProfile(false);
         void markAsRead(contactId);
     };
 
@@ -409,6 +441,7 @@ export default function MessageCenter({
                         rol: option.rol,
                         avatar: option.avatar,
                         subtitle: option.subtitle,
+                        perfil: option.perfil,
                         ultimoMensaje: message.texto || (message.archivo ? '📎 Archivo adjunto' : null),
                         ultimoMensajeFecha: 'Ahora',
                         noLeidos: 0,
@@ -617,13 +650,29 @@ export default function MessageCenter({
                                             {selectedContact.avatar}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h2 className="text-sm font-bold text-gray-800 truncate">{selectedContact.nombre}</h2>
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowProfile(true)}
+                                                    className="text-sm font-bold text-gray-800 truncate hover:text-[#293577] hover:underline text-left"
+                                                    title="Ver perfil del contacto"
+                                                >
+                                                    {selectedContact.nombre}
+                                                </button>
                                                 <span className={`hidden sm:inline-flex px-2 py-0.5 rounded-full border text-[10px] font-semibold ${roleTone[selectedContact.rol] ?? 'bg-gray-50 text-gray-700 border-gray-200'}`}>
                                                     {selectedContact.rol}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-gray-500 truncate">{selectedContact.subtitle}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs text-gray-500 truncate">{selectedContact.subtitle}</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowProfile(true)}
+                                                    className="text-[11px] font-semibold text-[#293577] hover:text-[#181b49] whitespace-nowrap"
+                                                >
+                                                    Ver perfil
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -745,6 +794,132 @@ export default function MessageCenter({
                     </div>
                 </div>
             </div>
+
+            {showProfile && selectedContact && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998] flex items-center justify-center p-4"
+                    onClick={() => setShowProfile(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100 shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#293577] to-[#181b49] text-white flex items-center justify-center text-sm font-bold shadow-sm flex-shrink-0">
+                                    {selectedContact.avatar}
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-base font-bold text-gray-800 truncate">{selectedContact.nombre}</h3>
+                                    <p className="text-xs text-gray-500 mt-0.5">{selectedContact.rol}</p>
+                                    <p className="text-xs text-gray-500 truncate">{selectedContact.subtitle}</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowProfile(false)}
+                                className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 flex items-center justify-center"
+                                title="Cerrar"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Documento</p>
+                                    <p className="text-sm font-medium text-gray-800 mt-1">{selectedContact.perfil?.documento || 'No registrado'}</p>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Telefono</p>
+                                    <p className="text-sm font-medium text-gray-800 mt-1">{selectedContact.perfil?.telefono || 'No registrado'}</p>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 sm:col-span-2">
+                                    <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Correo</p>
+                                    <p className="text-sm font-medium text-gray-800 mt-1 break-all">{selectedContact.perfil?.email || 'No registrado'}</p>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Sede</p>
+                                    <p className="text-sm font-medium text-gray-800 mt-1">{selectedContact.perfil?.sede || 'No registrada'}</p>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Curso actual</p>
+                                    <p className="text-sm font-medium text-gray-800 mt-1">{selectedContact.perfil?.curso_actual || 'No aplica'}</p>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 sm:col-span-2">
+                                    <p className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Direccion</p>
+                                    <p className="text-sm font-medium text-gray-800 mt-1">{selectedContact.perfil?.direccion || 'No registrada'}</p>
+                                </div>
+                            </div>
+
+                            {(selectedContact.perfil?.hijos?.length ?? 0) > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-800 mb-2">Hijos vinculados</h4>
+                                    <div className="space-y-2">
+                                        {selectedContact.perfil?.hijos?.map(hijo => (
+                                            <div key={hijo.id} className="flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-emerald-800 truncate">{hijo.nombre}</p>
+                                                    <p className="text-xs text-emerald-700">{hijo.documento || 'Sin documento'}</p>
+                                                </div>
+                                                <span className="text-xs font-medium text-emerald-800 bg-white/80 border border-emerald-200 px-2 py-1 rounded-full">
+                                                    {hijo.curso || 'Sin curso activo'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {(selectedContact.perfil?.acudientes?.length ?? 0) > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-800 mb-2">Acudientes</h4>
+                                    <div className="space-y-2">
+                                        {selectedContact.perfil?.acudientes?.map(acudiente => (
+                                            <div key={acudiente.id} className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                                                <p className="text-sm font-semibold text-blue-800">{acudiente.nombre}</p>
+                                                <p className="text-xs text-blue-700 mt-0.5">
+                                                    {acudiente.documento || 'Sin documento'}
+                                                    {acudiente.telefono ? ` · ${acudiente.telefono}` : ''}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {(selectedContact.perfil?.materias?.length ?? 0) > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-800 mb-2">Materias</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedContact.perfil?.materias?.map(materia => (
+                                            <span key={materia} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                {materia}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {(selectedContact.perfil?.cursos_direccion?.length ?? 0) > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-800 mb-2">Direcciones de grupo</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedContact.perfil?.cursos_direccion?.map(curso => (
+                                            <span key={curso} className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                                {curso}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </SidebarLayout>
     );

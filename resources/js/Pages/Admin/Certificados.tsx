@@ -109,7 +109,7 @@ const INSTITUCION = {
     nombre1: 'INSTITUTO PEDAGOGICO',
     nombre2: 'EMPRENDEDORES DEL SABER',
     lema: 'Ser, saber y emprender',
-    legal: 'Aprobado por Resolución No 3769 del 23 - 05 - 2023',
+    legal: 'Aprobado por Resolución No 9385 del 10 - 11 - 2025',
     daneNit: 'DANE 313001800093  -  NIT 73143410 -6',
     firma: 'COORDINADORA',
     sede: 'Villas de la candelaria Mz. 44 Lt. 11 CEL: 3005257812 - 3006529540',
@@ -377,8 +377,9 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         const W   = 210;
         const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
         const { dia, mes, anio } = fechaLiteral();
-        const logoHeader    = await cargarPrimerLogoDisponible(1,    420);
-        const logoWatermark = await cargarPrimerLogoDisponible(0.08, 260);
+        const logoHeader    = await cargarPrimerLogoDisponible(1, 420);
+        // La marca de agua se imprime muy grande: se necesita más resolución para evitar pixelación.
+        const logoWatermark = await cargarPrimerLogoDisponible(0.08, 1400);
 
         const nombreEstudiante = cert.estudiante.toUpperCase();
         const tipoDoc  = cert.estudiante_tipo_documento || 'T.I.';
@@ -446,7 +447,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             doc.text('Ser, saber y emprender', TEXT_CX, 31, { align: 'center' });
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(7.5);
-            doc.text('Aprobado por Resoluci\u00f3n No 3769 del 23 - 05 - 2023', TEXT_CX, 36, { align: 'center' });
+            doc.text('Aprobado por Resoluci\u00f3n No 9385 del 10 - 11 - 2025', TEXT_CX, 36, { align: 'center' });
             doc.text('DANE 313001800093  \u2013  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
 
             // ── Navy divider bar under text block (filled + black border) ──

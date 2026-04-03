@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Profesor;
 use App\Http\Controllers\Controller;
 use App\Models\{Actividad, ConceptoNota, CursoMateria, Entrega, Matricula, Nota, Periodo};
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -138,8 +139,15 @@ class NotaController extends Controller
             ->get()
             ->groupBy('estudiante_id');
 
+        $notasDefinitivas = Nota::where('curso_materia_id', $cmId)
+            ->where('periodo_id', $periodoId)
+            ->where('tipo', 'definitiva')
+            ->whereIn('estudiante_id', $matriculas->pluck('estudiante_id'))
+            ->get()
+            ->keyBy('estudiante_id');
+
         /* ── Build per-student data ── */
-        $estudiantesData = $matriculas->map(function ($mat) use ($actividades, $entregas, $notasManual, $conceptos) {
+        $estudiantesData = $matriculas->map(function ($mat) use ($actividades, $entregas, $notasManual, $conceptos, $notasDefinitivas) {
             $estId       = $mat->estudiante_id;
             $estEntregas = $entregas->get($estId, collect());
 
@@ -194,6 +202,7 @@ class NotaController extends Controller
                 'actividadDetalle' => $actividadDetalle,
                 'manuales'         => (object) $manuales, // force JSON {}
                 'definitiva'       => $definitiva,
+                'indicadorDesempeno' => trim((string) ($notasDefinitivas->get($estId)?->descripcion ?? '')),
             ];
         })->sortBy('nombre')->values();
 
@@ -288,15 +297,33 @@ class NotaController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'notas'                    => 'required|array',
-            'notas.*.concepto_nota_id' => 'required|exists:concepto_notas,id',
-            'notas.*.estudiante_id'    => 'required|exists:users,id',
-            'notas.*.valor'            => 'required|numeric|min:0|max:5',
+            'curso_materia_id'         => 'required|exists:curso_materia,id',
+            'periodo_id'               => 'required|exists:periodos,id',
+            'notas'                    => 'nullable|array',
+            'notas.*.concepto_nota_id' => 'required_with:notas|exists:concepto_notas,id',
+            'notas.*.estudiante_id'    => 'required_with:notas|exists:users,id',
+            'notas.*.valor'            => 'required_with:notas|numeric|min:0|max:5',
+            'indicadores'              => 'nullable|array',
+            'indicadores.*.estudiante_id' => 'required_with:indicadores|exists:users,id',
+            'indicadores.*.texto'      => 'nullable|string|max:255',
         ]);
+
+        $cursoMateriaId = (int) $data['curso_materia_id'];
+        $periodoId = (int) $data['periodo_id'];
+
+        $cm = CursoMateria::findOrFail($cursoMateriaId);
+        if ($cm->profesor_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $periodo = Periodo::findOrFail($periodoId);
+        if (!in_array($periodo->estado, ['activo', 'pendiente'], true)) {
+            return response()->json(['message' => 'El período está cerrado y no permite cambios de notas.'], 422);
+        }
 
         $checked = []; // cache ownership & lock checks per concept
 
-        foreach ($data['notas'] as $notaData) {
+        foreach (($data['notas'] ?? []) as $notaData) {
             $cId = $notaData['concepto_nota_id'];
 
             if (!isset($checked[$cId])) {
@@ -304,14 +331,16 @@ class NotaController extends Controller
                 if (!$concepto || $concepto->tipo !== 'manual') {
                     continue;
                 }
-                $cm      = CursoMateria::find($concepto->curso_materia_id);
-                $periodo = Periodo::find($concepto->periodo_id);
-                if (!$cm || $cm->profesor_id !== auth()->id()) {
+
+                if ((int) $concepto->curso_materia_id !== $cursoMateriaId || (int) $concepto->periodo_id !== $periodoId) {
                     continue;
                 }
-                if (!$periodo || !in_array($periodo->estado, ['activo', 'pendiente'], true)) {
-                    return response()->json(['message' => 'El período está cerrado y no permite cambios de notas.'], 422);
+
+                $cmConcepto = CursoMateria::find($concepto->curso_materia_id);
+                if (!$cmConcepto || $cmConcepto->profesor_id !== auth()->id()) {
+                    continue;
                 }
+
                 $checked[$cId] = $concepto;
             }
 
@@ -332,6 +361,149 @@ class NotaController extends Controller
             );
         }
 
+        $indicadoresMap = collect($data['indicadores'] ?? [])
+            ->mapWithKeys(function ($item) {
+                return [(int) $item['estudiante_id'] => trim((string) ($item['texto'] ?? ''))];
+            });
+
+        $estudiantesIds = collect($data['notas'] ?? [])
+            ->pluck('estudiante_id')
+            ->map(fn($id) => (int) $id)
+            ->merge($indicadoresMap->keys())
+            ->unique()
+            ->values();
+
+        if ($estudiantesIds->isNotEmpty()) {
+            $this->sincronizarDefinitivas($cursoMateriaId, $periodoId, $estudiantesIds, $indicadoresMap);
+        }
+
         return response()->json(['success' => true]);
+    }
+
+    private function sincronizarDefinitivas(int $cursoMateriaId, int $periodoId, Collection $estudiantesIds, Collection $indicadoresMap): void
+    {
+        $conceptos = ConceptoNota::where('curso_materia_id', $cursoMateriaId)
+            ->where('periodo_id', $periodoId)
+            ->orderBy('orden')
+            ->get();
+
+        if ($conceptos->isEmpty()) {
+            return;
+        }
+
+        $manualConceptIds = $conceptos->where('tipo', 'manual')->pluck('id');
+
+        $notasManualesPorEstudiante = Nota::whereIn('estudiante_id', $estudiantesIds)
+            ->whereIn('concepto_nota_id', $manualConceptIds)
+            ->get()
+            ->groupBy('estudiante_id')
+            ->map(fn($rows) => $rows->keyBy('concepto_nota_id'));
+
+        $actividades = Actividad::where('curso_materia_id', $cursoMateriaId)
+            ->where('periodo_id', $periodoId)
+            ->where('activa', true)
+            ->get(['id', 'porcentaje'])
+            ->keyBy('id');
+
+        $entregasPorEstudiante = collect();
+        if ($actividades->isNotEmpty()) {
+            $entregasPorEstudiante = Entrega::whereIn('actividad_id', $actividades->keys())
+                ->whereIn('estudiante_id', $estudiantesIds)
+                ->where('estado', 'calificada')
+                ->get(['actividad_id', 'estudiante_id', 'calificacion'])
+                ->groupBy('estudiante_id')
+                ->map(fn($rows) => $rows->keyBy('actividad_id'));
+        }
+
+        foreach ($estudiantesIds as $estudianteId) {
+            $estudianteId = (int) $estudianteId;
+
+            $actividadNota = $this->calcularNotaActividades(
+                $actividades,
+                $entregasPorEstudiante->get($estudianteId, collect())
+            );
+
+            $manualesEstudiante = $notasManualesPorEstudiante->get($estudianteId, collect());
+
+            $sumDef = 0;
+            $sumDefPeso = 0;
+            foreach ($conceptos as $concepto) {
+                $valor = null;
+
+                if ($concepto->tipo === 'actividades') {
+                    $valor = $actividadNota;
+                } else {
+                    $notaManual = $manualesEstudiante->get($concepto->id);
+                    $valor = $notaManual ? (float) $notaManual->valor : null;
+                }
+
+                if ($valor !== null) {
+                    $sumDef += $valor * (float) $concepto->porcentaje;
+                    $sumDefPeso += (float) $concepto->porcentaje;
+                }
+            }
+
+            $definitiva = $sumDefPeso > 0 ? round($sumDef / $sumDefPeso, 1) : null;
+
+            $debeActualizarIndicador = $indicadoresMap->has($estudianteId);
+            $indicadorTexto = $debeActualizarIndicador ? $indicadoresMap->get($estudianteId) : null;
+            $descripcionIndicador = ($indicadorTexto !== null && $indicadorTexto !== '') ? $indicadorTexto : null;
+
+            if ($definitiva !== null) {
+                $payload = [
+                    'concepto_nota_id' => null,
+                    'valor' => $definitiva,
+                ];
+
+                if ($debeActualizarIndicador) {
+                    $payload['descripcion'] = $descripcionIndicador;
+                }
+
+                Nota::updateOrCreate(
+                    [
+                        'estudiante_id' => $estudianteId,
+                        'curso_materia_id' => $cursoMateriaId,
+                        'periodo_id' => $periodoId,
+                        'tipo' => 'definitiva',
+                    ],
+                    $payload
+                );
+
+                continue;
+            }
+
+            if ($debeActualizarIndicador) {
+                Nota::where('estudiante_id', $estudianteId)
+                    ->where('curso_materia_id', $cursoMateriaId)
+                    ->where('periodo_id', $periodoId)
+                    ->where('tipo', 'definitiva')
+                    ->update(['descripcion' => $descripcionIndicador]);
+            }
+        }
+    }
+
+    private function calcularNotaActividades(Collection $actividades, Collection $entregasEstudiante): ?float
+    {
+        if ($actividades->isEmpty()) {
+            return null;
+        }
+
+        $sumPeso = 0;
+        $sumValor = 0;
+
+        foreach ($actividades as $actividadId => $actividad) {
+            $entrega = $entregasEstudiante->get($actividadId);
+            if (!$entrega || $entrega->calificacion === null) {
+                continue;
+            }
+
+            $peso = (float) $actividad->porcentaje;
+            $calificacion = (float) $entrega->calificacion;
+
+            $sumPeso += $peso;
+            $sumValor += $calificacion * $peso;
+        }
+
+        return $sumPeso > 0 ? round($sumValor / $sumPeso, 1) : null;
     }
 }

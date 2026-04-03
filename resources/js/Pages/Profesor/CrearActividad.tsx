@@ -1,6 +1,6 @@
 import SidebarLayout from '@/Layouts/SidebarLayout';
 import { Head, router, Link } from '@inertiajs/react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { profesorMenuItems } from '@/Config/profesorMenu';
 
 // ── Types ──
@@ -59,6 +59,10 @@ interface Props {
     profesor: { nombre: string };
     cursoMaterias: CursoMateria[];
     actividad: ActividadEdit | null;
+    prefill?: {
+        cursoId: number | null;
+        cursoMateriaId: number | null;
+    };
 }
 
 // ── Constants ──
@@ -88,15 +92,61 @@ const defaultPregunta = (): PreguntaForm => ({
     ], _key: genKey(),
 });
 
-export default function CrearActividad({ profesor, cursoMaterias, actividad }: Props) {
+const DRAFT_VERSION = 1;
+const DRAFT_PREFIX = 'profesor.actividad.autosave';
+
+interface ActividadDraftOpcion {
+    texto: string;
+    es_correcta: boolean;
+}
+
+interface ActividadDraftPregunta {
+    enunciado: string;
+    tipo: 'seleccion_multiple' | 'verdadero_falso' | 'abierta';
+    puntos: string;
+    imagenPreview: string | null;
+    imagenExistente: string | null;
+    opciones: ActividadDraftOpcion[];
+}
+
+interface ActividadDraftData {
+    version: number;
+    step: number;
+    cursoId: string;
+    cursoMateriaId: string;
+    titulo: string;
+    descripcion: string;
+    tipo: string;
+    fechaEntrega: string;
+    porcentaje: string;
+    activa: boolean;
+    permiteEntregaTardia: boolean;
+    maxIntentos: string;
+    cerradaManualmente: boolean;
+    preguntas: ActividadDraftPregunta[];
+    savedAt: string;
+}
+
+export default function CrearActividad({ profesor, cursoMaterias, actividad, prefill }: Props) {
     const isEditing = actividad !== null;
+
+    const prefillCursoMateriaId = prefill?.cursoMateriaId ? prefill.cursoMateriaId.toString() : '';
+    const prefillCursoId = prefill?.cursoId ? prefill.cursoId.toString() : '';
+    const actividadCursoMateriaId = actividad?.cursoMateriaId ? actividad.cursoMateriaId.toString() : '';
+
+    const initialCursoMateriaId = actividadCursoMateriaId || prefillCursoMateriaId;
+    const cursoIdFromMateria = initialCursoMateriaId
+        ? (cursoMaterias.find(cm => cm.id.toString() === initialCursoMateriaId)?.cursoId?.toString() ?? '')
+        : '';
+    const fallbackCursoId = cursoIdFromMateria || prefillCursoId || (cursoMaterias[0]?.cursoId?.toString() ?? '');
 
     // ── Step state ──
     const [step, setStep] = useState(1);
     const totalSteps = 3;
 
     // ── Form state ──
-    const [cursoMateriaId, setCursoMateriaId] = useState(actividad?.cursoMateriaId?.toString() ?? '');
+    const [cursoId, setCursoId] = useState(fallbackCursoId);
+    const [cursoMateriaId, setCursoMateriaId] = useState(initialCursoMateriaId);
     const [titulo, setTitulo] = useState(actividad?.titulo ?? '');
     const [descripcion, setDescripcion] = useState(actividad?.descripcion ?? '');
     const [tipo, setTipo] = useState(actividad?.tipo ?? '');
@@ -189,6 +239,203 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
     });
 
     const esQuizExamen = tipo === 'quiz' || tipo === 'examen';
+    const draftKey = `${DRAFT_PREFIX}.${isEditing ? `edit.${actividad?.id}` : 'create'}`;
+    const [autosaveReady, setAutosaveReady] = useState(false);
+    const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [autosaveSavedAt, setAutosaveSavedAt] = useState<string | null>(null);
+    const [draftRestored, setDraftRestored] = useState(false);
+
+    const clearAutosaveDraft = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.removeItem(draftKey);
+        setAutosaveStatus('idle');
+        setAutosaveSavedAt(null);
+        setDraftRestored(false);
+    }, [draftKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            setAutosaveReady(true);
+            return;
+        }
+
+        try {
+            const raw = window.localStorage.getItem(draftKey);
+            if (!raw) {
+                setAutosaveReady(true);
+                return;
+            }
+
+            const parsed = JSON.parse(raw) as ActividadDraftData;
+            if (parsed?.version !== DRAFT_VERSION) {
+                window.localStorage.removeItem(draftKey);
+                setAutosaveReady(true);
+                return;
+            }
+
+            setStep(Math.min(3, Math.max(1, Number(parsed.step) || 1)));
+            setCursoId(parsed.cursoId ?? '');
+            setCursoMateriaId(parsed.cursoMateriaId ?? '');
+            setTitulo(parsed.titulo ?? '');
+            setDescripcion(parsed.descripcion ?? '');
+            setTipo(parsed.tipo ?? '');
+            setFechaEntrega(parsed.fechaEntrega ?? '');
+            setPorcentaje(parsed.porcentaje ?? '');
+            setActiva(Boolean(parsed.activa));
+            setPermiteEntregaTardia(Boolean(parsed.permiteEntregaTardia));
+            setMaxIntentos(parsed.maxIntentos ?? '');
+            setCerradaManualmente(Boolean(parsed.cerradaManualmente));
+
+            const restoredPreguntas = Array.isArray(parsed.preguntas)
+                ? parsed.preguntas.map((pregunta) => {
+                    const tipoPregunta = (pregunta.tipo === 'abierta' || pregunta.tipo === 'verdadero_falso')
+                        ? pregunta.tipo
+                        : 'seleccion_multiple';
+
+                    let opciones = (pregunta.opciones ?? []).map((opcion) => ({
+                        texto: opcion.texto ?? '',
+                        es_correcta: Boolean(opcion.es_correcta),
+                        _key: genKey(),
+                    }));
+
+                    if (tipoPregunta !== 'abierta' && opciones.length < 2) {
+                        opciones = [defaultOpcion(), defaultOpcion()];
+                    }
+
+                    return {
+                        enunciado: pregunta.enunciado ?? '',
+                        tipo: tipoPregunta,
+                        puntos: pregunta.puntos ?? '1',
+                        imagenFile: null,
+                        imagenPreview: pregunta.imagenPreview ?? null,
+                        imagenExistente: pregunta.imagenExistente ?? null,
+                        opciones: tipoPregunta === 'abierta' ? [] : opciones,
+                        _key: genKey(),
+                    } as PreguntaForm;
+                })
+                : [];
+
+            if (restoredPreguntas.length > 0) {
+                setPreguntas(restoredPreguntas);
+            }
+
+            setAutosaveSavedAt(parsed.savedAt ?? null);
+            setAutosaveStatus(parsed.savedAt ? 'saved' : 'idle');
+            setDraftRestored(true);
+        } catch {
+            setAutosaveStatus('error');
+        } finally {
+            setAutosaveReady(true);
+        }
+    }, [draftKey]);
+
+    const draftSnapshot = useMemo<ActividadDraftData>(() => {
+        return {
+            version: DRAFT_VERSION,
+            step,
+            cursoId,
+            cursoMateriaId,
+            titulo,
+            descripcion,
+            tipo,
+            fechaEntrega,
+            porcentaje,
+            activa,
+            permiteEntregaTardia,
+            maxIntentos,
+            cerradaManualmente,
+            preguntas: preguntas.map((pregunta) => ({
+                enunciado: pregunta.enunciado,
+                tipo: pregunta.tipo,
+                puntos: pregunta.puntos,
+                imagenPreview: pregunta.imagenPreview && pregunta.imagenPreview.startsWith('http') ? pregunta.imagenPreview : null,
+                imagenExistente: pregunta.imagenExistente,
+                opciones: pregunta.opciones.map((opcion) => ({
+                    texto: opcion.texto,
+                    es_correcta: opcion.es_correcta,
+                })),
+            })),
+            savedAt: new Date().toISOString(),
+        };
+    }, [
+        activa,
+        cerradaManualmente,
+        cursoId,
+        cursoMateriaId,
+        descripcion,
+        fechaEntrega,
+        maxIntentos,
+        permiteEntregaTardia,
+        porcentaje,
+        preguntas,
+        step,
+        tipo,
+        titulo,
+    ]);
+
+    useEffect(() => {
+        if (!autosaveReady || typeof window === 'undefined') {
+            return;
+        }
+
+        setAutosaveStatus('saving');
+
+        const timer = window.setTimeout(() => {
+            try {
+                window.localStorage.setItem(draftKey, JSON.stringify(draftSnapshot));
+                setAutosaveSavedAt(draftSnapshot.savedAt);
+                setAutosaveStatus('saved');
+            } catch {
+                setAutosaveStatus('error');
+            }
+        }, 500);
+
+        return () => window.clearTimeout(timer);
+    }, [autosaveReady, draftKey, draftSnapshot]);
+
+    const autosaveText = useMemo(() => {
+        if (autosaveStatus === 'saving') return 'guardando...';
+        if (autosaveStatus === 'error') return 'error de guardado local';
+        if (autosaveSavedAt) {
+            return `guardado: ${new Date(autosaveSavedAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+        }
+        return 'sin cambios guardados';
+    }, [autosaveSavedAt, autosaveStatus]);
+
+    const cursosDisponibles = useMemo(() => {
+        const porCurso = new Map<number, { id: number; nombre: string; nivel: string }>();
+        for (const cm of cursoMaterias) {
+            if (!porCurso.has(cm.cursoId)) {
+                porCurso.set(cm.cursoId, { id: cm.cursoId, nombre: cm.curso, nivel: cm.nivel });
+            }
+        }
+        return Array.from(porCurso.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }, [cursoMaterias]);
+
+    const materiasDelCurso = useMemo(() => {
+        if (!cursoId) return [];
+        return cursoMaterias
+            .filter(cm => cm.cursoId.toString() === cursoId)
+            .sort((a, b) => a.materia.localeCompare(b.materia));
+    }, [cursoMaterias, cursoId]);
+
+    useEffect(() => {
+        if (!cursoId) {
+            setCursoMateriaId('');
+            return;
+        }
+
+        if (materiasDelCurso.length === 0) {
+            setCursoMateriaId('');
+            return;
+        }
+
+        const materiaValida = materiasDelCurso.some(cm => cm.id.toString() === cursoMateriaId);
+        if (!materiaValida) {
+            setCursoMateriaId(materiasDelCurso[0].id.toString());
+        }
+    }, [cursoId, materiasDelCurso, cursoMateriaId]);
+
     const cursoMateriaSeleccionado = useMemo(
         () => cursoMaterias.find(cm => cm.id.toString() === cursoMateriaId),
         [cursoMaterias, cursoMateriaId]
@@ -303,8 +550,14 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
     // ── Submit ──
     const handleSubmit = () => {
         if (!step1Valid || !step2Valid) return;
-        setProcessing(true);
         setSubmitError(null);
+
+        if (preguntasValidationError) {
+            setSubmitError(preguntasValidationError);
+            return;
+        }
+
+        setProcessing(true);
 
         const formData = new FormData();
         formData.append('curso_materia_id', cursoMateriaId);
@@ -347,12 +600,14 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
         if (isEditing) {
             router.put(`/profesor/actividades/${actividad!.id}`, formData as any, {
                 forceFormData: true,
+                onSuccess: () => clearAutosaveDraft(),
                 onError: errorHandler,
                 onFinish: () => setProcessing(false),
             });
         } else {
             router.post('/profesor/actividades', formData, {
                 forceFormData: true,
+                onSuccess: () => clearAutosaveDraft(),
                 onError: errorHandler,
                 onFinish: () => setProcessing(false),
             });
@@ -361,6 +616,45 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
 
     // ── Total puntos ──
     const totalPuntos = preguntas.reduce((s, p) => s + (parseFloat(p.puntos) || 0), 0);
+
+    const preguntasValidationError = useMemo(() => {
+        if (!esQuizExamen) return null;
+
+        if (preguntas.length === 0) {
+            return 'Debes agregar al menos una pregunta para quiz o examen.';
+        }
+
+        for (let i = 0; i < preguntas.length; i += 1) {
+            const p = preguntas[i];
+            const nro = i + 1;
+
+            if (!p.enunciado.trim()) {
+                return `La pregunta ${nro} no tiene enunciado.`;
+            }
+
+            if ((parseFloat(p.puntos) || 0) <= 0) {
+                return `La pregunta ${nro} debe tener un puntaje mayor a 0.`;
+            }
+
+            if (p.tipo === 'abierta') {
+                continue;
+            }
+
+            if (p.opciones.length < 2) {
+                return `La pregunta ${nro} debe tener al menos 2 opciones.`;
+            }
+
+            if (p.opciones.some(o => !o.texto.trim())) {
+                return `La pregunta ${nro} tiene opciones vacías.`;
+            }
+
+            if (!p.opciones.some(o => o.es_correcta)) {
+                return `La pregunta ${nro} debe tener una opción correcta.`;
+            }
+        }
+
+        return null;
+    }, [esQuizExamen, preguntas]);
 
     return (
         <>
@@ -424,25 +718,75 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
                     ))}
                 </div>
 
+                <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        <p className="text-sm text-gray-700">
+                            <span className="font-semibold">Guardado automático:</span> {autosaveText}
+                        </p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                            Se guarda localmente con cada cambio. Los archivos adjuntos e imágenes subidas desde archivo no se guardan en este borrador.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={clearAutosaveDraft}
+                        className="w-fit px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                        Limpiar borrador local
+                    </button>
+                </div>
+
+                {draftRestored && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-700">
+                        Se recuperó un borrador guardado automáticamente para que continúes donde habías quedado.
+                    </div>
+                )}
+
                 {/* ══════════ STEP 1: Información ══════════ */}
                 {step === 1 && (
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                         <div className="p-5 sm:p-7 space-y-6">
 
                             {/* Curso y Materia */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Curso y Materia *</label>
-                                <select
-                                    value={cursoMateriaId}
-                                    onChange={e => setCursoMateriaId(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577]"
-                                >
-                                    <option value="">Seleccionar...</option>
-                                    {cursoMaterias.map(cm => (
-                                        <option key={cm.id} value={cm.id}>{cm.materia} — {cm.curso}</option>
-                                    ))}
-                                </select>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Curso *</label>
+                                    <select
+                                        value={cursoId}
+                                        onChange={e => setCursoId(e.target.value)}
+                                        disabled={isEditing}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577] disabled:bg-gray-50 disabled:text-gray-500"
+                                    >
+                                        <option value="">Seleccionar curso...</option>
+                                        {cursosDisponibles.map(curso => (
+                                            <option key={curso.id} value={curso.id}>{curso.nombre} · {curso.nivel}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Materia *</label>
+                                    <select
+                                        value={cursoMateriaId}
+                                        onChange={e => setCursoMateriaId(e.target.value)}
+                                        disabled={!cursoId || isEditing}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#293577] focus:border-[#293577] disabled:bg-gray-50 disabled:text-gray-500"
+                                    >
+                                        <option value="">Seleccionar materia...</option>
+                                        {materiasDelCurso.map(cm => (
+                                            <option key={cm.id} value={cm.id}>{cm.materia}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
+
+                            {cursoMateriaSeleccionado && (
+                                <div className="-mt-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2">
+                                    <p className="text-xs text-blue-700 font-medium">
+                                        Asignando a: <span className="font-bold">{cursoMateriaSeleccionado.materia}</span> en <span className="font-bold">{cursoMateriaSeleccionado.curso}</span>.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Título */}
                             <div>
@@ -968,7 +1312,7 @@ export default function CrearActividad({ profesor, cursoMaterias, actividad }: P
                             </button>
                             <button
                                 onClick={handleSubmit}
-                                disabled={processing || !step1Valid || !step2Valid}
+                                disabled={processing || !step1Valid || !step2Valid || !!preguntasValidationError}
                                 className="px-8 py-2.5 bg-[#293577] text-white rounded-xl text-sm font-bold hover:bg-[#181b49] disabled:opacity-40 transition-colors flex items-center gap-2"
                             >
                                 {processing ? (
