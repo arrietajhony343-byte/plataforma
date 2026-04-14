@@ -26,12 +26,15 @@ class ProfileController extends Controller
             $user->loadMissing('hijos:id,name,dificultad_aprendizaje,dificultad_aprendizaje_desc,diagnostico_salud,diagnostico_salud_desc,alergias,alergias_desc,nombre_madre,telefono_madre,ocupacion_madre,nombre_padre,telefono_padre,ocupacion_padre,convive_con,numero_hermanos,lugar_que_ocupa_familia');
         }
 
+        $user->loadMissing('sede:id,nombre');
+
         $rolLabel = match ($user->getRoleNames()->first()) {
-            'admin'      => 'Administrador',
-            'profesor'   => 'Docente',
-            'padre'      => 'Padre de Familia',
-            'estudiante' => 'Estudiante',
-            default      => 'Usuario',
+            'admin'        => 'Administrador',
+            'coordinador'  => 'Coordinador',
+            'profesor'     => 'Docente',
+            'padre'        => 'Padre de Familia',
+            'estudiante'   => 'Estudiante',
+            default        => 'Usuario',
         };
 
         $acudiente = $user->hasRole('estudiante') ? $user->padres->first() : null;
@@ -84,6 +87,7 @@ class ProfileController extends Controller
                 'eps'         => $user->eps,
                 'acudiente_nombre' => $acudiente?->name,
                 'acudiente_telefono' => $acudiente?->telefono,
+                'sede_nombre' => $user->hasRole('coordinador') ? $user->sede?->nombre : null,
             ],
             'hijosProfile' => $hijosProfile,
         ]);

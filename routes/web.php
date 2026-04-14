@@ -155,6 +155,17 @@ Route::middleware(['auth', 'verified', 'role:admin|coordinador'])->prefix('admin
     Route::put('/pagos/conceptos/{concepto}', [PagoController::class, 'updateConcepto'])->name('pagos.conceptos.update');
     Route::put('/pagos/conceptos/{concepto}/toggle', [PagoController::class, 'toggleConcepto'])->name('pagos.conceptos.toggle');
     Route::delete('/pagos/conceptos/{concepto}', [PagoController::class, 'destroyConcepto'])->name('pagos.conceptos.destroy');
+
+    // Contabilidad (read-only para coordinador también)
+    Route::get('/contabilidad', [ContabilidadController::class, 'index'])->name('contabilidad');
+
+    // Cafetería (coordinador ve y opera solo su sede)
+    Route::get('/cafeteria', [CafeteriaController::class, 'index'])->name('cafeteria');
+    Route::post('/cafeteria/productos', [CafeteriaController::class, 'storeProducto'])->name('cafeteria.productos.store');
+    Route::put('/cafeteria/productos/{producto}', [CafeteriaController::class, 'updateProducto'])->name('cafeteria.productos.update');
+    Route::delete('/cafeteria/productos/{producto}', [CafeteriaController::class, 'destroyProducto'])->name('cafeteria.productos.destroy');
+    Route::post('/cafeteria/compras', [CafeteriaController::class, 'registrarCompra'])->name('cafeteria.compras.store');
+    Route::post('/cafeteria/ventas', [CafeteriaController::class, 'registrarVenta'])->name('cafeteria.ventas.store');
 });
 
 // Rutas de Administrador — exclusivas para admin
@@ -191,17 +202,6 @@ Route::middleware(['auth', 'verified', 'role:admin'])->prefix('admin')->name('ad
 
     // Pagos
     // (movido al grupo role:admin|coordinador)
-
-    // Contabilidad (read-only)
-    Route::get('/contabilidad', [ContabilidadController::class, 'index'])->name('contabilidad');
-
-    // Cafetería
-    Route::get('/cafeteria', [CafeteriaController::class, 'index'])->name('cafeteria');
-    Route::post('/cafeteria/productos', [CafeteriaController::class, 'storeProducto'])->name('cafeteria.productos.store');
-    Route::put('/cafeteria/productos/{producto}', [CafeteriaController::class, 'updateProducto'])->name('cafeteria.productos.update');
-    Route::delete('/cafeteria/productos/{producto}', [CafeteriaController::class, 'destroyProducto'])->name('cafeteria.productos.destroy');
-    Route::post('/cafeteria/compras', [CafeteriaController::class, 'registrarCompra'])->name('cafeteria.compras.store');
-    Route::post('/cafeteria/ventas', [CafeteriaController::class, 'registrarVenta'])->name('cafeteria.ventas.store');
 });
 
 // Rutas de Profesor

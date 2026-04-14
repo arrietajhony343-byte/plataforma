@@ -95,6 +95,33 @@ const diasLabel: Record<string, string> = {
     viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo',
 };
 
+/**
+ * Fusiona bloques consecutivos (hora_fin ≈ hora_inicio del siguiente, tolerancia 5 min).
+ * Devuelve bloques con hora_fin extendida y campo `isMerged` si se fusionaron varios.
+ */
+function mergeBloques<T extends { hora_inicio: string; hora_fin: string }>(bloques: T[]): (T & { isMerged: boolean })[] {
+    if (bloques.length === 0) return [];
+    const toMin = (h: string) => { const [hh, mm] = h.split(':'); return +hh * 60 + +mm; };
+    const result: (T & { isMerged: boolean })[] = [];
+    let i = 0;
+    while (i < bloques.length) {
+        const cur = { ...bloques[i], isMerged: false } as T & { isMerged: boolean };
+        while (i + 1 < bloques.length) {
+            const next = bloques[i + 1];
+            if (Math.abs(toMin(cur.hora_fin) - toMin(next.hora_inicio)) <= 5) {
+                cur.hora_fin = next.hora_fin;
+                cur.isMerged = true;
+                i++;
+            } else {
+                break;
+            }
+        }
+        result.push(cur);
+        i++;
+    }
+    return result;
+}
+
 function getDiaSemana(fecha: string): string {
     const d = new Date(fecha + 'T12:00:00');
     const map = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -226,13 +253,14 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
         }
     }, [cursoSel, materiasDisponibles]);
 
-    // Bloques from initial props for selected date & curso_materia
+    // Bloques from initial props for selected date & curso_materia — consecutive merged
     const bloquesHoy = useMemo(() => {
         if (!cursoMateriaId) return [];
         const dia = getDiaSemana(fechaSel);
-        return bloques
+        const raw = bloques
             .filter(b => b.curso_materia_id === cursoMateriaId && b.dia === dia)
             .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+        return mergeBloques(raw);
     }, [cursoMateriaId, fechaSel, bloques]);
 
     const tieneClaseHoy = bloquesHoy.length > 0;
@@ -452,16 +480,18 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
     const activeBloques = bloquesDelDia.length > 0 ? bloquesDelDia : (bloquesHoy.length > 0 ? bloquesHoy.map(b => ({ id: b.id, hora_inicio: b.hora_inicio, hora_fin: b.hora_fin, salon: b.salon })) : []);
     const hasBloques = activeBloques.length > 0;
 
-    // Schedules for the week for the selected curso_materia
+    // Schedules for the week for the selected curso_materia — consecutive blocks merged
     const horarioSemanal = useMemo(() => {
         if (!cursoMateriaId) return [];
         const dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
         return dias.map(dia => ({
             dia,
             label: diasLabel[dia],
-            bloques: bloques
-                .filter(b => b.curso_materia_id === cursoMateriaId && b.dia === dia)
-                .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio)),
+            bloques: mergeBloques(
+                bloques
+                    .filter(b => b.curso_materia_id === cursoMateriaId && b.dia === dia)
+                    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
+            ),
         })).filter(d => d.bloques.length > 0);
     }, [cursoMateriaId, bloques]);
 
@@ -761,6 +791,12 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                                     <span className="text-sm font-bold text-[#293577]">
                                                         {formatHora(bloque.hora_inicio)} — {formatHora(bloque.hora_fin)}
                                                     </span>
+                                                    {(bloque as any).isMerged && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-200">
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                                            Bloques combinados
+                                                        </span>
+                                                    )}
                                                     {bloque.salon && (
                                                         <span className="text-xs text-gray-500 font-medium">Salón: {bloque.salon}</span>
                                                     )}

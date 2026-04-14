@@ -58,6 +58,7 @@ export default function SidebarLayout({
     const { url } = page;
     const user = page.props.auth.user;
     const userName = (userInfo?.name?.trim() || (user as any)?.name || 'Usuario') as string;
+    const userFoto: string | null = userInfo?.avatar || (user as any)?.foto_url || null;
 
     // Si el usuario es coordinador, ignorar el menú recibido y usar el menú de coordinador
     const effectiveMenuItems = (user as any)?.rol === 'coordinador' ? coordinadorMenuItems : menuItems;
@@ -194,8 +195,8 @@ export default function SidebarLayout({
                 {userInfo && (
                     <div className="px-6 py-4 border-b border-white/10">
                         <div className="flex items-center gap-3">
-                            {userInfo.avatar ? (
-                                <img src={userInfo.avatar} alt={userName} className="w-12 h-12 rounded-full object-cover" />
+                            {userFoto ? (
+                                <img src={userFoto} alt={userName} className="w-12 h-12 rounded-full object-cover border-2 border-white/30" />
                             ) : (
                                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
                                     {userName.charAt(0).toUpperCase()}
@@ -391,10 +392,16 @@ export default function SidebarLayout({
                                     onClick={toggleUserMenu}
                                     className="flex items-center gap-2 hover:bg-white/10 p-2 rounded-lg transition-colors"
                                 >
-                                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center border border-white/30">
-                                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                                        </svg>
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center border border-white/30 overflow-hidden">
+                                        {userFoto ? (
+                                            <img src={userFoto} alt={userName} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full bg-white/20 flex items-center justify-center">
+                                                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                                </svg>
+                                            </div>
+                                        )}
                                     </div>
                                 </button>
 

@@ -120,34 +120,47 @@ class AsistenciaController extends Controller
                 'documento' => $e->documento ?? '',
             ]);
 
+        // Horario bloques for this curso_materia on this day — consecutive blocks merged
+        $diaSemana  = $this->getDiaSemana($fecha);
+        $bloquesRaw = HorarioBloque::where('curso_materia_id', $cmId)
+            ->where('dia', $diaSemana)
+            ->orderBy('hora_inicio')
+            ->get();
+
+        $bloquesDelDia = $this->mergeBloques($bloquesRaw);
+
+        // Map any original block ID → primary block ID of its merged group
+        $blockToPrimary = [];
+        foreach ($bloquesDelDia as $grp) {
+            foreach ($grp['ids'] as $bid) {
+                $blockToPrimary[$bid] = $grp['id'];
+            }
+        }
+
         // Existing attendance records for this date + curso_materia
+        // Normalize bloque IDs to their primary (merged group leader)
         $registros = Asistencia::where('curso_materia_id', $cmId)
             ->whereDate('fecha', $fecha)
             ->get()
-            ->keyBy(fn ($a) => $a->estudiante_id . '-' . ($a->horario_bloque_id ?? 0));
-
-        // Horario bloques for this curso_materia on this day
-        $diaSemana = $this->getDiaSemana($fecha);
-        $bloquesDelDia = HorarioBloque::where('curso_materia_id', $cmId)
-            ->where('dia', $diaSemana)
-            ->orderBy('hora_inicio')
-            ->get()
-            ->map(fn ($b) => [
-                'id'          => $b->id,
-                'hora_inicio' => $b->hora_inicio,
-                'hora_fin'    => $b->hora_fin,
-                'salon'       => $b->salon,
-            ]);
+            ->keyBy(fn ($a) => $a->estudiante_id . '-' . (
+                $a->horario_bloque_id
+                    ? ($blockToPrimary[$a->horario_bloque_id] ?? $a->horario_bloque_id)
+                    : 0
+            ));
 
         // Build attendance matrix
         $asistencias = [];
         foreach ($registros as $reg) {
+            $primaryId = $reg->horario_bloque_id
+                ? ($blockToPrimary[$reg->horario_bloque_id] ?? $reg->horario_bloque_id)
+                : null;
+
             $asistencias[] = [
-                'id'               => $reg->id,
-                'estudiante_id'    => $reg->estudiante_id,
-                'horario_bloque_id'=> $reg->horario_bloque_id,
-                'estado'           => $reg->estado,
-                'observacion'      => $reg->observacion,
+                'id'                => $reg->id,
+                'estudiante_id'     => $reg->estudiante_id,
+                'horario_bloque_id' => $primaryId,
+                'estado'            => $reg->estado,
+                'observacion'       => $reg->observacion,
             ];
         }
 
@@ -351,5 +364,68 @@ class AsistenciaController extends Controller
         ];
         $day = date('l', strtotime($fecha));
         return $map[$day] ?? 'lunes';
+    }
+
+    /**
+     * Convierte "HH:MM" o "HH:MM:SS" a minutos desde medianoche.
+     */
+    private function timeToMinutes(string $time): int
+    {
+        $parts = explode(':', $time);
+        return (int) $parts[0] * 60 + (int) ($parts[1] ?? 0);
+    }
+
+    /**
+     * Fusiona bloques consecutivos de la misma materia en un solo "super-bloque".
+     * Dos bloques son consecutivos si la hora_fin de uno y la hora_inicio del
+     * siguiente difieren en ≤ 5 minutos.
+     *
+     * Devuelve un array de grupos, cada uno con:
+     *   id          → ID del primer bloque (clave primaria de asistencia)
+     *   hora_inicio → del primer bloque
+     *   hora_fin    → del último bloque fusionado
+     *   salon       → del primer bloque
+     *   ids         → todos los IDs originales incluidos en el grupo
+     */
+    private function mergeBloques(\Illuminate\Support\Collection $bloques): array
+    {
+        if ($bloques->isEmpty()) {
+            return [];
+        }
+
+        $result   = [];
+        $all      = $bloques->values()->all();
+        $i        = 0;
+
+        while ($i < count($all)) {
+            $b       = $all[$i];
+            $primary = [
+                'id'          => $b->id,
+                'hora_inicio' => $b->hora_inicio,
+                'hora_fin'    => $b->hora_fin,
+                'salon'       => $b->salon,
+                'ids'         => [$b->id],
+            ];
+
+            // Extender mientras el siguiente sea consecutivo
+            while (($i + 1) < count($all)) {
+                $next         = $all[$i + 1];
+                $endMinutes   = $this->timeToMinutes($primary['hora_fin']);
+                $startMinutes = $this->timeToMinutes($next->hora_inicio);
+
+                if (abs($endMinutes - $startMinutes) <= 5) {
+                    $primary['hora_fin'] = $next->hora_fin;
+                    $primary['ids'][]    = $next->id;
+                    $i++;
+                } else {
+                    break;
+                }
+            }
+
+            $result[] = $primary;
+            $i++;
+        }
+
+        return $result;
     }
 }

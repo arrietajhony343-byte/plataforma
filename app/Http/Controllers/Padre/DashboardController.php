@@ -69,7 +69,7 @@ class DashboardController extends Controller
 
         $promedio = $notasRef->isNotEmpty() ? round((float) $notasRef->avg('valor'), 1) : 0.0;
 
-        $materiasTotales = $notasRef
+        $materiasTotales = $cursoMateriaIds->count() ?: $notasRef
             ->pluck('curso_materia_id')
             ->filter()
             ->unique()
