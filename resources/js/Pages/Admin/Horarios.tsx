@@ -1783,8 +1783,7 @@ export default function Horarios({ profesores: profesoresRaw, horarios, cursos, 
                                                 <option value="todas">Todas las sedes</option>
                                                 {sedes.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
                                             </select>
-                                            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
-                                        </div>
+                                            </div>
                                     )}
                                     <span className="text-[10px] text-gray-400">{stats.cursosConClases} de {stats.totalCursos} con horario</span>
                                 </div>

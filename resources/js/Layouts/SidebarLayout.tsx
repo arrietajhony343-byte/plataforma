@@ -179,12 +179,12 @@ export default function SidebarLayout({
                         className="w-32 h-32 object-contain drop-shadow-lg"
                         onError={() => {
                             if (logoSrc === '/storage/logo.png') {
-                                setLogoSrc('/storage/logo-certificados.png');
+                                setLogoSrc('/logo.png');
                                 return;
                             }
 
-                            if (logoSrc === '/storage/logo-certificados.png') {
-                                setLogoSrc('/logo-certificados.png');
+                            if (logoSrc !== '/logo.png') {
+                                setLogoSrc('/logo.png');
                             }
                         }}
                     />

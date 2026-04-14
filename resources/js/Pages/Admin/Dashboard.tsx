@@ -25,25 +25,25 @@ export default function Dashboard({ stats, actividadReciente }: Props) {
         {
             label: 'Total Estudiantes',
             value: stats.totalEstudiantes,
-            image: '/storage/total-estudiantes.png',
+            image: '/total-estudiantes.png',
             href: '/admin/estudiantes',
         },
         {
             label: 'Cursos Activos',
             value: stats.cursosActivos,
-            image: '/storage/cursos-activos.png',
+            image: '/cursos-activos.png',
             href: '/admin/cursos',
         },
         {
             label: 'Profesores',
             value: stats.totalProfesores,
-            image: '/storage/profesores.png',
+            image: '/profesores.png',
             href: '/admin/usuarios',
         },
         {
             label: 'Calendario',
             value: `${stats.diasRestantes} días`,
-            image: '/storage/calendario.png',
+            image: '/calendario.png',
             href: '/admin/periodos',
         },
     ];

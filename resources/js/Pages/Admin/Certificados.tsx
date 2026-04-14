@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { adminMenuItems } from '@/Config/adminMenu';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import axios from 'axios';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface TipoCertificado {
@@ -197,20 +198,18 @@ const cargarImagenConOpacidad = async (src: string, opacidad = 1, maxPx = 400): 
                 ctx.drawImage(img, 0, 0, cW, cH);
                 // PNG siempre (preserva transparencia del logo); JPEG solo si opacidad=1 Y no es PNG con alpha
                 // Para simplificar: siempre PNG con fondo blanco cuando opacidad=1
-                if (opacidad >= 1) {
-                    // Redibujar sobre fondo blanco para evitar fondo negro en JPEG
-                    const canvas2 = document.createElement('canvas');
-                    canvas2.width  = cW;
-                    canvas2.height = cH;
-                    const ctx2 = canvas2.getContext('2d');
-                    if (!ctx2) { res(null); return; }
-                    ctx2.fillStyle = '#ffffff';
-                    ctx2.fillRect(0, 0, cW, cH);
-                    ctx2.drawImage(img, 0, 0, cW, cH);
-                    res(canvas2.toDataURL('image/jpeg', 0.92));
-                } else {
-                    res(canvas.toDataURL('image/png'));
-                }
+                // Siempre JPEG con fondo blanco para mantener tamaño mínimo
+                const canvas2 = document.createElement('canvas');
+                canvas2.width  = cW;
+                canvas2.height = cH;
+                const ctx2 = canvas2.getContext('2d');
+                if (!ctx2) { res(null); return; }
+                ctx2.fillStyle = '#ffffff';
+                ctx2.fillRect(0, 0, cW, cH);
+                ctx2.globalAlpha = opacidad;
+                ctx2.drawImage(img, 0, 0, cW, cH);
+                const quality = opacidad >= 1 ? 0.65 : 0.25;
+                res(canvas2.toDataURL('image/jpeg', quality));
             };
             img.onerror = () => res(null);
             img.src = base64;
@@ -392,7 +391,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
 
         /* ─── Header ─── */
         // Misma geometria de boletines para mantener consistencia visual.
-        const LOGO_X = 7.5, LOGO_Y = 2.5, LOGO_W = 38, LOGO_H = 41;
+        const LOGO_X = 7.5, LOGO_Y = 18, LOGO_W = 38, LOGO_H = 41;
         const TRIANG_MAX = 50;
         const TRIANG_MID = 33;
         const TRIANG_MIN = 16;
@@ -436,19 +435,19 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             doc.setTextColor(10, 35, 90);
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(19);
-            doc.text('INSTITUTO PEDAGOGICO', TEXT_CX, 14, { align: 'center' });
+            doc.text('INSTITUTO PEDAGOGICO', TEXT_CX, 25, { align: 'center' });
             doc.setFontSize(17);
-            doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 24, { align: 'center' });
+            doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 35, { align: 'center' });
 
             // ── Sub-lines ──
             doc.setTextColor(25, 25, 25);
             doc.setFont('times', 'italic');
             doc.setFontSize(9);
-            doc.text('Ser, saber y emprender', TEXT_CX, 31, { align: 'center' });
+            doc.text('Ser, saber y emprender', TEXT_CX, 43, { align: 'center' });
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(7.5);
-            doc.text('Aprobado por Resoluci\u00f3n No 9385 del 10 - 11 - 2025', TEXT_CX, 36, { align: 'center' });
-            doc.text('DANE 313001800093  \u2013  NIT 73143410 - 6', TEXT_CX, 41, { align: 'center' });
+            doc.text('Aprobado por Resoluci\u00f3n No 9385 del 10 - 11 - 2025', TEXT_CX, 49, { align: 'center' });
+            doc.text('DANE 313001800093  \u2013  NIT 73143410 - 6', TEXT_CX, 54, { align: 'center' });
 
             // ── Navy divider bar under text block (filled + black border) ──
             const barX = LOGO_X + LOGO_W + 7;
@@ -456,7 +455,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             doc.setFillColor(10, 35, 90);
             doc.setDrawColor(0, 0, 0);
             doc.setLineWidth(0.35);
-            doc.rect(barX, 46, barW, 2.1, 'FD');
+            doc.rect(barX, 59, barW, 2.1, 'FD');
         };
 
         /* ─── Watermark ─── */
@@ -502,10 +501,10 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             doc.setTextColor(20, 20, 20);
             doc.setFont('times', 'bold');
             doc.setFontSize(10.5);
-            doc.text('LA SUSCRITA COORDINADORA DEL', W / 2, 60, { align: 'center' });
-            doc.text('INSTITUTO PEDAG\u00d3GICO EMPRENDEDORES DEL SABER', W / 2, 68, { align: 'center' });
+            doc.text('LA SUSCRITA COORDINADORA DEL', W / 2, 75, { align: 'center' });
+            doc.text('INSTITUTO PEDAG\u00d3GICO EMPRENDEDORES DEL SABER', W / 2, 83, { align: 'center' });
             doc.setFontSize(13);
-            doc.text('CERTIFICA:', W / 2, 84, { align: 'center' });
+            doc.text('CERTIFICA:', W / 2, 99, { align: 'center' });
         };
 
         /* ─── Assemble page ─── */
@@ -533,7 +532,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                 { text: nivelAcademico, bold: true },
                 { text: '.' },
             ];
-            let y = renderRichParagraph(doc, segs, marX, 94, bodyW, fSize, 'times', lH);
+            let y = renderRichParagraph(doc, segs, marX, 120, bodyW, fSize, 'times', lH);
 
             const notas = cert.notas?.length > 0
                 ? cert.notas.map(n => [
@@ -628,7 +627,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                 ];
             }
 
-            let y = renderRichParagraph(doc, segs, marX, 94, bodyW, fSize, 'times', lH);
+            let y = renderRichParagraph(doc, segs, marX, 120, bodyW, fSize, 'times', lH);
 
             const cierreBase = detalleAdicional && !codigo.includes('paz')
                 ? `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. ${detalleAdicional}, a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.`
@@ -658,22 +657,27 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         setGeneratingCertId(cert.id);
 
         try {
+            // 1. Generar PDF en el navegador y descargarlo para el admin
             const { blob, fileName } = await generarPDF(cert, true);
-            const pdf = new File([blob], fileName, { type: 'application/pdf' });
 
-            router.post(
-                `/admin/certificados/${cert.id}/generar`,
-                { archivo: pdf },
-                {
-                    forceFormData: true,
-                    preserveScroll: true,
-                    onSuccess: () => setShowModalGestionar(null),
-                    onFinish: () => setGeneratingCertId(null),
+            // 2. Subir el PDF al servidor para que el padre pueda descargarlo
+            const form = new FormData();
+            form.append('archivo', new File([blob], fileName, { type: 'application/pdf' }));
+
+            await axios.post(`/admin/certificados/${cert.id}/generar`, form);
+
+            // 3. Refrescar datos de Inertia y actualizar modal
+            router.reload({
+                onSuccess: () => {
+                    setShowModalGestionar(prev =>
+                        prev ? { ...prev, estado: 'listo', archivo: fileName } : null
+                    );
                 },
-            );
+            });
         } catch {
+            alert('No fue posible generar o subir el PDF. Verifica que el servidor esté disponible.');
+        } finally {
             setGeneratingCertId(null);
-            alert('No fue posible generar el PDF del certificado.');
         }
     }, [generarPDF]);
 

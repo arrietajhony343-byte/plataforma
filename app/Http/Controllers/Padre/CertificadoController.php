@@ -64,20 +64,20 @@ class CertificadoController extends Controller
                     ->first();
 
                 return [
-                    'id' => $c->id,
-                    'tipo' => $c->tipoCertificado?->nombre ?? ($c->tipo ?: 'Certificado'),
-                    'precio' => (int) ($c->tipoCertificado?->precio ?? 0),
-                    'descripcion' => $c->descripcion,
-                    'estado' => $c->estado,
+                    'id'                 => $c->id,
+                    'tipo'               => $c->tipoCertificado?->nombre ?? ($c->tipo ?: 'Certificado'),
+                    'precio'             => (int) ($c->tipoCertificado?->precio ?? 0),
+                    'descripcion'        => $c->descripcion,
+                    'estado'             => $c->estado,
                     'archivo_disponible' => !empty($c->archivo),
-                    'fecha_solicitud' => $c->fecha_solicitud?->format('Y-m-d'),
-                    'fecha_entrega' => $c->fecha_entrega?->format('Y-m-d'),
-                    'pago' => $pago ? [
-                        'id' => $pago->id,
-                        'estado' => $pago->estado,
-                        'monto' => (float) $pago->monto,
-                        'fecha_vencimiento' => $pago->fecha_vencimiento?->format('Y-m-d'),
-                        'fecha_pago' => $pago->fecha_pago?->format('Y-m-d'),
+                    'fecha_solicitud'    => $c->fecha_solicitud?->format('Y-m-d'),
+                    'fecha_entrega'      => $c->fecha_entrega?->format('Y-m-d'),
+                    'pago'               => $pago ? [
+                        'id'               => $pago->id,
+                        'estado'           => $pago->estado,
+                        'monto'            => (float) $pago->monto,
+                        'fecha_vencimiento'=> $pago->fecha_vencimiento?->format('Y-m-d'),
+                        'fecha_pago'       => $pago->fecha_pago?->format('Y-m-d'),
                     ] : null,
                 ];
             })
@@ -205,6 +205,14 @@ class CertificadoController extends Controller
 
         if (!$certificado->archivo || !Storage::exists($certificado->archivo)) {
             return redirect()->back()->with('error', 'El archivo del certificado no está disponible.');
+        }
+
+        // Marcar como entregado la primera vez que el padre descarga
+        if ($certificado->estado === 'listo') {
+            $certificado->update([
+                'estado'        => 'entregado',
+                'fecha_entrega' => now(),
+            ]);
         }
 
         return Storage::download($certificado->archivo);

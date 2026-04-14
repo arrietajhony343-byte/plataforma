@@ -243,6 +243,11 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
         router.put(`/admin/pagos/conceptos/${c.id}/toggle`);
     }, []);
 
+    const handleEliminarConcepto = useCallback((c: ConceptoPago) => {
+        if (!confirm(`¿Eliminar permanentemente el concepto "${c.nombre}"?`)) return;
+        router.delete(`/admin/pagos/conceptos/${c.id}`);
+    }, []);
+
     const abrirEditConcepto = (c: ConceptoPago) => {
         setEditConcepto(c);
         setFormConcepto({ nombre: c.nombre, descripcion: c.descripcion ?? '', monto: c.monto.toString(), periodicidad: c.periodicidad });
@@ -772,14 +777,22 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                                     </button>
                                                 </td>
                                                 <td className="px-5 py-3">
-                                                    <div className="flex justify-end">
+                                                    <div className="flex justify-end gap-1">
                                                         {!c.es_certificado ? (
-                                                            <button onClick={() => abrirEditConcepto(c)} title="Editar"
-                                                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-[#293577] transition-colors">
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                                </svg>
-                                                            </button>
+                                                            <>
+                                                                <button onClick={() => abrirEditConcepto(c)} title="Editar"
+                                                                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-[#293577] transition-colors">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                    </svg>
+                                                                </button>
+                                                                <button onClick={() => handleEliminarConcepto(c)} title="Eliminar"
+                                                                    className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                    </svg>
+                                                                </button>
+                                                            </>
                                                         ) : (
                                                             <span className="text-xs text-gray-400">Gestionado en Certificados</span>
                                                         )}
@@ -823,12 +836,20 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                                             </span>
                                         </div>
                                         {!c.es_certificado ? (
-                                            <button onClick={() => abrirEditConcepto(c)}
-                                                className="p-2 rounded-lg bg-gray-100 text-gray-600">
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                            </button>
+                                            <div className="flex gap-1">
+                                                <button onClick={() => abrirEditConcepto(c)}
+                                                    className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-[#293577] transition-colors">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                                <button onClick={() => handleEliminarConcepto(c)}
+                                                    className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         ) : (
                                             <span className="text-xs text-gray-400">Gestionado en Certificados</span>
                                         )}

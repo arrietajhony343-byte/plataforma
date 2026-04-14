@@ -52,6 +52,9 @@ interface Props {
         totalPendiente: number;
         totalVencido: number;
         totalGeneral: number;
+        cafTotalVentas: number;
+        cafTotalCompras: number;
+        cafUtilidad: number;
     };
     sedes: Sede[];
     periodoActivo: { id: number; nombre: string } | null;
@@ -246,6 +249,10 @@ export default function Contabilidad({
             ['Total vencido', resumen.totalVencido],
             ['Total general', resumen.totalGeneral],
             ['Cumplimiento', `${cumplimiento}%`],
+            [],
+            ['Cafetería - Ventas', resumen.cafTotalVentas],
+            ['Cafetería - Compras', resumen.cafTotalCompras],
+            ['Cafetería - Utilidad', resumen.cafUtilidad],
         ]);
         wsResumen['!cols'] = [{ wch: 30 }, { wch: 55 }];
         XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
@@ -311,6 +318,17 @@ export default function Contabilidad({
             { wch: 14 }, { wch: 26 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
         ];
         XLSX.utils.book_append_sheet(wb, wsDeudores, 'Deudores');
+
+        const wsCaf = XLSX.utils.aoa_to_sheet([
+            ['CAFETERÍA - RESUMEN FINANCIERO'],
+            [],
+            ['Indicador', 'Valor'],
+            ['Total Ventas', resumen.cafTotalVentas],
+            ['Total Compras', resumen.cafTotalCompras],
+            ['Utilidad Neta', resumen.cafUtilidad],
+        ]);
+        wsCaf['!cols'] = [{ wch: 28 }, { wch: 20 }];
+        XLSX.utils.book_append_sheet(wb, wsCaf, 'Cafetería');
 
         XLSX.writeFile(wb, `Contabilidad_Detallada_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }, [
@@ -487,6 +505,26 @@ export default function Contabilidad({
                 5: { cellWidth: 56 },
                 6: { cellWidth: 18, halign: 'center' },
                 7: { cellWidth: 24, halign: 'right' },
+            },
+        });
+
+        doc.addPage('a4', 'landscape');
+        drawHeader('Reporte de Contabilidad', 'Cafetería - Resumen financiero');
+        autoTable(doc, {
+            startY: 30,
+            margin: { left: M, right: M },
+            head: [['Indicador', 'Valor']],
+            body: [
+                ['Total Ventas', fmt(resumen.cafTotalVentas)],
+                ['Total Compras (egresos)', fmt(resumen.cafTotalCompras)],
+                ['Utilidad Neta', fmt(resumen.cafUtilidad)],
+            ],
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 3, textColor: [30, 41, 59] },
+            headStyles: { fillColor: [41, 53, 119], textColor: [255, 255, 255], fontStyle: 'bold' },
+            columnStyles: {
+                0: { cellWidth: 90, fontStyle: 'bold' },
+                1: { cellWidth: 50, halign: 'right' },
             },
         });
 
@@ -782,6 +820,22 @@ export default function Contabilidad({
                             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                 <p className="text-xs uppercase tracking-wide text-blue-700">Total General</p>
                                 <p className="text-2xl font-bold text-blue-700 mt-1">{fmt(resumen.totalGeneral)}</p>
+                            </div>
+                        </div>
+
+                        {/* Cafetería KPIs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+                                <p className="text-xs uppercase tracking-wide text-teal-700 font-semibold">Caf — Ventas</p>
+                                <p className="text-2xl font-bold text-teal-700 mt-1">{fmt(resumen.cafTotalVentas)}</p>
+                            </div>
+                            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                                <p className="text-xs uppercase tracking-wide text-orange-700 font-semibold">Caf — Compras</p>
+                                <p className="text-2xl font-bold text-orange-700 mt-1">{fmt(resumen.cafTotalCompras)}</p>
+                            </div>
+                            <div className={`rounded-xl p-4 border ${resumen.cafUtilidad >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                                <p className={`text-xs uppercase tracking-wide font-semibold ${resumen.cafUtilidad >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>Caf — Utilidad</p>
+                                <p className={`text-2xl font-bold mt-1 ${resumen.cafUtilidad >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{fmt(resumen.cafUtilidad)}</p>
                             </div>
                         </div>
 

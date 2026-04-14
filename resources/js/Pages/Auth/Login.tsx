@@ -36,7 +36,7 @@ export default function Login({
                     {/* Logo */}
                     <div className="flex flex-col items-center mb-8">
                         <img 
-                            src="/storage/logo.png" 
+                            src="/logo.png" 
                             alt="I.P. Emprendedores del Saber" 
                             className="w-32 h-32 object-contain"
                         />

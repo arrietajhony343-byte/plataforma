@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Concerns\ScopesBySede;
 use App\Http\Controllers\Controller;
-use App\Models\{Pago, Periodo, Sede, User};
+use App\Models\{CafeteriaMovimiento, Pago, Periodo, Sede, User};
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -104,6 +104,36 @@ class ContabilidadController extends Controller
         $totalPendiente = (float) $pagosContables->where('estado', 'pendiente')->sum('monto');
         $totalVencido = (float) $pagosContables->where('estado', 'vencido')->sum('monto');
 
+        // ── Datos de cafetería (ventas = ingresos, compras = egresos) ──
+        $cafBase = CafeteriaMovimiento::query()
+            ->join('cafeteria_productos', 'cafeteria_movimientos.producto_id', '=', 'cafeteria_productos.id')
+            ->when($sedeId, fn($q) => $q->where('cafeteria_productos.sede_id', $sedeId));
+
+        $cafTotalVentas  = (float) (clone $cafBase)->where('cafeteria_movimientos.tipo', 'venta')->sum('cafeteria_movimientos.total');
+        $cafTotalCompras = (float) (clone $cafBase)->where('cafeteria_movimientos.tipo', 'compra')->sum('cafeteria_movimientos.total');
+
+        $cafMovimientosMensuales = CafeteriaMovimiento::query()
+            ->selectRaw("CAST(strftime('%m', cafeteria_movimientos.created_at) AS INTEGER) as mes, SUM(cafeteria_movimientos.total) as total")
+            ->join('cafeteria_productos', 'cafeteria_movimientos.producto_id', '=', 'cafeteria_productos.id')
+            ->where('cafeteria_movimientos.tipo', 'venta')
+            ->whereYear('cafeteria_movimientos.created_at', $anio)
+            ->when($sedeId, fn($q) => $q->where('cafeteria_productos.sede_id', $sedeId))
+            ->groupByRaw("CAST(strftime('%m', cafeteria_movimientos.created_at) AS INTEGER)")
+            ->pluck('total', 'mes');
+
+        // Sumar ventas cafetería a ingresos mensuales
+        foreach ($cafMovimientosMensuales as $mes => $total) {
+            $totalesPorMes[$mes] = (float) ($totalesPorMes[$mes] ?? 0) + (float) $total;
+        }
+
+        $ingresosMensuales = collect(range(1, 12))
+            ->map(fn($m) => [
+                'mes'   => $meses[$m - 1],
+                'total' => (float) $totalesPorMes[$m],
+            ])
+            ->values()
+            ->all();
+
         // Deudores: agrupado por estudiante sobre pagos vencidos visibles.
         $deudores = $pagosContables
             ->where('estado', 'vencido')
@@ -173,14 +203,17 @@ class ContabilidadController extends Controller
 
         return Inertia::render('Admin/Contabilidad', [
             'resumen' => [
-                'totalRecaudado' => $totalRecaudado,
-                'totalPendiente' => $totalPendiente,
-                'totalVencido'   => $totalVencido,
-                'totalGeneral'   => $totalRecaudado + $totalPendiente + $totalVencido,
+                'totalRecaudado'  => $totalRecaudado,
+                'totalPendiente'  => $totalPendiente,
+                'totalVencido'    => $totalVencido,
+                'totalGeneral'    => $totalRecaudado + $totalPendiente + $totalVencido,
+                'cafTotalVentas'  => $cafTotalVentas,
+                'cafTotalCompras' => $cafTotalCompras,
+                'cafUtilidad'     => $cafTotalVentas - $cafTotalCompras,
             ],
             'ingresosMensuales'   => $ingresosMensuales,
             'ingresosPorConcepto' => $ingresosPorConcepto,
-            'deudores'             => $deudores,
+            'deudores'            => $deudores,
             'ultimosPagos'        => $ultimosPagos,
             'sedes'               => $sedes,
             'periodoActivo'       => $periodoActivo ? ['id' => $periodoActivo->id, 'nombre' => $periodoActivo->nombre] : null,

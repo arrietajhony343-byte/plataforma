@@ -257,31 +257,40 @@ class CertificadoController extends Controller
 
     /**
      * Guardar certificado generado (PDF) y marcarlo como generado/enviado.
+     * El PDF se genera en el navegador del admin y se sube al servidor
+     * para que los acudientes puedan descargarlo desde su portal.
      */
-    public function generar(Request $request, Certificado $certificado): RedirectResponse
+    public function generar(Request $request, Certificado $certificado)
     {
         if (!$this->pagoConfirmadoParaCertificado($certificado)) {
-            return redirect()->back()->with('error', 'Debe confirmarse el pago antes de generar el certificado.');
+            return response()->json(['error' => 'Debe confirmarse el pago antes de generar el certificado.'], 422);
         }
 
+        // Si ya existe archivo guardado, solo actualizar estado y reenviar notificación.
         if ($certificado->archivo && Storage::exists($certificado->archivo)) {
             if (in_array($certificado->estado, ['solicitado', 'en_proceso'], true)) {
                 $certificado->update(['estado' => 'listo']);
             }
-
-            return redirect()->back()->with('success', 'El certificado ya estaba generado. Se conservó el archivo existente.');
+            $notificados = $this->notifyPadresDisponibilidad($certificado, false);
+            $msg = $notificados > 0
+                ? "Certificado actualizado. Se notificó a {$notificados} acudiente(s)."
+                : 'Certificado actualizado.';
+            return response()->json(['success' => $msg]);
         }
 
         $request->validate([
-            'archivo' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+            'archivo' => ['required', 'file', 'mimes:pdf', 'max:20480'],
         ]);
 
         $nombreArchivo = 'certificado_' . $certificado->id . '_' . now()->format('Ymd_His') . '.pdf';
-        $rutaArchivo = $request->file('archivo')->storeAs('certificados/' . $certificado->estudiante_id, $nombreArchivo);
+        $rutaArchivo   = $request->file('archivo')->storeAs(
+            'certificados/' . $certificado->estudiante_id,
+            $nombreArchivo
+        );
 
         $certificado->update([
             'archivo' => $rutaArchivo,
-            'estado' => 'listo',
+            'estado'  => 'listo',
         ]);
 
         $notificados = $this->notifyPadresDisponibilidad($certificado, false);
@@ -290,7 +299,7 @@ class CertificadoController extends Controller
             ? "Certificado generado y enviado. Se notificó a {$notificados} acudiente(s)."
             : 'Certificado generado y enviado.';
 
-        return redirect()->back()->with('success', $mensaje);
+        return response()->json(['success' => $mensaje]);
     }
 
     /* ════════════════════════════════════════════════════════════════════════

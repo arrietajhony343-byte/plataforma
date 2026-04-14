@@ -326,6 +326,21 @@ class PagoController extends Controller
         return redirect()->back()->with('success', $concepto->activo ? 'Concepto activado.' : 'Concepto desactivado.');
     }
 
+    public function destroyConcepto(ConceptoPago $concepto)
+    {
+        if ($concepto->tipo_certificado_id) {
+            return redirect()->back()->with('error', 'Los conceptos asociados a tipos de certificado se administran desde el módulo de Certificados.');
+        }
+
+        if ($concepto->pagos_count > 0) {
+            return redirect()->back()->with('error', 'No se puede eliminar un concepto que tiene pagos asociados.');
+        }
+
+        $concepto->delete();
+
+        return redirect()->back()->with('success', 'Concepto eliminado.');
+    }
+
     private function sincronizarConceptosCertificados(): void
     {
         $tipos = TipoCertificado::query()->get();
