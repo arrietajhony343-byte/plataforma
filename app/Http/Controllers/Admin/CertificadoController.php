@@ -21,6 +21,12 @@ class CertificadoController extends Controller
         // Pre-cargar tipos por código para resolver registros legacy
         $tiposPorCodigo = TipoCertificado::all()->keyBy('codigo');
 
+        // Pre-cache coordinadores por sede para la firma del PDF
+        $coordinadoresPorSede = User::role('coordinador')
+            ->whereNotNull('sede_id')
+            ->get(['id', 'name', 'sede_id'])
+            ->keyBy('sede_id');
+
         $pagosCertificados = collect();
         Pago::query()
             ->whereNotNull('notas')
@@ -35,11 +41,11 @@ class CertificadoController extends Controller
             });
 
         // Get all certificates with relationships
-        $certificados = Certificado::with(['estudiante', 'tipoCertificado'])
+        $certificados = Certificado::with(['estudiante.padres', 'tipoCertificado'])
             ->when($sedeId, fn($q) => $q->whereHas('estudiante', fn($eq) => $eq->where('sede_id', $sedeId)))
             ->orderByDesc('created_at')
             ->get()
-            ->map(function (Certificado $c) use ($tiposPorCodigo, $pagosCertificados) {
+            ->map(function (Certificado $c) use ($tiposPorCodigo, $pagosCertificados, $coordinadoresPorSede) {
                 // Resolver tipo: si no tiene tipo_certificado_id, buscar por código legacy
                 $tipo = $c->tipoCertificado
                     ?? ($c->tipo ? $tiposPorCodigo->get($c->tipo) : null);
@@ -65,9 +71,7 @@ class CertificadoController extends Controller
                         ->first();
 
                 // Get parent(s) for notification
-                $padres = $c->estudiante->padres()
-                    ->select('users.id', 'users.name')
-                    ->get()
+                $padres = $c->estudiante->padres
                     ->map(fn($p) => ['id' => $p->id, 'name' => $p->name])
                     ->values();
 
@@ -91,7 +95,7 @@ class CertificadoController extends Controller
                             'materia'    => $n->cursoMateria->materia->nombre,
                             'ih'         => (int) ($n->cursoMateria->horas_semanales ?? 0),
                             'definitiva' => $definitiva,
-                            'escala'     => $definitiva >= 4.6 ? 'SUPERIOR'
+                            'escala'     => $definitiva >= 4.5 ? 'SUPERIOR'
                                 : ($definitiva >= 4.0 ? 'ALTO'
                                     : ($definitiva >= 3.0 ? 'BASICO' : 'BAJO')),
                         ];
@@ -109,6 +113,7 @@ class CertificadoController extends Controller
                     'nivel'               => $mat?->curso?->nivel ?? '',
                     'curso_id'            => $mat?->curso_id,
                     'curso'               => $mat?->curso?->nombre ?? '',
+                    'coordinadora'        => $coordinadoresPorSede->get($c->estudiante->sede_id)?->name ?? '',
                     'descripcion'         => $c->descripcion,
                     'archivo'             => $c->archivo,
                     'fecha_solicitud'     => $c->fecha_solicitud?->format('Y-m-d'),

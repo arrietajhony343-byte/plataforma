@@ -310,6 +310,9 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile/hijos/{hijo}', [ProfileController::class, 'updateHijo'])->name('profile.hijos.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Mensajes no-leídos (para badge en sidebar)
+    Route::get('/api/mensajes/no-leidos', [MensajeController::class, 'noLeidos']);
+
     // Notificaciones API (todos los roles)
     Route::prefix('api/notificaciones')->group(function () {
         Route::get('/',                        [\App\Http\Controllers\NotificacionController::class, 'index']);

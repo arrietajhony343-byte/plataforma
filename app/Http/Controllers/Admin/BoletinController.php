@@ -37,22 +37,27 @@ class BoletinController extends Controller
             ->when($this->sedeId(), fn($q, $s) => $q->where('id', $s))
             ->get()->map(fn($s) => ['id' => $s->id, 'nombre' => $s->nombre]);
 
+        // Pre-cache períodos por año para evitar N+1
+        $periodosPorAnio = Periodo::orderBy('numero')->get()->groupBy('anio');
+
+        // Pre-cache coordinadores por sede_id
+        $coordinadoresPorSede = User::role('coordinador')
+            ->whereNotNull('sede_id')
+            ->get(['id', 'name', 'sede_id'])
+            ->keyBy('sede_id');
+
         // Boletines con relaciones completas
         $boletines = Boletin::with(['estudiante.padres', 'periodo', 'curso.directorGrupo'])
             ->when($this->sedeId(), fn($q, $s) => $q->whereHas('curso', fn($cq) => $cq->where('sede_id', $s)))
             ->orderByDesc('created_at')
             ->get()
-            ->map(function (Boletin $b) {
-                $padres = $b->estudiante->padres()
-                    ->select('users.id', 'users.name')
-                    ->get()
+            ->map(function (Boletin $b) use ($periodosPorAnio, $coordinadoresPorSede) {
+                $padres = $b->estudiante->padres
                     ->map(fn($p) => ['id' => $p->id, 'name' => $p->name])
                     ->values();
 
-                // Todos los períodos del mismo año académico, ordenados por número
-                $todosPeriodos = Periodo::where('anio', $b->periodo->anio)
-                    ->orderBy('numero')
-                    ->get();
+                // Períodos del mismo año académico desde el cache
+                $todosPeriodos = $periodosPorAnio->get($b->periodo->anio, collect());
 
                 // IDs de CursoMaterias de este curso
                 $cmsAll = CursoMateria::where('curso_id', $b->curso_id)
@@ -123,6 +128,7 @@ class BoletinController extends Controller
                     'anio'            => $b->periodo->anio,
                     'total_periodos'  => $todosPeriodos->count(),
                     'director_grupo'  => $b->curso->directorGrupo?->name ?? 'Sin asignar',
+                    'coordinadora'    => $coordinadoresPorSede->get($b->curso->sede_id)?->name ?? '',
                     'promedio'        => (float) $b->promedio,
                     'puesto'          => $b->puesto,
                     'observacion'     => $b->observacion_general,

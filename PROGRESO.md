@@ -1,127 +1,92 @@
-# Plataforma Académica — Plan de Producción
+# Plataforma Académica — Estado del Proyecto
 
-## Estado General
-- **Framework:** Laravel 12 + Breeze + Inertia.js + React + TypeScript + Tailwind
-- **Auth:** Spatie Laravel Permission (4 roles: admin, profesor, estudiante, padre)
+## Stack
+- **Framework:** Laravel 12 + Breeze + Inertia.js + React + TypeScript + Tailwind CSS
+- **Auth:** Spatie Laravel Permission — roles: admin, coordinador, profesor, estudiante, padre
 - **DB:** SQLite
-- **Usuarios seed:** admin@colegio.com, profesor@colegio.com, estudiante@colegio.com, padre@colegio.com (pass: password)
+- **PDF:** jsPDF + jspdf-autotable (generación browser-side)
+
+## Credenciales de prueba
+| Email | Password | Rol |
+|-------|----------|-----|
+| admin@colegio.com | password | admin |
+| yuchy26@hotmail.com | — | coordinador |
 
 ---
 
-## FASE 1 — Núcleo (Modelos base) ✅ COMPLETADO
+## Paneles implementados
 
-| # | Modelo | Migración | Modelo | Seeder | Relaciones |
-|---|--------|-----------|--------|--------|------------|
-| 1 | `periodos` | ✅ | ✅ | ✅ | hasMany notas, boletines |
-| 2 | `cursos` | ✅ | ✅ | ✅ | belongsToMany materias, hasMany matriculas |
-| 3 | `materias` | ✅ | ✅ | ✅ | belongsToMany cursos |
-| 4 | `curso_materia` (pivot) | ✅ | ✅ | ✅ | profesor asignado |
-| 5 | `matriculas` | ✅ | ✅ | ✅ | estudiante↔curso↔periodo |
-| 6 | `padre_estudiante` (pivot) | ✅ | ✅ | ✅ | padre↔estudiante |
+### Panel Admin / Coordinador ✅ COMPLETO
+| Página | Ruta | Estado |
+|--------|------|--------|
+| Dashboard | /admin/dashboard | 🟢 |
+| Usuarios | /admin/usuarios | 🟢 CRUD completo |
+| Estudiantes | /admin/estudiantes | 🟢 Lectura + export |
+| Cursos + Materias | /admin/cursos | 🟢 CRUD |
+| Periodos | /admin/periodos | 🟢 CRUD + ventanas + excepciones |
+| Horarios | /admin/horarios | 🟢 CRUD |
+| Boletines | /admin/boletines | 🟢 Generar PDF + notificar |
+| Pagos | /admin/pagos | 🟢 CRUD + confirmar/anular |
+| Contabilidad | /admin/contabilidad | 🟢 Solo lectura |
+| Reportes | /admin/reportes | 🟢 Rendimiento + asistencia + export |
+| Certificados | /admin/certificados | 🟢 CRUD + PDF + pago + notificar |
+| Cafetería | /admin/cafeteria | 🟢 Productos + ventas + compras |
+| Sedes | /admin/sedes | 🟢 CRUD (solo admin) |
+| Mensajes | /admin/mensajes | 🟢 Chat en tiempo real |
 
----
+### Panel Profesor ✅ COMPLETO
+| Página | Ruta | Estado |
+|--------|------|--------|
+| Dashboard | /profesor/dashboard | 🟢 |
+| Registrar Notas | /profesor/notas | 🟢 Upsert masivo + conceptos |
+| Observador | /profesor/observador | 🟢 Crear + director reporte |
+| Horario | /profesor/horario | 🟢 |
+| Calendario | /profesor/calendario | 🟢 Eventos personales |
+| Actividades | /profesor/actividades | 🟢 CRUD + calificar + entregas |
+| Asistencias | /profesor/asistencias | 🟢 Registro masivo + resumen |
+| Mensajes | /profesor/mensajes | 🟢 |
 
-## FASE 2 — Académico ✅ COMPLETADO
+### Panel Estudiante ✅ COMPLETO
+| Página | Ruta | Estado |
+|--------|------|--------|
+| Dashboard | /estudiante/dashboard | 🟢 |
+| Materias + Actividades | /estudiante/materias | 🟢 |
+| Actividad detalle | /estudiante/actividades/{id} | 🟢 Entregar + quiz |
+| Notas | /estudiante/notas | 🟢 |
+| Horario | /estudiante/horario | 🟢 |
+| Observador | /estudiante/observador | 🟢 |
+| Boletines | /estudiante/boletines | 🟢 |
+| Mensajes | /estudiante/mensajes | 🟢 |
 
-| # | Modelo | Migración | Modelo | Seeder | Controller |
-|---|--------|-----------|--------|--------|------------|
-| 7 | `notas` | ✅ | ✅ | ✅ | ✅ |
-| 8 | `observaciones` | ✅ | ✅ | ✅ | ✅ |
-| 9 | `actividades` | ✅ | ✅ | ✅ | ✅ |
-| 10 | `entrega_actividades` | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## FASE 3 — Operativo ✅ COMPLETADO
-
-| # | Modelo | Migración | Modelo | Seeder | Controller |
-|---|--------|-----------|--------|--------|------------|
-| 11 | `horario_bloques` | ✅ | ✅ | ✅ | ✅ |
-| 12 | `mensajes` | ✅ | ✅ | ✅ | ✅ |
-| 13 | `notificaciones` | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## FASE 4 — Financiero ✅ COMPLETADO
-
-| # | Modelo | Migración | Modelo | Seeder | Controller |
-|---|--------|-----------|--------|--------|------------|
-| 14 | `concepto_pagos` | ✅ | ✅ | ✅ | ✅ |
-| 15 | `pagos` | ✅ | ✅ | ✅ | ✅ |
-| 16 | `comprobantes` | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## FASE 5 — Documentos ✅ COMPLETADO
-
-| # | Modelo | Migración | Modelo | Seeder | Controller |
-|---|--------|-----------|--------|--------|------------|
-| 17 | `boletines` | ✅ | ✅ | ✅ | ✅ |
-| 18 | `certificados` | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## PÁGINAS — Conexión Backend ↔ Frontend
-
-### Panel Admin (11 páginas) ✅ COMPLETADO
-| Página | Ruta | Controller | Props reales | CRUD | Estado |
-|--------|------|------------|-------------|------|--------|
-| Dashboard | /admin/dashboard | DashboardController | ✅ | N/A | 🟢 |
-| Usuarios | /admin/usuarios | UsuarioController | ✅ | ✅ CRUD completo | 🟢 |
-| Estudiantes | /admin/estudiantes | EstudianteController | ✅ | Solo lectura | 🟢 |
-| Cursos | /admin/cursos | CursoController | ✅ | ✅ CRUD | 🟢 |
-| Periodos | /admin/periodos | PeriodoController | ✅ | ✅ CRUD | 🟢 |
-| Horarios | /admin/horarios | HorarioController | ✅ | ✅ CRUD | 🟢 |
-| Boletines | /admin/boletines | BoletinController | ✅ | ✅ generar | 🟢 |
-| Pagos | /admin/pagos | PagoController | ✅ | ✅ CRUD | 🟢 |
-| Contabilidad | /admin/contabilidad | ContabilidadController | ✅ | Solo lectura | 🟢 |
-| Reportes | /admin/reportes | ReporteController | ✅ | Solo lectura | 🟢 |
-| Certificados | /admin/certificados | CertificadoController | ✅ | ✅ CRUD | 🟢 |
-
-### Panel Profesor (6 páginas) ✅ COMPLETADO
-| Página | Ruta | Controller | Props reales | CRUD | Estado |
-|--------|------|------------|-------------|------|--------|
-| Dashboard | /profesor/dashboard | DashboardController | ✅ | N/A | 🟢 |
-| RegistrarNotas | /profesor/notas | NotaController | ✅ | ✅ upsert masivo | 🟢 |
-| Observador | /profesor/observador | ObservadorController | ✅ | ✅ crear | 🟢 |
-| Calendario | /profesor/calendario | CalendarioController | ✅ | Solo lectura | 🟢 |
-| Actividades | /profesor/actividades | ActividadController | ✅ | ✅ CRUD | 🟢 |
-| Mensajes | /profesor/mensajes | MensajeController | ✅ | ✅ enviar | 🟢 |
-
-### Panel Estudiante (8 páginas) — PENDIENTE
-| Página | Ruta | Controller | Props reales | CRUD | Estado |
-|--------|------|------------|-------------|------|--------|
-| Dashboard | /estudiante/dashboard | EstudianteDashboardController | ❌ mock | N/A | 🔴 |
-| Materias | /estudiante/materias | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Actividades | /estudiante/actividades | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Notas | /estudiante/notas | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Horario | /estudiante/horario | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Mensajes | /estudiante/mensajes | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Observador | /estudiante/observador | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Boletines | /estudiante/boletines | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-
-### Panel Padre (8 páginas) — PENDIENTE
-| Página | Ruta | Controller | Props reales | CRUD | Estado |
-|--------|------|------------|-------------|------|--------|
-| Dashboard | /padre/dashboard | ❌ closure | ❌ hardcoded | N/A | 🔴 |
-| Boletin | /padre/boletin | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Calendario | /padre/calendario | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Seguimiento | /padre/seguimiento | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Notificaciones | /padre/notificaciones | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Pagos | /padre/pagos | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Comprobantes | /padre/comprobantes | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
-| Mensajes | /padre/mensajes | ❌ closure | ❌ hardcoded | ❌ | 🔴 |
+### Panel Padre ✅ COMPLETO
+| Página | Ruta | Estado |
+|--------|------|--------|
+| Dashboard | /padre/dashboard | 🟢 |
+| Boletín | /padre/boletin | 🟢 Ver + descargar PDF |
+| Calendario | /padre/calendario | 🟢 |
+| Horario | /padre/horario | 🟢 |
+| Seguimiento | /padre/seguimiento | 🟢 |
+| Observador | /padre/observador | 🟢 |
+| Notificaciones | /padre/notificaciones | 🟢 |
+| Certificados | /padre/certificados | 🟢 Solicitar + descargar |
+| Pagos | /padre/pagos | 🟢 Ver + pagar |
+| Comprobantes | /padre/comprobantes | 🟢 |
+| Mensajes | /padre/mensajes | 🟢 |
 
 ---
 
-## Leyenda
-- 🔴 No implementado (frontend mock)
-- 🔶 Parcialmente implementado
-- 🟢 Completamente funcional
+## Generación de PDFs
+- **Boletines:** `Admin/Boletines.tsx` — genera por estudiante o masivo (todos los de un curso/período)
+- **Certificados:** `Admin/Certificados.tsx` — genera y sube al servidor; padre descarga desde su portal
+- **Shared utils:** `resources/js/utils/pdfUtils.ts` — logo loading, escala valorativa, constantes institución
+- **Logo:** `/public/logo-certificados.png` ✅ existe
+- **Escala:** SUPERIOR ≥ 4.5 · ALTO ≥ 4.0 · BÁSICO ≥ 3.0 · BAJO < 3.0
 
-## Notas
-- 16 migraciones ejecutadas, 17 modelos, seeder completo (DatosColegioSeeder)
-- 32 rutas admin verificadas con `php artisan route:list`
-- 14 rutas profesor verificadas con `php artisan route:list`
-- TypeScript compila sin errores (tsc --noEmit EXIT 0)
-- Siguiente: Panel Estudiante (controllers + rutas + frontend)
+## Correcciones aplicadas (2026-05-30)
+- N+1 fix: `CertificadoController` — `padres` eager-loaded
+- N+1 fix: `BoletinController` — `todosPeriodos` pre-cacheado por año
+- Umbral SUPERIOR: corregido 4.6 → 4.5 en CertificadoController y Certificados.tsx
+- `nivelesConfig` completado con `transicion`/`preescolar`/`secundaria`/`media` en ambos TSX
+- Código duplicado extraído a `pdfUtils.ts` (logo loading, candidatos, constantes institución)
+- Firma hardcoded `INDIRA CANO ROMAN` → `PDF_INSTITUCION.firmaNombre` (un solo lugar de edición)
+- Sidebar: badge de mensajes no-leídos + polling automático 60s (notificaciones + mensajes)

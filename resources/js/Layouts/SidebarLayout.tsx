@@ -44,6 +44,7 @@ export default function SidebarLayout({
     const [notifs, setNotifs]                 = useState<Notif[]>([]);
     const [noLeidas, setNoLeidas]             = useState(0);
     const [loadingNotifs, setLoadingNotifs]   = useState(false);
+    const [noMensajes, setNoMensajes]         = useState(0);
 
     const userMenuRef      = useRef<HTMLDivElement>(null);
     const notifsRef        = useRef<HTMLDivElement>(null);
@@ -87,8 +88,23 @@ export default function SidebarLayout({
         setLoadingNotifs(false);
     }, []);
 
-    // Cargar al montar
-    useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
+    const fetchMensajesNoLeidos = useCallback(async () => {
+        try {
+            const res = await axios.get('/api/mensajes/no-leidos');
+            setNoMensajes(res.data.noLeidos ?? 0);
+        } catch (_) { /* silencioso */ }
+    }, []);
+
+    // Cargar al montar + polling cada 60 segundos
+    useEffect(() => {
+        fetchNotifs();
+        fetchMensajesNoLeidos();
+        const id = setInterval(() => {
+            fetchNotifs();
+            fetchMensajesNoLeidos();
+        }, 60_000);
+        return () => clearInterval(id);
+    }, [fetchNotifs, fetchMensajesNoLeidos]);
 
     const toggleNotifs = () => {
         setShowUserMenu(false);
@@ -228,7 +244,12 @@ export default function SidebarLayout({
                                 style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
                             >
                                 <span className="w-5 h-5 flex-shrink-0 text-base leading-none">{item.icon}</span>
-                                <span className="text-sm font-semibold tracking-wide">{item.label || item.name}</span>
+                                <span className="text-sm font-semibold tracking-wide flex-1">{item.label || item.name}</span>
+                                {item.href.includes('/mensajes') && noMensajes > 0 && (
+                                    <span className="ml-auto min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold flex-shrink-0">
+                                        {noMensajes > 99 ? '99+' : noMensajes}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}

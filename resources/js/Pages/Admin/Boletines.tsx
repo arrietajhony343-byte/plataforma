@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { adminMenuItems } from '@/Config/adminMenu';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { cargarPrimerLogoDisponible, PDF_INSTITUCION } from '@/utils/pdfUtils';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface Periodo { id: number; nombre: string; anio: number; activo: boolean; }
@@ -36,6 +37,7 @@ interface Boletin {
     anio: number;
     total_periodos: number;
     director_grupo: string;
+    coordinadora: string;
     promedio: number;
     puesto: number | null;
     observacion: string | null;
@@ -92,8 +94,12 @@ interface Props {
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 const nivelesConfig: Record<string, { label: string; color: string; chipActive: string }> = {
-    prejardin:    { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',   chipActive: 'bg-pink-500' },
+    prejardin:    { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',       chipActive: 'bg-pink-500' },
+    preescolar:   { label: 'Transición',   color: 'bg-purple-100 text-purple-700',   chipActive: 'bg-purple-500' },
+    transicion:   { label: 'Transición',   color: 'bg-purple-100 text-purple-700',   chipActive: 'bg-purple-500' },
     primaria:     { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',       chipActive: 'bg-blue-500' },
+    secundaria:   { label: 'Secundaria',   color: 'bg-cyan-100 text-cyan-700',       chipActive: 'bg-cyan-500' },
+    media:        { label: 'Media',        color: 'bg-amber-100 text-amber-700',     chipActive: 'bg-amber-500' },
     bachillerato: { label: 'Bachillerato', color: 'bg-emerald-100 text-emerald-700', chipActive: 'bg-emerald-500' },
 };
 
@@ -118,57 +124,6 @@ const getNivelLabel      = (n: string) => nivelesConfig[n]?.label     ?? n;
 const getNivelChipActive = (n: string) => nivelesConfig[n]?.chipActive ?? 'bg-gray-500';
 const promedioColor      = (p: number) => p >= 4 ? 'text-green-600' : p >= 3 ? 'text-yellow-600' : 'text-red-500';
 
-/* ═══════════════════════════ INSTITUTION CONSTANTS ═══════════════════════════ */
-const LOGO_CANDIDATES_BOL = [
-    '/logo-certificados.png', '/logo-certificados.jpg', '/logo-certificados.jpeg',
-    '/images/logo-certificados.png', '/images/logo-certificados.jpg',
-    '/img/logo-certificados.png', '/certificados-logo.png',
-];
-
-const cargarImagenBoletin = async (src: string, opacidad = 1, maxPx = 400): Promise<string | null> => {
-    const url = src.startsWith('http') ? src : window.location.origin + src;
-    try {
-        const resp = await fetch(url, { credentials: 'same-origin' });
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        const base64: string = await new Promise((res, rej) => {
-            const reader = new FileReader();
-            reader.onloadend = () => res(reader.result as string);
-            reader.onerror   = () => rej(new Error('err'));
-            reader.readAsDataURL(blob);
-        });
-        return new Promise((res) => {
-            const img = new Image();
-            img.onload = () => {
-                const origW = img.naturalWidth || img.width || maxPx;
-                const origH = img.naturalHeight || img.height || maxPx;
-                const scale = Math.min(1, maxPx / Math.max(origW, origH));
-                const cW = Math.round(origW * scale), cH = Math.round(origH * scale);
-                const canvas = document.createElement('canvas');
-                canvas.width = cW; canvas.height = cH;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) { res(null); return; }
-                if (opacidad >= 1) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, cW, cH);
-                }
-                ctx.globalAlpha = opacidad;
-                ctx.drawImage(img, 0, 0, cW, cH);
-                res(opacidad >= 1 ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png'));
-            };
-            img.onerror = () => res(null);
-            img.src = base64;
-        });
-    } catch { return null; }
-};
-
-const cargarLogoBoletin = async (opacidad = 1, maxPx = 400): Promise<string | null> => {
-    for (const c of LOGO_CANDIDATES_BOL) {
-        const r = await cargarImagenBoletin(c, opacidad, maxPx);
-        if (r) return r;
-    }
-    return null;
-};
 
 /* ═══════════════════════════ PDF HELPERS ═══════════════════════════ */
 const getDescriptor = (nota: number | null): string => {
@@ -271,7 +226,7 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
     doc.rect(tableX, vY, tableW, valorRowH, 'FD');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-    doc.text('<VALORACION: LOGROS/DIFICULTADES>', W / 2, vY + 4.5, { align: 'center' });
+    doc.text('VALORACIÓN: LOGROS Y DIFICULTADES', W / 2, vY + 4.5, { align: 'center' });
 
     // ── Tabla de notas ──
     const totalPer = Math.min(b.total_periodos, 4);
@@ -487,7 +442,7 @@ async function dibujarBoletinPagina(doc: jsPDF, b: Boletin, logoHeader: string |
 
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
     doc.setTextColor(10, 10, 10);
-    doc.text('INDIRA CANO ROMAN', 57, actualSigY - 2, { align: 'center' });
+    doc.text((b.coordinadora || PDF_INSTITUCION.firmaNombre).toUpperCase(), 57, actualSigY - 2, { align: 'center' });
     doc.text(b.director_grupo.toUpperCase(), 153, actualSigY - 2, { align: 'center' });
 
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
@@ -624,8 +579,8 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
     // ── PDF individual ──
     const generarPDFIndividual = useCallback(async (boletin: Boletin) => {
         const [logoHeader, logoWatermark] = await Promise.all([
-            cargarLogoBoletin(1, 850),
-            cargarLogoBoletin(0.08, 420),
+            cargarPrimerLogoDisponible(1, 850),
+            cargarPrimerLogoDisponible(0.08, 420),
         ]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         await dibujarBoletinPagina(doc, boletin, logoHeader, logoWatermark);
@@ -637,8 +592,8 @@ export default function Boletines({ boletines, resumenNotas, periodos, cursos, n
         const lista = boletinesFiltrados;
         if (lista.length === 0) { alert('No hay boletines para exportar.'); return; }
         const [logoHeader, logoWatermark] = await Promise.all([
-            cargarLogoBoletin(1, 850),
-            cargarLogoBoletin(0.08, 420),
+            cargarPrimerLogoDisponible(1, 850),
+            cargarPrimerLogoDisponible(0.08, 420),
         ]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         for (let idx = 0; idx < lista.length; idx++) {

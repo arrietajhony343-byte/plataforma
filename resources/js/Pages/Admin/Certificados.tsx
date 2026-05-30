@@ -6,6 +6,7 @@ import { adminMenuItems } from '@/Config/adminMenu';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import axios from 'axios';
+import { cargarPrimerLogoDisponible, PDF_INSTITUCION } from '@/utils/pdfUtils';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface TipoCertificado {
@@ -50,6 +51,7 @@ interface Certificado {
     nivel: string;
     curso_id: number | null;
     curso: string;
+    coordinadora: string;
     descripcion: string | null;
     archivo: string | null;
     fecha_solicitud: string;
@@ -73,10 +75,12 @@ interface Props {
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 const nivelesConfig: Record<string, { label: string; color: string; chipActive: string }> = {
-    prejardin:    { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',     chipActive: 'bg-pink-500' },
-    primaria:     { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',     chipActive: 'bg-blue-500' },
-    secundaria:   { label: 'Secundaria',   color: 'bg-cyan-100 text-cyan-700',     chipActive: 'bg-cyan-500' },
-    media:        { label: 'Media',        color: 'bg-amber-100 text-amber-700',   chipActive: 'bg-amber-500' },
+    prejardin:    { label: 'Pre-Jardín',   color: 'bg-pink-100 text-pink-700',       chipActive: 'bg-pink-500' },
+    preescolar:   { label: 'Transición',   color: 'bg-purple-100 text-purple-700',   chipActive: 'bg-purple-500' },
+    transicion:   { label: 'Transición',   color: 'bg-purple-100 text-purple-700',   chipActive: 'bg-purple-500' },
+    primaria:     { label: 'Primaria',     color: 'bg-blue-100 text-blue-700',       chipActive: 'bg-blue-500' },
+    secundaria:   { label: 'Secundaria',   color: 'bg-cyan-100 text-cyan-700',       chipActive: 'bg-cyan-500' },
+    media:        { label: 'Media',        color: 'bg-amber-100 text-amber-700',     chipActive: 'bg-amber-500' },
     bachillerato: { label: 'Bachillerato', color: 'bg-emerald-100 text-emerald-700', chipActive: 'bg-emerald-500' },
 };
 
@@ -95,31 +99,9 @@ const getEstadoLabel = (estado: string) => estadosConfig[estado]?.label ?? estad
 
 const formatPrecio = (precio: number) => '$' + precio.toLocaleString('es-CO');
 
-const LOGO_CANDIDATES = [
-    '/logo-certificados.png',
-    '/logo-certificados.jpg',
-    '/logo-certificados.jpeg',
-    '/images/logo-certificados.png',
-    '/images/logo-certificados.jpg',
-    '/img/logo-certificados.png',
-    '/certificados-logo.png',
-    '/images/certificados-logo.png',
-];
 
-const INSTITUCION = {
-    nombre1: 'INSTITUTO PEDAGOGICO',
-    nombre2: 'EMPRENDEDORES DEL SABER',
-    lema: 'Ser, saber y emprender',
-    legal: 'Aprobado por Resolución No 9385 del 10 - 11 - 2025',
-    daneNit: 'DANE 313001800093  -  NIT 73143410 -6',
-    firma: 'COORDINADORA',
-    sede: 'Villas de la candelaria Mz. 44 Lt. 11 CEL: 3005257812 - 3006529540',
-    correo: 'CORREO: emprendedores.sersaber2023@gmail.com',
-    ciudad: 'Cartagena de Indias - Colombia',
-};
-
-const getEscalaValorativa = (nota: number) => {
-    if (nota >= 4.6) return 'SUPERIOR';
+const getEscalaValorativa = (nota: number): string => {
+    if (nota >= 4.5) return 'SUPERIOR';
     if (nota >= 4.0) return 'ALTO';
     if (nota >= 3.0) return 'BASICO';
     return 'BAJO';
@@ -162,70 +144,6 @@ const sanitizarDetalleAdicional = (detalle?: string | null): string | null => {
     return limpio;
 };
 
-/**
- * Carga una imagen, la redimensiona al tamaño máximo indicado (en px a 96dpi)
- * y aplica opacidad opcional. Devuelve base64 JPEG (opacidad=1) o PNG (opacidad<1).
- * Usar maxPx pequeño reduce drásticamente el peso del PDF.
- */
-const cargarImagenConOpacidad = async (src: string, opacidad = 1, maxPx = 400): Promise<string | null> => {
-    const url = src.startsWith('http') ? src : window.location.origin + src;
-    try {
-        const resp = await fetch(url, { credentials: 'same-origin' });
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        const base64: string = await new Promise((res, rej) => {
-            const reader = new FileReader();
-            reader.onloadend = () => res(reader.result as string);
-            reader.onerror   = () => rej(new Error('FileReader error'));
-            reader.readAsDataURL(blob);
-        });
-        // Redimensionar + aplicar opacidad siempre vía canvas
-        return new Promise((res) => {
-            const img = new Image();
-            img.onload = () => {
-                const origW = img.naturalWidth  || img.width  || maxPx;
-                const origH = img.naturalHeight || img.height || maxPx;
-                const scale = Math.min(1, maxPx / Math.max(origW, origH));
-                const cW = Math.round(origW * scale);
-                const cH = Math.round(origH * scale);
-                const canvas = document.createElement('canvas');
-                canvas.width  = cW;
-                canvas.height = cH;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) { res(null); return; }
-                ctx.clearRect(0, 0, cW, cH);
-                ctx.globalAlpha = opacidad;
-                ctx.drawImage(img, 0, 0, cW, cH);
-                // PNG siempre (preserva transparencia del logo); JPEG solo si opacidad=1 Y no es PNG con alpha
-                // Para simplificar: siempre PNG con fondo blanco cuando opacidad=1
-                // Siempre JPEG con fondo blanco para mantener tamaño mínimo
-                const canvas2 = document.createElement('canvas');
-                canvas2.width  = cW;
-                canvas2.height = cH;
-                const ctx2 = canvas2.getContext('2d');
-                if (!ctx2) { res(null); return; }
-                ctx2.fillStyle = '#ffffff';
-                ctx2.fillRect(0, 0, cW, cH);
-                ctx2.globalAlpha = opacidad;
-                ctx2.drawImage(img, 0, 0, cW, cH);
-                const quality = opacidad >= 1 ? 0.65 : 0.25;
-                res(canvas2.toDataURL('image/jpeg', quality));
-            };
-            img.onerror = () => res(null);
-            img.src = base64;
-        });
-    } catch {
-        return null;
-    }
-};
-
-const cargarPrimerLogoDisponible = async (opacidad = 1, maxPx = 400): Promise<string | null> => {
-    for (const candidate of LOGO_CANDIDATES) {
-        const result = await cargarImagenConOpacidad(candidate, opacidad, maxPx);
-        if (result) return result;
-    }
-    return null;
-};
 
 /* ═══════════════════════════ RICH-TEXT HELPER ═══════════════════════════ */
 type RichSeg = { text: string; bold?: boolean };
@@ -376,7 +294,7 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         const W   = 210;
         const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
         const { dia, mes, anio } = fechaLiteral();
-        const logoHeader    = await cargarPrimerLogoDisponible(1, 420);
+        const logoHeader    = await cargarPrimerLogoDisponible(1, 850);
         // La marca de agua se imprime muy grande: se necesita más resolución para evitar pixelación.
         const logoWatermark = await cargarPrimerLogoDisponible(0.08, 1400);
 
@@ -486,13 +404,16 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
         };
 
         /* ─── Firma ─── */
+        const coordinadoraNombre = (cert.coordinadora || PDF_INSTITUCION.firmaNombre).toUpperCase();
         const drawFirma = (yLine: number) => {
             doc.setDrawColor(30, 30, 30);
             doc.setLineWidth(0.3);
             doc.line(75, yLine, 135, yLine);
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(9.5);
+            doc.setFontSize(8.5);
             doc.setTextColor(20, 20, 20);
+            doc.text(coordinadoraNombre, W / 2, yLine - 2, { align: 'center' });
+            doc.setFontSize(9);
             doc.text('COORDINADORA', W / 2, yLine + 6, { align: 'center' });
         };
 

@@ -67,6 +67,15 @@ class MensajeController extends Controller
         return response()->json($payload);
     }
 
+    public function noLeidos(Request $request): JsonResponse
+    {
+        $count = Mensaje::where('destinatario_id', $request->user()->id)
+            ->where('leido', false)
+            ->count();
+
+        return response()->json(['noLeidos' => $count]);
+    }
+
     public function poll(Request $request, User $contacto): JsonResponse
     {
         $user = $request->user();
