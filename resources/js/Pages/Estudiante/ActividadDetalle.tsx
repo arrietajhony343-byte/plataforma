@@ -56,6 +56,7 @@ interface ActividadDetalle {
 }
 
 interface Props {
+    estudiante: { nombre: string };
     actividad: ActividadDetalle;
 }
 
@@ -114,7 +115,7 @@ function NotaCircle({ nota }: { nota: number }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function ActividadDetalle({ actividad }: Props) {
+export default function ActividadDetalle({ estudiante, actividad }: Props) {
     const { props: pageProps } = usePage<any>();
     const flash = (pageProps as any).flash as { success?: string; error?: string } | undefined;
 
@@ -302,7 +303,7 @@ export default function ActividadDetalle({ actividad }: Props) {
     // ── Render ────────────────────────────────────────────────────
 
     return (
-        <SidebarLayout menuItems={estudianteMenuItems} userInfo={{ name: '', role: 'Estudiante' }}>
+        <SidebarLayout menuItems={estudianteMenuItems} userInfo={{ name: estudiante.nombre, role: 'Estudiante' }}>
             <Head title={actividad.titulo} />
 
             {/* Breadcrumb */}

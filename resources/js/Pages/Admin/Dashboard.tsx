@@ -18,9 +18,11 @@ interface Actividad {
 interface Props {
     stats: Stats;
     actividadReciente: Actividad[];
+    periodoActivo: { nombre: string; anio: number } | null;
+    resumenFinanciero: { pagosPendientes: number; pagosVencidos: number };
 }
 
-export default function Dashboard({ stats, actividadReciente }: Props) {
+export default function Dashboard({ stats, actividadReciente, periodoActivo, resumenFinanciero }: Props) {
     const statCards = [
         {
             label: 'Total Estudiantes',
@@ -65,8 +67,22 @@ export default function Dashboard({ stats, actividadReciente }: Props) {
                             </h1>
                             <p className="text-blue-200 text-sm mt-1">Resumen general del periodo académico</p>
                         </div>
-                        <div className="flex gap-2">
-                            
+                        <div className="flex flex-wrap gap-3 text-sm">
+                            {periodoActivo && (
+                                <span className="bg-white/10 text-white px-3 py-1 rounded-lg font-semibold">
+                                    {periodoActivo.nombre} · {periodoActivo.anio}
+                                </span>
+                            )}
+                            {resumenFinanciero.pagosPendientes > 0 && (
+                                <span className="bg-amber-400/20 text-amber-200 px-3 py-1 rounded-lg font-semibold">
+                                    {resumenFinanciero.pagosPendientes} pagos pendientes
+                                </span>
+                            )}
+                            {resumenFinanciero.pagosVencidos > 0 && (
+                                <span className="bg-red-400/20 text-red-200 px-3 py-1 rounded-lg font-semibold">
+                                    {resumenFinanciero.pagosVencidos} pagos vencidos
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>

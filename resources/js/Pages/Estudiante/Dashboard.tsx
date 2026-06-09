@@ -40,6 +40,13 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
     const nombre = estudiante?.nombre || 'Estudiante';
     const grado = estudiante?.grado || 'Sin asignar';
 
+    const formatFecha = (f: string | null | undefined) => {
+        if (!f) return 'No registrada';
+        const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+        if (Number.isNaN(d.getTime())) return f;
+        return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+    };
+
     // Usar los datos del backend
     const pendientes = pendientesData || [];
     const vencidas = vencidasData || [];
@@ -139,7 +146,7 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Documento:</span> <p className="font-semibold text-gray-800">{(estudiante?.tipo_documento || '') + ' ' + (estudiante?.documento || 'No registrado')}</p></div>
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Teléfono:</span> <p className="font-semibold text-gray-800">{estudiante?.telefono || 'No registrado'}</p></div>
-                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Fecha de nacimiento:</span> <p className="font-semibold text-gray-800">{estudiante?.fecha_nacimiento || 'No registrada'}</p></div>
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Fecha de nacimiento:</span> <p className="font-semibold text-gray-800">{formatFecha(estudiante?.fecha_nacimiento)}</p></div>
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Dirección:</span> <p className="font-semibold text-gray-800">{estudiante?.direccion || 'No registrada'}</p></div>
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">Grupo sanguíneo:</span> <p className="font-semibold text-gray-800">{estudiante?.grupo_sanguineo || 'No registrado'}</p></div>
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><span className="text-gray-500">EPS:</span> <p className="font-semibold text-gray-800">{estudiante?.eps || 'No registrada'}</p></div>
@@ -234,7 +241,7 @@ export default function Dashboard({ estudiante, pendientes: pendientesData, venc
                             </svg>
                         </div>
                         <p className="text-sm font-semibold text-gray-700">No hay actividades pendientes ni vencidas</p>
-                        <p className="text-xs text-gray-400 mt-1">Cuando tus profesores publiquen nuevas actividades apareceran aqui.</p>
+                        <p className="text-xs text-gray-400 mt-1">Cuando tus profesores publiquen nuevas actividades aparecerán aquí.</p>
                     </div>
                 )}
             </div>

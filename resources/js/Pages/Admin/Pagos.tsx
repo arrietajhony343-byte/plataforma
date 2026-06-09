@@ -295,16 +295,16 @@ export default function Pagos({ pagos, conceptos, estudiantes, periodos, sedes, 
                     Curso: p.curso,
                     Nivel: nivelLabel(p.nivel),
                     Concepto: p.concepto,
-                    Periodo: p.periodo,
+                    Período: p.periodo,
                     Monto: p.monto,
                     Estado: estadosConfig[p.estado]?.label ?? p.estado,
-                    'Metodo de pago': p.metodo_pago ?? '',
+                    'Método de pago': p.metodo_pago ?? '',
                     Referencia: p.referencia ?? '',
                     'Fecha vencimiento': p.estado === 'pagado' ? '' : p.fecha_vencimiento,
                     'Fecha pago': p.fecha_pago ?? '',
                     Notas: p.notas ?? '',
                 }))
-                : [{ Estudiante: 'Sin registros', 'ID estudiante': '', Sede: '', Curso: '', Nivel: '', Concepto: '', Periodo: '', Monto: 0, Estado: '', 'Metodo de pago': '', Referencia: '', 'Fecha vencimiento': '', 'Fecha pago': '', Notas: '' }]
+                : [{ Estudiante: 'Sin registros', 'ID estudiante': '', Sede: '', Curso: '', Nivel: '', Concepto: '', Período: '', Monto: 0, Estado: '', 'Método de pago': '', Referencia: '', 'Fecha vencimiento': '', 'Fecha pago': '', Notas: '' }]
         );
         registrosSheet['!cols'] = [
             { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 26 },

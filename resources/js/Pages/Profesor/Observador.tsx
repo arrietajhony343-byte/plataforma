@@ -8,6 +8,7 @@ interface EstudianteBack {
     id: number;
     nombre: string;
     curso: string;
+    curso_id: number;
 }
 
 interface ObservacionBack {
@@ -25,6 +26,7 @@ interface CursoMateriaMap {
     id: number;
     curso_id: number;
     materia_id: number;
+    materia_nombre: string;
 }
 
 interface PeriodoItem {
@@ -126,10 +128,12 @@ interface Etiqueta {
 
 export default function Observador({ profesor, cursos, estudiantes, observaciones, cursoMaterias, periodos, directorCursos, directorEstudiantes, observadorDirector, boletinObservaciones }: Props) {
     const [busqueda, setBusqueda] = useState('');
+    const [showSuggestions, setShowSuggestions] = useState(false);
     const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoObservacion>('positiva');
     const [etiquetasSeleccionadas, setEtiquetasSeleccionadas] = useState<string[]>([]);
     const [descripcion, setDescripcion] = useState('');
     const [estudianteSeleccionado, setEstudianteSeleccionado] = useState('');
+    const [cursoMateriaSeleccionadaId, setCursoMateriaSeleccionadaId] = useState('');
     const [cursoFiltro, setCursoFiltro] = useState('');
     const [tab, setTab] = useState<'nuevo' | 'director' | 'historial'>('nuevo');
 
@@ -402,21 +406,35 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
         }
     };
 
-    // Filtrar estudiantes por búsqueda y curso
-    const estudiantesFiltrados = estudiantes.filter(e => {
-        const matchBusqueda = !busqueda || e.nombre.toLowerCase().includes(busqueda.toLowerCase());
-        const matchCurso = !cursoFiltro || e.curso === cursos.find(c => c.id === Number(cursoFiltro))?.nombre;
-        return matchBusqueda && matchCurso;
-    });
+    // Filtrar estudiantes para el autocomplete
+    const estudiantesFiltrados = useMemo(() => {
+        const q = busqueda.toLowerCase().trim();
+        return estudiantes.filter(e => {
+            const matchCurso = !cursoFiltro || e.curso_id === Number(cursoFiltro);
+            const matchSearch = !q || e.nombre.toLowerCase().includes(q) || e.curso.toLowerCase().includes(q);
+            return matchCurso && matchSearch;
+        }).slice(0, 20);
+    }, [busqueda, cursoFiltro, estudiantes]);
+
+    // Materias del profesor para el curso del estudiante seleccionado
+    const materiasParaEstudiante = useMemo(() => {
+        if (!estudianteSeleccionado) return [];
+        const est = estudiantes.find(e => e.id === Number(estudianteSeleccionado));
+        if (!est) return [];
+        return cursoMaterias.filter(cm => cm.curso_id === est.curso_id);
+    }, [estudianteSeleccionado, estudiantes, cursoMaterias]);
+
+    // Auto-select materia when only one option
+    useEffect(() => {
+        if (materiasParaEstudiante.length === 1) {
+            setCursoMateriaSeleccionadaId(materiasParaEstudiante[0].id.toString());
+        } else {
+            setCursoMateriaSeleccionadaId('');
+        }
+    }, [materiasParaEstudiante]);
 
     const registrarObservacion = () => {
-        if (!estudianteSeleccionado || !descripcion.trim()) return;
-        const est = estudiantes.find(e => e.id === Number(estudianteSeleccionado));
-        if (!est) return;
-        // Find a curso_materia_id for this student's curso
-        const cursoObj = cursos.find(c => c.nombre === est.curso);
-        const cm = cursoMaterias.find(cma => cma.curso_id === cursoObj?.id);
-        if (!cm) return;
+        if (!estudianteSeleccionado || !descripcion.trim() || !cursoMateriaSeleccionadaId) return;
 
         const etiquetasTexto = etiquetasSeleccionadas.map(id => {
             const et = [...etiquetasPredefinidas, ...etiquetasPersonalizadas].find(e => e.id === id);
@@ -425,7 +443,7 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
 
         router.post('/profesor/observador', {
             estudiante_id: Number(estudianteSeleccionado),
-            curso_materia_id: cm.id,
+            curso_materia_id: Number(cursoMateriaSeleccionadaId),
             tipo: tipoSeleccionado,
             categoria: etiquetasTexto || 'General',
             descripcion: etiquetasTexto ? `[${etiquetasTexto}] ${descripcion}` : descripcion,
@@ -434,6 +452,8 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
                 setDescripcion('');
                 setEtiquetasSeleccionadas([]);
                 setEstudianteSeleccionado('');
+                setBusqueda('');
+                setCursoMateriaSeleccionadaId('');
             },
         });
     };
@@ -824,24 +844,98 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
                 {/* Selección de estudiante */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar Estudiante</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                        <select value={cursoFiltro} onChange={(e) => setCursoFiltro(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <option value="">Todos los cursos</option>
-                            {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        </select>
-                        <div className="relative">
-                            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar estudiante..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+
+                    {estudianteSeleccionado ? (
+                        /* Estudiante seleccionado — pill con X */
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="inline-flex items-center gap-2 bg-[#293577]/10 border border-[#293577]/30 text-[#293577] rounded-lg px-3 py-2 text-sm font-medium">
+                                <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" /></svg>
+                                <span>{estudiantes.find(e => e.id === Number(estudianteSeleccionado))?.nombre}</span>
+                                <span className="text-xs bg-[#293577]/20 px-1.5 py-0.5 rounded">{estudiantes.find(e => e.id === Number(estudianteSeleccionado))?.curso}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setEstudianteSeleccionado(''); setBusqueda(''); setCursoMateriaSeleccionadaId(''); }}
+                                    className="ml-1 p-0.5 rounded hover:bg-[#293577]/20 transition-colors"
+                                    title="Cambiar estudiante"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <select value={estudianteSeleccionado} onChange={(e) => setEstudianteSeleccionado(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500">
-                        <option value="">Seleccionar estudiante...</option>
-                        {estudiantesFiltrados.map(e => (
-                            <option key={e.id} value={e.id}>{e.nombre} - {e.curso}</option>
-                        ))}
-                    </select>
+                    ) : (
+                        /* Combobox de búsqueda */
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <select value={cursoFiltro} onChange={(e) => setCursoFiltro(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]">
+                                <option value="">Todos los cursos</option>
+                                {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            </select>
+                            <div className="relative">
+                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    value={busqueda}
+                                    onChange={(e) => { setBusqueda(e.target.value); setShowSuggestions(true); }}
+                                    onFocus={() => setShowSuggestions(true)}
+                                    onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                                    placeholder="Buscar estudiante por nombre..."
+                                    className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                />
+                                {showSuggestions && (busqueda.length > 0 || cursoFiltro) && (
+                                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                        {estudiantesFiltrados.length > 0 ? (
+                                            estudiantesFiltrados.map(e => (
+                                                <button
+                                                    key={e.id}
+                                                    type="button"
+                                                    onMouseDown={() => {
+                                                        setEstudianteSeleccionado(e.id.toString());
+                                                        setBusqueda('');
+                                                        setShowSuggestions(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 hover:bg-[#293577]/5 text-sm border-b border-gray-100 last:border-0 flex items-center gap-2"
+                                                >
+                                                    <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" /></svg>
+                                                    <span className="font-medium text-gray-800">{e.nombre}</span>
+                                                    <span className="ml-auto text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">{e.curso}</span>
+                                                </button>
+                                            ))
+                                        ) : (
+                                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                                {estudiantes.length === 0
+                                                    ? 'Sin estudiantes asignados a tus cursos.'
+                                                    : 'No se encontraron estudiantes.'}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Materia de la observación */}
+                    {estudianteSeleccionado && (
+                        <div className="mt-3">
+                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Materia de la observación</label>
+                            {materiasParaEstudiante.length === 0 ? (
+                                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                    No tienes materias asignadas en este curso.
+                                </p>
+                            ) : (
+                                <select
+                                    value={cursoMateriaSeleccionadaId}
+                                    onChange={(e) => setCursoMateriaSeleccionadaId(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#293577]/30 focus:border-[#293577]"
+                                >
+                                    {materiasParaEstudiante.length > 1 && <option value="">Seleccionar materia...</option>}
+                                    {materiasParaEstudiante.map(cm => (
+                                        <option key={cm.id} value={cm.id}>{cm.materia_nombre}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Info de fecha y profesor */}
@@ -924,7 +1018,7 @@ export default function Observador({ profesor, cursos, estudiantes, observacione
                 </div>
 
                 {/* Botón de registro */}
-                <button onClick={registrarObservacion} disabled={!estudianteSeleccionado || !descripcion.trim()} className="bg-[#293577] text-white px-6 py-3 rounded-lg hover:bg-[#181b49] transition-colors font-semibold disabled:opacity-50">
+                <button onClick={registrarObservacion} disabled={!estudianteSeleccionado || !cursoMateriaSeleccionadaId || !descripcion.trim()} className="bg-[#293577] text-white px-6 py-3 rounded-lg hover:bg-[#181b49] transition-colors font-semibold disabled:opacity-50">
                     Registrar comentario
                 </button>
             </div>

@@ -14,7 +14,7 @@ class ObservadorController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         // Cursos/materias asignados
         $cursoMaterias = CursoMateria::where('profesor_id', $user->id)
@@ -33,9 +33,10 @@ class ObservadorController extends Controller
             ->with(['estudiante', 'curso'])
             ->get()
             ->map(fn($m) => [
-                'id'     => $m->estudiante->id,
-                'nombre' => $m->estudiante->name,
-                'curso'  => $m->curso->nombre,
+                'id'      => $m->estudiante->id,
+                'nombre'  => $m->estudiante->name,
+                'curso'   => $m->curso->nombre,
+                'curso_id' => $m->curso_id,
             ])
             ->unique('id')
             ->sortBy('nombre')
@@ -59,9 +60,10 @@ class ObservadorController extends Controller
             ]);
 
         $cursoMateriasMap = $cursoMaterias->map(fn($cm) => [
-            'id'         => $cm->id,
-            'curso_id'   => $cm->curso_id,
-            'materia_id' => $cm->materia_id,
+            'id'             => $cm->id,
+            'curso_id'       => $cm->curso_id,
+            'materia_id'     => $cm->materia_id,
+            'materia_nombre' => $cm->materia?->nombre ?? '',
         ]);
 
         $periodos = Periodo::where('anio', $anio)
@@ -182,7 +184,7 @@ class ObservadorController extends Controller
         unset($data['curso_materia_id']);
         $data['materia_id']  = $cm?->materia_id;
         $data['profesor_id'] = auth()->id();
-        $data['fecha']       = now()->toDateString();
+        $data['fecha']       = now('America/Bogota')->toDateString();
 
         Observacion::create($data);
 
@@ -284,7 +286,7 @@ class ObservadorController extends Controller
             ],
             [
                 'director_id' => $directorId,
-                'fecha_realizacion' => $data['fecha_realizacion'] ?? now()->toDateString(),
+                'fecha_realizacion' => $data['fecha_realizacion'] ?? now('America/Bogota')->toDateString(),
                 'resumen_general' => trim((string) ($data['resumen_general'] ?? '')),
                 'fortalezas' => $fortalezas,
                 'dificultades' => $dificultades,

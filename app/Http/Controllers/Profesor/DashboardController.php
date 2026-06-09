@@ -14,7 +14,7 @@ class DashboardController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         // ── Todos los curso_materia del profesor este año ──
         $cursoMaterias = CursoMateria::where('profesor_id', $user->id)
@@ -180,7 +180,7 @@ class DashboardController extends Controller
         // ── Actividades que vencen hoy ──
         $actividadesHoy = Actividad::whereIn('curso_materia_id', $cmIds)
             ->where('activa', true)
-            ->whereDate('fecha_entrega', now()->toDateString())
+            ->whereDate('fecha_entrega', now('America/Bogota')->toDateString())
             ->with('cursoMateria.materia', 'cursoMateria.curso')
             ->orderBy('fecha_entrega')
             ->get()

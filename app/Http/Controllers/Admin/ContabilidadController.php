@@ -15,7 +15,7 @@ class ContabilidadController extends Controller
 
     public function index(): Response
     {
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
         $periodoActivo = Periodo::activo()->first();
         $sedeId = $this->sedeId();
 

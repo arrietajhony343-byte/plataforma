@@ -103,13 +103,13 @@ class EstudianteController extends Controller
         $estudiante->update([
             'name'             => $data['name'],
             'email'            => $data['email'],
-            'telefono'         => $data['phone'] ?? $estudiante->telefono,
-            'documento'        => $data['documento'] ?? $estudiante->documento,
+            'telefono'         => $data['phone'],
+            'documento'        => $data['documento'],
             'tipo_documento'   => $data['tipo_documento'],
-            'direccion'        => $data['direccion'] ?? $estudiante->direccion,
-            'fecha_nacimiento' => $data['fecha_nacimiento'] ?? $estudiante->fecha_nacimiento,
+            'direccion'        => $data['direccion'],
+            'fecha_nacimiento' => $data['fecha_nacimiento'],
             'lugar_nacimiento' => $data['lugar_nacimiento'] ?? null,
-            'genero'           => $data['genero'] ?? $estudiante->genero,
+            'genero'           => $data['genero'],
             'grupo_sanguineo'  => $data['grupo_sanguineo'] ?? null,
             'eps'              => $data['eps'] ?? null,
             'dificultad_aprendizaje' => (bool) ($data['dificultad_aprendizaje'] ?? false),
@@ -138,7 +138,7 @@ class EstudianteController extends Controller
                 if ($matricula) {
                     $matricula->update(['curso_id' => $data['curso_id']]);
                 } else {
-                    $periodo = Periodo::orderBy('id')->first();
+                    $periodo = Periodo::activo()->first() ?? Periodo::orderByDesc('id')->first();
                     Matricula::create([
                         'estudiante_id'   => $estudiante->id,
                         'curso_id'        => $data['curso_id'],

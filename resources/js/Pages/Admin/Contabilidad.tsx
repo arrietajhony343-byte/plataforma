@@ -110,7 +110,7 @@ export default function Contabilidad({
     const [sedeSel, setSedeSel] = useState('todas');
     const [nivelSel, setNivelSel] = useState('todos');
     const [cursoSel, setCursoSel] = useState('todos');
-    const [metodoSel, setMetodoSel] = useState('todos');
+    const [metodoSel, setMétodoSel] = useState('todos');
     const [conceptoSel, setConceptoSel] = useState('todos');
     const [deudaMin, setDeudaMin] = useState('');
     const [vencidosMin, setVencidosMin] = useState('');
@@ -214,7 +214,7 @@ export default function Contabilidad({
             items.push(`Curso: ${cursoSel}`);
         }
         if (metodoSel !== 'todos') {
-            items.push(`Metodo: ${metodoSel}`);
+            items.push(`Método: ${metodoSel}`);
         }
         if (conceptoSel !== 'todos') {
             items.push(`Concepto: ${conceptoSel}`);
@@ -277,17 +277,17 @@ export default function Contabilidad({
                     Fecha: p.fecha ?? '',
                     Estudiante: p.estudiante,
                     Documento: p.documento ?? '',
-                    Telefono: p.telefono ?? '',
+                    Teléfono: p.telefono ?? '',
                     Correo: p.email ?? '',
                     Sede: p.sede ?? 'N/A',
                     Curso: p.curso ?? 'N/A',
                     Nivel: nivelLabel(p.nivel),
                     Concepto: p.concepto,
-                    Metodo: p.metodo ?? '',
+                    Método: p.metodo ?? '',
                     Referencia: p.referencia ?? '',
                     Monto: p.monto,
                 }))
-                : [{ Fecha: '', Estudiante: 'Sin registros', Documento: '', Telefono: '', Correo: '', Sede: '', Curso: '', Nivel: '', Concepto: '', Metodo: '', Referencia: '', Monto: 0 }]
+                : [{ Fecha: '', Estudiante: 'Sin registros', Documento: '', Teléfono: '', Correo: '', Sede: '', Curso: '', Nivel: '', Concepto: '', Método: '', Referencia: '', Monto: 0 }]
         );
         wsRegistros['!cols'] = [
             { wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 18 },
@@ -301,17 +301,17 @@ export default function Contabilidad({
                     Estudiante: m.nombre,
                     Documento: m.documento ?? '',
                     Correo: m.email ?? '',
-                    Telefono: m.telefono ?? '',
+                    Teléfono: m.telefono ?? '',
                     Sede: m.sede ?? 'N/A',
                     Curso: m.curso,
                     Nivel: nivelLabel(m.nivel),
                     Acudiente: m.acudiente ?? '',
                     'Documento acudiente': m.acudiente_doc ?? '',
-                    'Telefono acudiente': m.acudiente_tel ?? '',
+                    'Teléfono acudiente': m.acudiente_tel ?? '',
                     'Pagos vencidos': m.pagosVencidos,
                     'Deuda total': m.deudaTotal,
                 }))
-                : [{ Estudiante: 'Sin deudores', Documento: '', Correo: '', Telefono: '', Sede: '', Curso: '', Nivel: '', Acudiente: '', 'Documento acudiente': '', 'Telefono acudiente': '', 'Pagos vencidos': 0, 'Deuda total': 0 }]
+                : [{ Estudiante: 'Sin deudores', Documento: '', Correo: '', Teléfono: '', Sede: '', Curso: '', Nivel: '', Acudiente: '', 'Documento acudiente': '', 'Teléfono acudiente': '', 'Pagos vencidos': 0, 'Deuda total': 0 }]
         );
         wsDeudores['!cols'] = [
             { wch: 28 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 18 }, { wch: 14 },
@@ -443,7 +443,7 @@ export default function Contabilidad({
         autoTable(doc, {
             startY: 30,
             margin: { left: M, right: M },
-            head: [['Fecha', 'Estudiante', 'Documento', 'Sede', 'Curso', 'Nivel', 'Concepto', 'Metodo', 'Referencia', 'Monto']],
+            head: [['Fecha', 'Estudiante', 'Documento', 'Sede', 'Curso', 'Nivel', 'Concepto', 'Método', 'Referencia', 'Monto']],
             body: ultimosPagosFiltrados.length > 0
                 ? ultimosPagosFiltrados.map(p => [
                     p.fecha ?? 'N/A',
@@ -555,7 +555,7 @@ export default function Contabilidad({
         setSedeSel('todas');
         setNivelSel('todos');
         setCursoSel('todos');
-        setMetodoSel('todos');
+        setMétodoSel('todos');
         setConceptoSel('todos');
         setDeudaMin('');
         setVencidosMin('');
@@ -661,10 +661,10 @@ export default function Contabilidad({
                         {vistaActiva === 'movimientos' && (
                             <>
                                 <div className="relative">
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Metodo</label>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Método</label>
                                     <select
                                         value={metodoSel}
-                                        onChange={e => setMetodoSel(e.target.value)}
+                                        onChange={e => setMétodoSel(e.target.value)}
                                         className="appearance-none w-full pl-4 pr-9 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#293577]"
                                     >
                                         <option value="todos">Todos</option>
@@ -771,7 +771,7 @@ export default function Contabilidad({
                             {metodoSel !== 'todos' && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-700">
                                     {metodoSel}
-                                    <button onClick={() => setMetodoSel('todos')} className="hover:opacity-70">x</button>
+                                    <button onClick={() => setMétodoSel('todos')} className="hover:opacity-70">x</button>
                                 </span>
                             )}
                             {conceptoSel !== 'todos' && (
@@ -916,7 +916,7 @@ export default function Contabilidad({
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sede</th>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Curso</th>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Concepto</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Metodo</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Método</th>
                                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Monto</th>
                                             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Detalle</th>
                                         </tr>
@@ -1050,7 +1050,7 @@ export default function Contabilidad({
                                     <p className="font-semibold text-gray-900">{detalleMovimiento.concepto}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-gray-500">Metodo</p>
+                                    <p className="text-xs text-gray-500">Método</p>
                                     <p className="font-semibold text-gray-900">{detalleMovimiento.metodo || 'N/A'}</p>
                                 </div>
                                 <div>

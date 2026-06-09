@@ -44,7 +44,7 @@ class CalendarioController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         $cursoMaterias = $this->getCursoMaterias($user, $anio);
 
@@ -154,7 +154,7 @@ class CalendarioController extends Controller
             ])
             ->values();
 
-        $hoy = now()->toDateString();
+        $hoy = now('America/Bogota')->toDateString();
         $eventosPersonales = collect();
         if (Schema::hasTable('profesor_eventos')) {
             $eventosPersonales = ProfesorEvento::query()
@@ -196,7 +196,7 @@ class CalendarioController extends Controller
     public function horario(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         $cursoMaterias = $this->getCursoMaterias($user, $anio);
         $clasesSemanales = $this->getClasesSemanales($cursoMaterias);

@@ -166,7 +166,7 @@ class PagoController extends Controller
                     'tipo' => $tipoCertificado->codigo,
                     'descripcion' => $data['descripcion_solicitud'] ?? ($data['notas'] ?? null),
                     'estado' => 'solicitado',
-                    'fecha_solicitud' => now()->toDateString(),
+                    'fecha_solicitud' => now('America/Bogota')->toDateString(),
                 ]);
 
                 $data['periodo_id'] = null;
@@ -175,12 +175,12 @@ class PagoController extends Controller
             }
 
             if ($data['estado'] === 'pagado' && empty($data['fecha_pago'])) {
-                $data['fecha_pago'] = now()->toDateString();
+                $data['fecha_pago'] = now('America/Bogota')->toDateString();
             }
 
             if ($data['estado'] === 'pagado' && empty($data['fecha_vencimiento'])) {
                 // La tabla requiere fecha_vencimiento; para pagos ya cancelados se iguala a fecha de pago.
-                $data['fecha_vencimiento'] = $data['fecha_pago'] ?? now()->toDateString();
+                $data['fecha_vencimiento'] = $data['fecha_pago'] ?? now('America/Bogota')->toDateString();
             }
 
             $notaLibre = trim((string) ($data['notas'] ?? ''));
@@ -232,7 +232,7 @@ class PagoController extends Controller
         ]);
 
         if ($data['estado'] === 'pagado' && empty($data['fecha_pago'])) {
-            $data['fecha_pago'] = now()->toDateString();
+            $data['fecha_pago'] = now('America/Bogota')->toDateString();
         }
 
         $pago->update($data);
@@ -259,7 +259,7 @@ class PagoController extends Controller
             'estado'      => 'pagado',
             'metodo_pago' => $data['metodo_pago'],
             'referencia'  => $data['referencia'] ?? null,
-            'fecha_pago'  => now()->toDateString(),
+            'fecha_pago'  => now('America/Bogota')->toDateString(),
         ]);
 
         $this->marcarCertificadoEnGestion($pago);
@@ -332,7 +332,7 @@ class PagoController extends Controller
             return redirect()->back()->with('error', 'Los conceptos asociados a tipos de certificado se administran desde el módulo de Certificados.');
         }
 
-        if ($concepto->pagos_count > 0) {
+        if ($concepto->pagos()->count() > 0) {
             return redirect()->back()->with('error', 'No se puede eliminar un concepto que tiene pagos asociados.');
         }
 

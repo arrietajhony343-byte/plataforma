@@ -72,7 +72,7 @@ export default function Notas({ estudiante, periodos, periodoActualId, notasPorP
         return 'bg-red-50';
     };
 
-    const periodoLabel = periodos.find((p) => p.id === periodoActivo)?.nombre ?? 'Sin periodo';
+    const periodoLabel = periodos.find((p) => p.id === periodoActivo)?.nombre ?? 'Sin período';
 
     return (
         <SidebarLayout menuItems={estudianteMenuItems} userInfo={{ name: nombre, role: 'Estudiante' }}>
@@ -133,8 +133,8 @@ export default function Notas({ estudiante, periodos, periodoActualId, notasPorP
             {/* Tabla de notas por materia */}
             {periodos.length === 0 || !resumenActivo ? (
                 <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                    <p className="text-gray-600 font-semibold">Aun no tienes notas registradas.</p>
-                    <p className="text-gray-400 text-sm mt-1">Cuando tus profesores publiquen calificaciones las veras aqui por periodo y materia.</p>
+                    <p className="text-gray-600 font-semibold">Aún no tienes notas registradas.</p>
+                    <p className="text-gray-400 text-sm mt-1">Cuando tus profesores publiquen calificaciones las verás aquí por período y materia.</p>
                 </div>
             ) : (
                 <div className="space-y-4">

@@ -17,7 +17,7 @@ class NotaController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         $cursoMaterias = CursoMateria::where('profesor_id', $user->id)
             ->whereHas('curso', fn ($q) => $q->where('anio', $anio))

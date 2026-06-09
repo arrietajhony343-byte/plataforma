@@ -54,9 +54,16 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
 
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+    const formatFecha = (f: string | null) => {
+        if (!f) return '—';
+        const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+        if (Number.isNaN(d.getTime())) return f;
+        return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
     const fechaBase = useMemo(() => {
         if (items.length === 0) return new Date();
-        const d = new Date(items[0].fecha + 'T00:00:00');
+        const d = new Date(items[0].fecha + 'T12:00:00');
         return Number.isNaN(d.getTime()) ? new Date() : d;
     }, [items]);
 
@@ -109,8 +116,8 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
                     <>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div>
-                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Calendario Academico</h1>
-                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} Seccion {hijo.seccion}</p>
+                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Calendario Académico</h1>
+                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} Sección {hijo.seccion}</p>
                             </div>
                             {hijos.length > 1 && (
                                 <div>
@@ -132,7 +139,7 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
                                 <p className="text-2xl font-bold text-[#181b49]">{resumen.total}</p>
                             </div>
                             <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-                                <p className="text-sm text-gray-500">Proximas</p>
+                                <p className="text-sm text-gray-500">Próximas</p>
                                 <p className="text-2xl font-bold text-[#293577]">{resumen.proximas}</p>
                             </div>
                             <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
@@ -146,7 +153,7 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
                                 <p className="font-semibold text-red-800">Actividades pendientes o no entregadas</p>
                                 <div className="mt-1 space-y-1">
                                     {pendientes.slice(0, 3).map((a) => (
-                                        <p key={a.id} className="text-sm text-red-700">• {a.titulo} ({a.materia}) - {a.fecha}</p>
+                                        <p key={a.id} className="text-sm text-red-700">• {a.titulo} ({a.materia}) - {formatFecha(a.fecha)}</p>
                                     ))}
                                 </div>
                             </div>
@@ -177,7 +184,7 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
 
                                 <div className="hidden md:block">
                                     <div className="grid grid-cols-7 gap-1">
-                                        {['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].map((d) => <div key={d} className="text-center text-xs font-semibold text-gray-500 py-2">{d}</div>)}
+                                        {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => <div key={d} className="text-center text-xs font-semibold text-gray-500 py-2">{d}</div>)}
                                         {Array.from({ length: primerDiaSemana }).map((_, i) => <div key={`e-${i}`} className="min-h-[90px]" />)}
                                         {dias.map((dia) => {
                                             const acts = getItemsDelDia(dia);
@@ -228,7 +235,7 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
                                                     <p className="text-sm text-gray-500 truncate">{act.materia} · {act.profesor}</p>
                                                 </div>
                                                 <div className="text-right flex-shrink-0">
-                                                    <span className="inline-block bg-[#293577]/10 text-[#293577] px-2.5 py-1 rounded-full text-xs font-semibold">{act.fecha}</span>
+                                                    <span className="inline-block bg-[#293577]/10 text-[#293577] px-2.5 py-1 rounded-full text-xs font-semibold">{formatFecha(act.fecha)}</span>
                                                     {act.hora && <p className="text-xs text-gray-500 mt-1">{act.hora}</p>}
                                                 </div>
                                             </div>
@@ -251,7 +258,7 @@ export default function Calendario({ padre, hijos, hijo, items, pendientes, resu
                         <div className="space-y-2 text-sm">
                             <p><span className="text-gray-500">Materia:</span> <span className="text-gray-800 font-medium">{selectedActividad.materia}</span></p>
                             <p><span className="text-gray-500">Responsable:</span> <span className="text-gray-800 font-medium">{selectedActividad.profesor}</span></p>
-                            <p><span className="text-gray-500">Fecha:</span> <span className="text-gray-800 font-medium">{selectedActividad.fecha}{selectedActividad.hora ? ` ${selectedActividad.hora}` : ''}</span></p>
+                            <p><span className="text-gray-500">Fecha:</span> <span className="text-gray-800 font-medium">{formatFecha(selectedActividad.fecha)}{selectedActividad.hora ? ` ${selectedActividad.hora}` : ''}</span></p>
                             {selectedActividad.descripcion && <p className="mt-2 text-gray-700 bg-gray-50 p-3 rounded-lg">{selectedActividad.descripcion}</p>}
                         </div>
                         <button onClick={() => setSelectedActividad(null)} className="mt-5 w-full px-4 py-2 bg-[#293577] text-white rounded-lg">Cerrar</button>

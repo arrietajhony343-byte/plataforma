@@ -127,9 +127,9 @@ const boolToLabel = (value?: boolean | null) => {
 
 const toDate = (value?: string | null) => {
     if (!value) return 'No registrado';
-    const d = new Date(value);
+    const d = new Date(value.length === 10 ? value + 'T12:00:00' : value);
     if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString('es-CO');
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 const cargarImagen = async (src?: string | null): Promise<string | null> => {
@@ -318,7 +318,7 @@ export default function Observador({ padre, hijos, hijo, periodos, periodoSelecc
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10.5);
-        doc.text('Informacion del estudiante', M, y + 4);
+        doc.text('Información del estudiante', M, y + 4);
 
         autoTable(doc, {
             startY: y + 7,
@@ -567,16 +567,16 @@ export default function Observador({ padre, hijos, hijo, periodos, periodoSelecc
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {!hijo ? (
                     <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Observador Academico</h1>
+                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Observador Académico</h1>
                         <p className="text-gray-500 mt-2">No hay hijos vinculados a este acudiente.</p>
                     </div>
                 ) : (
                     <>
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                             <div>
-                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Observador Academico</h1>
+                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Observador Académico</h1>
                                 <p className="text-gray-600">
-                                    {hijo.nombre} · {hijo.grado} Seccion {hijo.seccion}
+                                    {hijo.nombre} · {hijo.grado} Sección {hijo.seccion}
                                 </p>
                             </div>
 
@@ -668,7 +668,7 @@ export default function Observador({ padre, hijos, hijo, periodos, periodoSelecc
 
                             {!observador ? (
                                 <div className="rounded-lg border border-dashed border-gray-300 p-5 text-sm text-gray-500">
-                                    Para este periodo aun no hay observador integral diligenciado por direccion de grupo. Los comentarios docentes si aparecen abajo.
+                                    Para este período aún no hay observador integral diligenciado por dirección de grupo. Los comentarios docentes sí aparecen abajo.
                                 </div>
                             ) : (
                                 <>
@@ -800,7 +800,7 @@ export default function Observador({ padre, hijos, hijo, periodos, periodoSelecc
                                 <h3 className="font-semibold text-gray-800">Historial de observadores generados</h3>
                             </div>
                             {historial.length === 0 ? (
-                                <div className="p-6 text-sm text-gray-500">Aun no hay observadores de periodo registrados.</div>
+                                <div className="p-6 text-sm text-gray-500">Aún no hay observadores de período registrados.</div>
                             ) : (
                                 <div className="divide-y divide-gray-100">
                                     {historial.map((item) => (
@@ -813,7 +813,7 @@ export default function Observador({ padre, hijos, hijo, periodos, periodoSelecc
                                                     Curso: {safeText(item.curso)} · Director: {safeText(item.director)}
                                                 </p>
                                                 <p className="text-xs text-gray-400 mt-0.5">
-                                                    Fecha realizacion: {toDate(item.fecha_realizacion)} · Actualizado: {safeText(item.updated_at)}
+                                                    Fecha realización: {toDate(item.fecha_realizacion)} · Actualizado: {toDate(item.updated_at)}
                                                 </p>
                                             </div>
                                             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${

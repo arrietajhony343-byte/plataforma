@@ -220,7 +220,7 @@ class UsuarioController extends Controller
         // Asignaciones académicas para estudiantes
         if ($data['role'] === 'estudiante') {
             if (!empty($data['curso_id'])) {
-                $periodo = Periodo::orderBy('id')->first();
+                $periodo = Periodo::activo()->first() ?? Periodo::orderByDesc('id')->first();
                 Matricula::create([
                     'estudiante_id'   => $user->id,
                     'curso_id'        => $data['curso_id'],
@@ -285,12 +285,12 @@ class UsuarioController extends Controller
         $updateData = [
             'name'             => $data['name'],
             'email'            => $data['email'],
-            'telefono'         => $data['phone'] ?? $user->telefono,
-            'documento'        => $data['documento'] ?? $user->documento,
+            'telefono'         => $data['phone'],
+            'documento'        => $data['documento'],
             'tipo_documento'   => $data['tipo_documento'],
-            'direccion'        => $data['direccion'] ?? $user->direccion,
-            'fecha_nacimiento' => $data['fecha_nacimiento'] ?? $user->fecha_nacimiento,
-            'genero'           => $data['genero'] ?? $user->genero,
+            'direccion'        => $data['direccion'],
+            'fecha_nacimiento' => $data['fecha_nacimiento'],
+            'genero'           => $data['genero'],
             'activo'           => ($data['status'] ?? 'activo') !== 'bloqueado',
             'sede_id'          => array_key_exists('sede_id', $data) ? $data['sede_id'] : $user->sede_id,
         ];
@@ -313,7 +313,7 @@ class UsuarioController extends Controller
                     if ($matricula) {
                         $matricula->update(['curso_id' => $data['curso_id']]);
                     } else {
-                        $periodo = Periodo::orderBy('id')->first();
+                        $periodo = Periodo::activo()->first() ?? Periodo::orderByDesc('id')->first();
                         Matricula::create([
                             'estudiante_id'   => $user->id,
                             'curso_id'        => $data['curso_id'],

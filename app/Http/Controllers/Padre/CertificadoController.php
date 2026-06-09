@@ -24,6 +24,7 @@ class CertificadoController extends Controller
 
         if ($hijos->isEmpty()) {
             return Inertia::render('Padre/Certificados', [
+                'padre' => ['nombre' => $padre->name],
                 'hijos' => [],
                 'hijo' => null,
                 'tipos' => [],
@@ -84,6 +85,7 @@ class CertificadoController extends Controller
             ->values();
 
         return Inertia::render('Padre/Certificados', [
+            'padre' => ['nombre' => $padre->name],
             'hijos' => $hijos->map(fn($h) => ['id' => $h->id, 'nombre' => $h->name])->values(),
             'hijo' => [
                 'id' => $hijo->id,
@@ -118,7 +120,7 @@ class CertificadoController extends Controller
                 'tipo' => $tipo->codigo,
                 'descripcion' => $data['descripcion'] ?? null,
                 'estado' => 'solicitado',
-                'fecha_solicitud' => now()->toDateString(),
+                'fecha_solicitud' => now('America/Bogota')->toDateString(),
             ]);
 
             $pagoPendiente = null;
@@ -134,7 +136,7 @@ class CertificadoController extends Controller
                     'estado' => 'pendiente',
                     'metodo_pago' => null,
                     'referencia' => null,
-                    'fecha_vencimiento' => now()->addDays(7)->toDateString(),
+                    'fecha_vencimiento' => now('America/Bogota')->addDays(7)->toDateString(),
                     'fecha_pago' => null,
                     'notas' => 'certificado:' . $certificado->id . '|' . $tipo->nombre,
                 ]);

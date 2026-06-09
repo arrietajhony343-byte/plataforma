@@ -81,20 +81,20 @@ export default function Boletin({ padre, hijos, hijo, periodos, periodoSeleccion
 
     return (
         <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
-            <Head title="Boletin & Notas" />
+            <Head title="Boletín & Notas" />
 
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {!hijo ? (
                     <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Boletin & Notas</h1>
+                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Boletín & Notas</h1>
                         <p className="text-gray-500 mt-2">No hay hijos vinculados a este acudiente.</p>
                     </div>
                 ) : (
                     <>
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                             <div>
-                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Boletin & Notas</h1>
-                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} {hijo.seccion} · Codigo: {hijo.codigo}</p>
+                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Boletín & Notas</h1>
+                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} {hijo.seccion} · Código: {hijo.codigo}</p>
                             </div>
 
                             <div className="flex flex-col sm:flex-row items-stretch gap-2">
@@ -138,25 +138,25 @@ export default function Boletin({ padre, hijos, hijo, periodos, periodoSeleccion
                                             <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
                                         </div>
                                         <div>
-                                            <h2 className="font-bold text-gray-800">Boletin {boletinActual.periodo}</h2>
+                                            <h2 className="font-bold text-gray-800">Boletín {boletinActual.periodo}</h2>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                                     boletinActual.estado === 'disponible' ? 'bg-green-100 text-green-800' :
                                                     boletinActual.estado === 'generando' ? 'bg-yellow-100 text-yellow-800' :
                                                     'bg-gray-100 text-gray-700'
                                                 }`}>
-                                                    {boletinActual.estado === 'disponible' ? 'Disponible' : boletinActual.estado === 'generando' ? 'Generandose automaticamente' : 'Pendiente'}
+                                                    {boletinActual.estado === 'disponible' ? 'Disponible' : boletinActual.estado === 'generando' ? 'Generándose automáticamente' : 'Pendiente'}
                                                 </span>
                                             </div>
                                             {boletinActual.estado === 'generando' && (
-                                                <p className="text-xs text-yellow-700 mt-1">El boletin se genera cuando se completan notas definitivas y observaciones del periodo.</p>
+                                                <p className="text-xs text-yellow-700 mt-1">El boletín se genera cuando se completan notas definitivas y observaciones del período.</p>
                                             )}
                                         </div>
                                     </div>
 
                                     {boletinActual.estado === 'disponible' && boletinActual.archivo_url && (
                                         <a href={boletinActual.archivo_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
-                                            Descargar Boletin PDF
+                                            Descargar Boletín PDF
                                         </a>
                                     )}
                                 </div>
@@ -267,7 +267,7 @@ export default function Boletin({ padre, hijos, hijo, periodos, periodoSeleccion
                                             bol.estado === 'generando' ? 'bg-yellow-200 text-yellow-800' :
                                             'bg-gray-200 text-gray-600'
                                         }`}>
-                                            {bol.estado === 'disponible' ? 'Disponible' : bol.estado === 'generando' ? 'Generandose' : 'Pendiente'}
+                                            {bol.estado === 'disponible' ? 'Disponible' : bol.estado === 'generando' ? 'Generándose' : 'Pendiente'}
                                         </span>
                                         {bol.estado === 'disponible' && bol.archivo_url && (
                                             <a href={bol.archivo_url} target="_blank" rel="noreferrer" className="mt-3 block w-full bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition-colors">
@@ -275,7 +275,7 @@ export default function Boletin({ padre, hijos, hijo, periodos, periodoSeleccion
                                             </a>
                                         )}
                                         {bol.estado === 'generando' && (
-                                            <p className="mt-2 text-xs text-yellow-700">Se genera al registrar notas definitivas del periodo.</p>
+                                            <p className="mt-2 text-xs text-yellow-700">Se genera al registrar notas definitivas del período.</p>
                                         )}
                                     </div>
                                 ))}

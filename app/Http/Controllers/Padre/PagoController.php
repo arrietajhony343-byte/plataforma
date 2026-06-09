@@ -23,6 +23,7 @@ class PagoController extends Controller
 
         if ($hijos->isEmpty()) {
             return Inertia::render('Padre/Pagos', [
+                'padre' => ['nombre' => $padre->name],
                 'hijos' => [],
                 'hijo' => null,
                 'pagos' => [],
@@ -71,6 +72,7 @@ class PagoController extends Controller
         ];
 
         return Inertia::render('Padre/Pagos', [
+            'padre' => ['nombre' => $padre->name],
             'hijos' => $hijos->map(fn($h) => ['id' => $h->id, 'nombre' => $h->name])->values(),
             'hijo' => [
                 'id' => $hijo->id,
@@ -105,7 +107,7 @@ class PagoController extends Controller
             'estado' => 'pagado',
             'metodo_pago' => $data['metodo_pago'],
             'referencia' => $referencia,
-            'fecha_pago' => now()->toDateString(),
+            'fecha_pago' => now('America/Bogota')->toDateString(),
         ]);
 
         Comprobante::query()->firstOrCreate(
@@ -116,6 +118,18 @@ class PagoController extends Controller
                 'nota_admin' => 'Pago confirmado desde el portal de acudiente.',
             ]
         );
+
+        $pago->loadMissing('conceptoPago');
+        $conceptoNombre = $pago->conceptoPago?->nombre ?? 'Concepto';
+        $montoFormato = '$' . number_format((float) $pago->monto, 0, ',', '.');
+
+        Notificacion::query()->create([
+            'user_id' => $padre->id,
+            'tipo'    => 'pago',
+            'titulo'  => 'Pago realizado',
+            'mensaje' => "Tu pago de \"{$conceptoNombre}\" por {$montoFormato} COP fue registrado correctamente. Referencia: {$referencia}.",
+            'leida'   => false,
+        ]);
 
         $this->marcarCertificadoEnGestionYNotificar($pago);
 
@@ -133,6 +147,7 @@ class PagoController extends Controller
 
         if ($hijos->isEmpty()) {
             return Inertia::render('Padre/Comprobantes', [
+                'padre' => ['nombre' => $padre->name],
                 'hijos' => [],
                 'hijo' => null,
                 'comprobantes' => [],
@@ -169,6 +184,7 @@ class PagoController extends Controller
         })->values();
 
         return Inertia::render('Padre/Comprobantes', [
+            'padre' => ['nombre' => $padre->name],
             'hijos' => $hijos->map(fn($h) => ['id' => $h->id, 'nombre' => $h->name])->values(),
             'hijo' => [
                 'id' => $hijo->id,

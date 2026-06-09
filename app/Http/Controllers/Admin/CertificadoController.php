@@ -113,6 +113,7 @@ class CertificadoController extends Controller
                     'nivel'               => $mat?->curso?->nivel ?? '',
                     'curso_id'            => $mat?->curso_id,
                     'curso'               => $mat?->curso?->nombre ?? '',
+                    'jornada'             => $mat?->curso?->jornada ?? '',
                     'coordinadora'        => $coordinadoresPorSede->get($c->estudiante->sede_id)?->name ?? '',
                     'descripcion'         => $c->descripcion,
                     'archivo'             => $c->archivo,
@@ -163,6 +164,7 @@ class CertificadoController extends Controller
                 'nombre'  => $c->nombre,
                 'nivel'   => $c->nivel,
                 'grado'   => $c->grado,
+                'jornada' => $c->jornada ?? 'mañana',
                 'sede_id' => $c->sede_id,
             ]);
 

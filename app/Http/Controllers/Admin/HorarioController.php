@@ -155,8 +155,8 @@ class HorarioController extends Controller
      * ================================================================ */
     public function index(): Response
     {
-        // Usar el año más reciente con cursos activos (no hardcodear now()->year)
-        $anio = Curso::activo()->max('anio') ?? now()->year;
+        // Usar el año más reciente con cursos activos (no hardcodear now('America/Bogota')->year)
+        $anio = Curso::activo()->max('anio') ?? now('America/Bogota')->year;
 
         // Cursos activos del año vigente (ordenados para el selector)
         $nivelOrder = ['preescolar' => 1, 'transicion' => 2, 'primaria' => 3, 'secundaria' => 4, 'media' => 5];

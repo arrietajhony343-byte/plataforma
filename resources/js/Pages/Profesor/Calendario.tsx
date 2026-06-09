@@ -167,40 +167,6 @@ function formatDateTimeLabel(iso: string | null) {
     }).format(parseIsoDateTime(iso));
 }
 
-function buildWeeklyClassEvents(clases: ClaseSemanal[], start: Date, end: Date): EventoCalendario[] {
-    const events: EventoCalendario[] = [];
-    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-    const limit = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-
-    while (cursor <= limit) {
-        const weekday = cursor.getDay();
-        const dateIso = toIsoDate(cursor);
-
-        clases.forEach((clase) => {
-            const classDay = DAY_ORDER[clase.dia.toLowerCase()] ?? -1;
-            if (classDay !== weekday) return;
-
-            events.push({
-                id: `clase-${clase.id}-${dateIso}`,
-                fecha: dateIso,
-                inicio: clase.horaInicio,
-                fin: clase.horaFin,
-                titulo: clase.materia ?? 'Clase programada',
-                descripcion: clase.salon ? `Salon ${clase.salon}` : 'Clase programada',
-                categoria: 'clase',
-                tipo: 'clase',
-                curso: clase.curso,
-                materia: clase.materia,
-                salon: clase.salon,
-                periodo: null,
-            });
-        });
-
-        cursor.setDate(cursor.getDate() + 1);
-    }
-
-    return events;
-}
 
 function sortEvents(events: EventoCalendario[]) {
     const weights: Record<EventoCalendario['categoria'], number> = {
@@ -408,10 +374,28 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
         }, {});
     }, [monthEvents]);
 
-    const selectedDayEvents = useMemo(
-        () => sortEvents(eventsByDate[selectedDate] ?? []),
-        [eventsByDate, selectedDate],
-    );
+    const selectedDayEvents = useMemo(() => {
+        const weekday = parseIsoDate(selectedDate).getDay();
+        const classEvents: EventoCalendario[] = clasesSemanales
+            .filter(clase => (DAY_ORDER[clase.dia.toLowerCase()] ?? -1) === weekday)
+            .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
+            .map<EventoCalendario>(clase => ({
+                id: `clase-${clase.id}-${selectedDate}`,
+                fecha: selectedDate,
+                inicio: clase.horaInicio,
+                fin: clase.horaFin,
+                titulo: clase.materia ?? 'Clase programada',
+                descripcion: clase.salon ? `Salón ${clase.salon}` : null,
+                categoria: 'clase',
+                tipo: 'clase',
+                curso: clase.curso,
+                materia: clase.materia,
+                salon: clase.salon,
+                periodo: null,
+            }));
+
+        return sortEvents([...classEvents, ...(eventsByDate[selectedDate] ?? [])]);
+    }, [eventsByDate, selectedDate, clasesSemanales]);
 
     const nextAgenda = useMemo(() => {
         const activityEvents = actividades
@@ -682,6 +666,7 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                                 </div>
 
                                 <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                                    <span className="rounded-full bg-[#293577]/10 px-3 py-1 text-[#293577]">Clases</span>
                                     <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">Actividades</span>
                                     <span className="rounded-full bg-teal-100 px-3 py-1 text-teal-700">Eventos personales</span>
                                     <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">Aperturas de notas</span>
@@ -762,7 +747,7 @@ export default function Calendario({ profesor, resumen, clasesSemanales, activid
                             <div className="border-b border-gray-100 px-5 py-4">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400">Agenda del dia</p>
                                 <h2 className="mt-1 text-xl font-black capitalize text-gray-900">{formatDateLabel(selectedDate)}</h2>
-                                <p className="mt-1 text-sm text-gray-500">{selectedDayEvents.length} elementos consolidados para esta fecha.</p>
+                                <p className="mt-1 text-sm text-gray-500">{selectedDayEvents.length} {selectedDayEvents.length === 1 ? 'elemento' : 'elementos'} — clases, actividades y eventos.</p>
                             </div>
 
                             <div className="p-4">

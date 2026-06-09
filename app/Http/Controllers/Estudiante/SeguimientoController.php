@@ -57,7 +57,7 @@ class SeguimientoController extends Controller
                 'disponible' => false,
                 'curso' => null,
                 'horas' => [],
-                'dias' => ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes'],
+                'dias' => ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'],
                 'bloques' => [],
             ]);
         }
@@ -125,7 +125,7 @@ class SeguimientoController extends Controller
                 'jornada' => $matricula->curso->jornada,
                 'anio' => $matricula->curso->anio,
             ],
-            'dias' => ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes'],
+            'dias' => ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'],
             'horas' => $horas,
             'bloques' => $bloques,
         ]);
@@ -207,7 +207,7 @@ class SeguimientoController extends Controller
         return match (strtolower($dia)) {
             'lunes' => 'Lunes',
             'martes' => 'Martes',
-            'miercoles' => 'Miercoles',
+            'miercoles' => 'Miércoles',
             'jueves' => 'Jueves',
             'viernes' => 'Viernes',
             default => ucfirst($dia),

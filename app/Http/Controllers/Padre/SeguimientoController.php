@@ -53,7 +53,7 @@ class SeguimientoController extends Controller
             ->latest('id')
             ->first();
 
-        $anio = (int) ($matricula?->curso?->anio ?? (Periodo::max('anio') ?: now()->year));
+        $anio = (int) ($matricula?->curso?->anio ?? (Periodo::max('anio') ?: now('America/Bogota')->year));
 
         $periodos = Periodo::query()
             ->where('anio', $anio)

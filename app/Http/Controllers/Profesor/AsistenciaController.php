@@ -17,7 +17,7 @@ class AsistenciaController extends Controller
     public function index(): Response
     {
         $user = auth()->user();
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         $cursoMaterias = CursoMateria::where('profesor_id', $user->id)
             ->whereHas('curso', fn ($q) => $q->where('anio', $anio)->where('activo', true))
@@ -198,7 +198,7 @@ class AsistenciaController extends Controller
         $cmId = $request->curso_materia_id;
         $fecha = $request->fecha;
 
-        if (Carbon::parse($fecha)->toDateString() !== now()->toDateString()) {
+        if (Carbon::parse($fecha)->toDateString() !== now('America/Bogota')->toDateString()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Solo puedes registrar o editar asistencias del día actual.',

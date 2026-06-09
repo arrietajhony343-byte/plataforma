@@ -73,7 +73,7 @@ class CalendarioController extends Controller
         }
 
         $curso = $matricula->curso;
-        $anio = (int) ($curso->anio ?? now()->year);
+        $anio = (int) ($curso->anio ?? now('America/Bogota')->year);
 
         $cursoMateriaIds = \App\Models\CursoMateria::query()
             ->where('curso_id', $curso->id)

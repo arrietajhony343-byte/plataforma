@@ -34,7 +34,7 @@ interface Props {
 
 export default function Horario({ estudiante, disponible, curso, dias, horas, bloques }: Props) {
     const nombre = estudiante?.nombre || 'Estudiante';
-    const diaMap = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+    const diaMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const hoy = new Date();
     const diaHoy = diaMap[hoy.getDay()] || '';
 
@@ -52,14 +52,14 @@ export default function Horario({ estudiante, disponible, curso, dias, horas, bl
                 <p className="text-gray-500 mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                     {curso
                         ? `${curso.nombre} - Jornada ${curso.jornada || 'No definida'} - ${curso.anio}`
-                        : 'Horario academico del estudiante'}
+                        : 'Horario académico del estudiante'}
                 </p>
             </div>
 
             {!disponible ? (
                 <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                    <p className="text-gray-700 font-semibold">Tu horario aun no ha sido generado.</p>
-                    <p className="text-gray-400 text-sm mt-1">Cuando administracion publique los bloques de clase de tu curso, aparecera aqui.</p>
+                    <p className="text-gray-700 font-semibold">Tu horario aún no ha sido generado.</p>
+                    <p className="text-gray-400 text-sm mt-1">Cuando administración publique los bloques de clase de tu curso, aparecerá aquí.</p>
                 </div>
             ) : (
                 <>

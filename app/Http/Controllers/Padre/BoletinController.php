@@ -55,7 +55,7 @@ class BoletinController extends Controller
             ->latest('id')
             ->first();
 
-        $anio = $matriculaActiva?->curso?->anio ?? (int) (Periodo::max('anio') ?: now()->year);
+        $anio = $matriculaActiva?->curso?->anio ?? (int) (Periodo::max('anio') ?: now('America/Bogota')->year);
 
         $periodos = Periodo::query()
             ->where('anio', $anio)

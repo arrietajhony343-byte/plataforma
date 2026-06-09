@@ -31,6 +31,7 @@ interface ActividadItem {
 }
 
 interface Props {
+    estudiante: { nombre: string };
     pendientes: ActividadItem[];
     vencidas: ActividadItem[];
     entregadas: ActividadItem[];
@@ -158,7 +159,7 @@ function ActividadCard({ act }: { act: ActividadItem }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function Actividades({ pendientes, vencidas, entregadas, calificadas }: Props) {
+export default function Actividades({ estudiante, pendientes, vencidas, entregadas, calificadas }: Props) {
     const [tab, setTab] = useState<'pendientes' | 'vencidas' | 'entregadas' | 'calificadas'>('pendientes');
     const [searchTerm, setSearchTerm] = useState('');
     const [filtroMateria, setFiltroMateria] = useState('');
@@ -193,7 +194,7 @@ export default function Actividades({ pendientes, vencidas, entregadas, califica
     ] as const;
 
     return (
-        <SidebarLayout menuItems={estudianteMenuItems} userInfo={{ name: '', role: 'Estudiante' }}>
+        <SidebarLayout menuItems={estudianteMenuItems} userInfo={{ name: estudiante.nombre, role: 'Estudiante' }}>
             <Head title="Mis Actividades" />
 
             {/* Header */}

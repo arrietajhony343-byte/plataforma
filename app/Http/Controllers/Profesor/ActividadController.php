@@ -145,11 +145,11 @@ class ActividadController extends Controller
 
         $this->validarPreguntasEvaluacion($request, (string) $data['tipo']);
 
-        $data['fecha_asignacion'] = now()->toDateString();
+        $data['fecha_asignacion'] = now('America/Bogota')->toDateString();
         $data['activa'] = $data['activa'] ?? true;
 
         // Periodo activo
-        $periodoActivo = Periodo::where('anio', now()->year)
+        $periodoActivo = Periodo::where('anio', now('America/Bogota')->year)
             ->where('estado', 'activo')
             ->first();
         $data['periodo_id'] = $periodoActivo?->id;
@@ -273,7 +273,7 @@ class ActividadController extends Controller
      */
     private function loadCursoMaterias(int $profesorId, ?int $excludeActividadId = null): \Illuminate\Support\Collection
     {
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
         $cms = CursoMateria::where('profesor_id', $profesorId)
             ->whereHas('curso', fn($q) => $q->where('anio', $anio))
             ->with(['curso', 'materia'])

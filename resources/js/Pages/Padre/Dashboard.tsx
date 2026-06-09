@@ -89,7 +89,7 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
 
     const formatFecha = (f: string | null) => {
         if (!f) return '—';
-        const d = new Date(f);
+        const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
         if (Number.isNaN(d.getTime())) return f;
         return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
     };
@@ -102,7 +102,7 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
                 {!hijo ? (
                     <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
                         <h1 className="text-2xl font-extrabold text-gray-900" style={{ fontFamily: "'Inter', sans-serif" }}>Sin hijos vinculados</h1>
-                        <p className="text-gray-500 mt-2">No hay estudiantes asociados a este acudiente. Contacta a administracion para relacionar el estudiante.</p>
+                        <p className="text-gray-500 mt-2">No hay estudiantes asociados a este acudiente. Contacta a administración para relacionar el estudiante.</p>
                     </div>
                 ) : (
                     <>
@@ -115,7 +115,7 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
                                     <h1 className="text-2xl font-extrabold" style={{ fontFamily: "'Inter', sans-serif" }}>
                                         Bienvenido, {padre.nombre}
                                     </h1>
-                                    <p className="text-blue-100">{hijo.nombre} · {hijo.grado} - Seccion {hijo.seccion}</p>
+                                    <p className="text-blue-100">{hijo.nombre} · {hijo.grado} - Sección {hijo.seccion}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {hijos.length > 1 && (
@@ -161,7 +161,7 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
                             </div>
                             <div className="bg-white rounded-xl shadow-sm p-4 text-center">
                                 <div className="text-3xl font-bold" style={{ color: '#185929' }}>{hijo.asistencia}%</div>
-                                <p className="text-gray-600 text-sm mt-1">Asistencia (30 dias)</p>
+                                <p className="text-gray-600 text-sm mt-1">Asistencia (30 días)</p>
                                 <div className="mt-2 h-1.5 bg-gray-200 rounded-full">
                                     <div className="h-1.5 rounded-full" style={{ width: `${hijo.asistencia}%`, backgroundColor: '#185929' }} />
                                 </div>
@@ -176,7 +176,7 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
                                     estadoPagos?.estado === 'vencido' ? 'bg-red-100 text-red-800' :
                                     'bg-yellow-100 text-yellow-800'
                                 }`}>
-                                    {estadoPagos?.estado === 'pagado' ? 'Al dia' : estadoPagos?.estado === 'vencido' ? 'Vencido' : 'Pendiente'}
+                                    {estadoPagos?.estado === 'pagado' ? 'Al día' : estadoPagos?.estado === 'vencido' ? 'Vencido' : 'Pendiente'}
                                 </span>
                             </div>
                         </div>
@@ -207,11 +207,11 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className="bg-white rounded-xl shadow-sm">
                                 <div className="flex justify-between items-center p-4 border-b">
-                                    <h2 className="text-lg font-semibold text-gray-800">Ultimas Notas</h2>
-                                    <Link href="/padre/boletin" className="text-[#293577] hover:underline text-sm">Ver boletin →</Link>
+                                    <h2 className="text-lg font-semibold text-gray-800">Últimas Notas</h2>
+                                    <Link href="/padre/boletin" className="text-[#293577] hover:underline text-sm">Ver boletín →</Link>
                                 </div>
                                 {ultimasNotas.length === 0 ? (
-                                    <div className="p-6 text-sm text-gray-500">Aun no hay notas registradas para este estudiante.</div>
+                                    <div className="p-6 text-sm text-gray-500">Aún no hay notas registradas para este estudiante.</div>
                                 ) : (
                                     <div className="divide-y">
                                         {ultimasNotas.map((nota, i) => (
@@ -262,11 +262,11 @@ export default function Dashboard({ padre, hijos, hijo, proximasActividades, not
 
                         <div className="bg-white rounded-xl shadow-sm">
                             <div className="flex justify-between items-center p-4 border-b">
-                                <h2 className="text-lg font-semibold text-gray-800">Proximas Actividades</h2>
+                                <h2 className="text-lg font-semibold text-gray-800">Próximas Actividades</h2>
                                 <Link href="/padre/calendario" className="text-[#293577] hover:underline text-sm">Ver calendario →</Link>
                             </div>
                             {proximasActividades.length === 0 ? (
-                                <div className="p-6 text-sm text-gray-500">No hay actividades proximas registradas.</div>
+                                <div className="p-6 text-sm text-gray-500">No hay actividades próximas registradas.</div>
                             ) : (
                                 <div className="divide-y">
                                     {proximasActividades.map((act) => (

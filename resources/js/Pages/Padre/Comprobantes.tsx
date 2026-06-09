@@ -20,12 +20,13 @@ interface ComprobanteItem {
 }
 
 interface Props {
+    padre: { nombre: string };
     hijos: HijoOption[];
     hijo: { id: number; nombre: string } | null;
     comprobantes: ComprobanteItem[];
 }
 
-export default function Comprobantes({ hijos, hijo, comprobantes }: Props) {
+export default function Comprobantes({ padre, hijos, hijo, comprobantes }: Props) {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterYear, setFilterYear] = useState<string>('todos');
 
@@ -56,7 +57,7 @@ export default function Comprobantes({ hijos, hijo, comprobantes }: Props) {
     };
 
     return (
-        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: 'Padre', role: 'Padre' }}>
+        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
             <Head title="Comprobantes" />
 
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
@@ -99,7 +100,7 @@ export default function Comprobantes({ hijos, hijo, comprobantes }: Props) {
                                     onChange={(e) => setFilterYear(e.target.value)}
                                     className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577]"
                                 >
-                                    <option value="todos">Todos los anos</option>
+                                    <option value="todos">Todos los años</option>
                                     {years.map((y) => <option key={y} value={y}>{y}</option>)}
                                 </select>
                             </div>
@@ -116,12 +117,12 @@ export default function Comprobantes({ hijos, hijo, comprobantes }: Props) {
                                         <div>
                                             <p className="font-semibold text-gray-800">{c.concepto}</p>
                                             <p className="text-xs text-gray-500">Ref: {c.referencia || 'Sin referencia'} · {c.fecha_pago || 'Sin fecha'}</p>
-                                            {c.detalle && <p className="text-xs text-gray-500 mt-1">{c.detalle}</p>}
+                                            {c.detalle && !c.detalle.startsWith('certificado:') && <p className="text-xs text-gray-500 mt-1">{c.detalle}</p>}
                                         </div>
 
                                         <div className="md:text-right">
                                             <p className="font-bold text-gray-800">{formatMonto(c.monto)}</p>
-                                            <p className="text-xs text-gray-500">{c.metodo_pago || 'Metodo no registrado'}</p>
+                                            <p className="text-xs text-gray-500">{c.metodo_pago || 'Método no registrado'}</p>
                                         </div>
 
                                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${

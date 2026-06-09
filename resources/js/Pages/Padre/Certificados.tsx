@@ -35,13 +35,14 @@ interface Solicitud {
 }
 
 interface Props {
+    padre: { nombre: string };
     hijos: HijoOption[];
     hijo: { id: number; nombre: string } | null;
     tipos: TipoCertificado[];
     solicitudes: Solicitud[];
 }
 
-export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props) {
+export default function Certificados({ padre, hijos, hijo, tipos, solicitudes }: Props) {
     const { data, setData, post, processing, reset, errors } = useForm({
         hijo_id: hijo?.id ?? 0,
         tipo_certificado_id: tipos[0]?.id ?? 0,
@@ -59,6 +60,13 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
         currency: 'COP',
         minimumFractionDigits: 0,
     }).format(monto);
+
+    const formatFecha = (f: string | null) => {
+        if (!f) return '—';
+        const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+        if (Number.isNaN(d.getTime())) return f;
+        return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
 
     const onHijoChange = (id: number) => {
         router.get('/padre/certificados', { hijo_id: id }, { preserveState: true });
@@ -96,14 +104,14 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
     };
 
     return (
-        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: 'Padre', role: 'Padre' }}>
+        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
             <Head title="Solicitud de Certificados" />
 
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {!hijo ? (
                     <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
                         <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Solicitud de Certificados</h1>
-                        <p className="text-gray-500 mt-2">No hay hijos vinculados para solicitar tramites.</p>
+                        <p className="text-gray-500 mt-2">No hay hijos vinculados para solicitar trámites.</p>
                     </div>
                 ) : (
                     <>
@@ -149,7 +157,7 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                             value={data.descripcion}
                                             onChange={(e) => setData('descripcion', e.target.value)}
                                             rows={4}
-                                            placeholder="Describe para que necesitas el certificado"
+                                            placeholder="Describe para qué necesitas el certificado"
                                             className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#293577] focus:border-transparent"
                                         />
                                         {errors.descripcion && <p className="text-xs text-red-600 mt-1">{errors.descripcion}</p>}
@@ -176,7 +184,7 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                             }`}
                                         >
                                             <p className="font-semibold text-gray-800">{t.nombre}</p>
-                                            <p className="text-xs text-gray-500 mt-1">{t.descripcion || 'Sin descripcion adicional'}</p>
+                                            <p className="text-xs text-gray-500 mt-1">{t.descripcion || 'Sin descripción adicional'}</p>
                                             <p className="text-sm font-bold text-[#293577] mt-2">{formatMonto(t.precio)}</p>
                                             {Number(data.tipo_certificado_id) === t.id && (
                                                 <p className="mt-2 text-xs font-semibold text-[#293577]">Tipo seleccionado para la solicitud</p>
@@ -194,7 +202,7 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
 
                             <div className="divide-y">
                                 {solicitudes.length === 0 && (
-                                    <div className="p-6 text-center text-gray-500 text-sm">Aun no hay solicitudes registradas.</div>
+                                    <div className="p-6 text-center text-gray-500 text-sm">Aún no hay solicitudes registradas.</div>
                                 )}
 
                                 {solicitudes.map((s) => (
@@ -207,7 +215,7 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                                             <div>
                                                 <p className="font-semibold text-gray-800">{s.tipo}</p>
-                                                <p className="text-sm text-gray-500">Solicitado: {s.fecha_solicitud || '—'}</p>
+                                                <p className="text-sm text-gray-500">Solicitado: {formatFecha(s.fecha_solicitud)}</p>
                                                 {s.descripcion && <p className="text-sm text-gray-600 mt-1">{s.descripcion}</p>}
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -254,7 +262,7 @@ export default function Certificados({ hijos, hijo, tipos, solicitudes }: Props)
                                             <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                                 <div className="text-sm text-gray-600">
                                                     <p>Pago: <strong className="text-gray-800">{s.pago.estado}</strong> · {formatMonto(s.pago.monto)}</p>
-                                                    <p className="text-xs">Vence: {s.pago.fecha_vencimiento || '—'} {s.pago.fecha_pago ? `· Pagado: ${s.pago.fecha_pago}` : ''}</p>
+                                                    <p className="text-xs">Vence: {formatFecha(s.pago.fecha_vencimiento)} {s.pago.fecha_pago ? `· Pagado: ${formatFecha(s.pago.fecha_pago)}` : ''}</p>
                                                 </div>
                                                 {s.pago.estado !== 'pagado' && (
                                                     <button

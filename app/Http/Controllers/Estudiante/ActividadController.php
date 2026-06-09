@@ -228,6 +228,7 @@ class ActividadController extends Controller
             ->sortByDesc('fechaEntregaISO')->values();
 
         return Inertia::render('Estudiante/Actividades', [
+            'estudiante'  => ['nombre' => $user->name],
             'pendientes' => $pendientes,
             'vencidas'   => $vencidas,
             'entregadas' => $entregadas,
@@ -273,7 +274,8 @@ class ActividadController extends Controller
         $data = $this->formatActividad($actividad, $entrega, conPreguntas: true, ordenExamen: $ordenExamen);
 
         return Inertia::render('Estudiante/ActividadDetalle', [
-            'actividad' => $data,
+            'estudiante' => ['nombre' => $user->name],
+            'actividad'  => $data,
         ]);
     }
 

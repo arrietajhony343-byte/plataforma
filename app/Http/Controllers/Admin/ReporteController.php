@@ -16,7 +16,7 @@ class ReporteController extends Controller
 
     public function index(): Response
     {
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
         $sedeId = $this->sedeId();
 
         // ── Periodos disponibles (del año actual o todos si no hay) ──
@@ -220,7 +220,7 @@ class ReporteController extends Controller
         $cursoId     = $request->input('curso_id');
         $nivelFiltro = $request->input('nivel', 'todos');
         $sedeId = $this->sedeId() ?? $request->input('sede_id');
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         // IDs de estudiantes según filtro de curso/nivel/sede
         $estudianteIds = null;
@@ -299,7 +299,7 @@ class ReporteController extends Controller
     {
         $periodoId   = $request->input('periodo_id');
         $nivelFiltro = $request->input('nivel', 'todos');
-        $anio = now()->year;
+        $anio = now('America/Bogota')->year;
 
         $estudiante = User::findOrFail($estudianteId);
 

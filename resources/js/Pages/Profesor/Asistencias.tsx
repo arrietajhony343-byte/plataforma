@@ -171,10 +171,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
         return first?.id?.toString() ?? '';
     });
 
-    const [fechaSel, setFechaSel] = useState(() => {
-        const now = new Date();
-        return now.toISOString().slice(0, 10);
-    });
+    const [fechaSel, setFechaSel] = useState(() => todayLocalIso());
 
     const [periodoSel, setPeriodoSel] = useState(() => {
         const active = periodos.find(p => p.estado === 'activo');
@@ -630,7 +627,7 @@ export default function Asistencias({ cursos, materias, cursoMaterias, bloques, 
                                     <button onClick={() => navigateDate(1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Día siguiente">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                     </button>
-                                    <button onClick={() => guardedChange(() => setFechaSel(new Date().toISOString().slice(0, 10)))}
+                                    <button onClick={() => guardedChange(() => setFechaSel(todayLocalIso()))}
                                         className="px-2.5 py-2 rounded-lg text-xs font-bold text-[#293577] hover:bg-[#293577]/5 transition-colors"
                                         title="Ir a hoy">
                                         Hoy

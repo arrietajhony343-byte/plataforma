@@ -64,8 +64,8 @@ const formatHora = (raw?: string | null) => {
 };
 
 const dayLabel = (dia: string) => {
-    if (dia === 'miercoles') return 'Miercoles';
-    if (dia === 'sabado') return 'Sabado';
+    if (dia === 'miercoles') return 'Miércoles';
+    if (dia === 'sabado') return 'Sábado';
     return dia.charAt(0).toUpperCase() + dia.slice(1);
 };
 
@@ -140,7 +140,7 @@ export default function Horario({ padre, hijos, hijo, horarioSemanal }: Props) {
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                             <div>
                                 <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Horario de clases</h1>
-                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} Seccion {hijo.seccion}</p>
+                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} Sección {hijo.seccion}</p>
                             </div>
 
                             <div className="flex items-center gap-2 w-full lg:w-auto">
@@ -215,7 +215,7 @@ export default function Horario({ padre, hijos, hijo, horarioSemanal }: Props) {
                                                                                     <p className="text-xs font-semibold text-indigo-900">{bloque.materia}</p>
                                                                                     <p className="text-[11px] text-indigo-700">{formatHora(bloque.horaInicio)} - {formatHora(bloque.horaFin)}</p>
                                                                                     <p className="text-[11px] text-gray-600">{bloque.profesor}</p>
-                                                                                    {bloque.salon && <p className="text-[11px] text-gray-500">Salon {bloque.salon}</p>}
+                                                                                    {bloque.salon && <p className="text-[11px] text-gray-500">Salón {bloque.salon}</p>}
                                                                                 </div>
                                                                             ))}
                                                                         </div>
@@ -246,7 +246,7 @@ export default function Horario({ padre, hijos, hijo, horarioSemanal }: Props) {
                                                                 <p className="text-sm font-semibold text-indigo-900">{bloque.materia}</p>
                                                                 <p className="text-xs text-indigo-700">{formatHora(bloque.horaInicio)} - {formatHora(bloque.horaFin)}</p>
                                                                 <p className="text-xs text-gray-600">{bloque.profesor}</p>
-                                                                {bloque.salon && <p className="text-xs text-gray-500">Salon {bloque.salon}</p>}
+                                                                {bloque.salon && <p className="text-xs text-gray-500">Salón {bloque.salon}</p>}
                                                             </div>
                                                         ))}
                                                     </div>

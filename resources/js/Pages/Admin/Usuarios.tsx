@@ -197,8 +197,6 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
     const [formData, setFormData] = useState({ ...EMPTY_FORM });
     const [processing, setProcessing] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-    const [cursoBusq, setCursoBusq] = useState('');
-    const [acudienteBusq, setAcudienteBusq] = useState('');
 
     const users = initialUsers;
 
@@ -287,8 +285,6 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
         setEditingUser(null);
         setFormData({ ...EMPTY_FORM });
         setFormErrors({});
-        setCursoBusq('');
-        setAcudienteBusq('');
         setShowModal(true);
     };
 
@@ -305,10 +301,6 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
             sede_id: user.sede_id?.toString() || '',
         });
         setFormErrors({});
-        const cursoNombre = user.curso_id ? (cursos.find(c => c.id === user.curso_id)?.nombre ?? '') : '';
-        const padreNombre = user.acudiente_id ? (padres.find(p => p.id === user.acudiente_id)?.name ?? '') : '';
-        setCursoBusq(cursoNombre);
-        setAcudienteBusq(padreNombre);
         setShowModal(true);
     };
 
@@ -370,13 +362,11 @@ export default function Usuarios({ users: initialUsers, actionLogs, cursos, padr
         // No enviar password vacío en edición
         if (editingUser && !payload.password) {
             const { password, ...rest } = payload;
-            if (editingUser) {
-                router.put(`/admin/usuarios/${editingUser.id}`, rest, {
-                    preserveScroll: true,
-                    onSuccess: () => { setShowModal(false); setProcessing(false); },
-                    onError: (errors) => { setFormErrors(errors as Record<string, string>); setProcessing(false); },
-                });
-            }
+            router.put(`/admin/usuarios/${editingUser.id}`, rest, {
+                preserveScroll: true,
+                onSuccess: () => { setShowModal(false); setProcessing(false); },
+                onError: (errors) => { setFormErrors(errors as Record<string, string>); setProcessing(false); },
+            });
         } else if (editingUser) {
             router.put(`/admin/usuarios/${editingUser.id}`, payload, {
                 preserveScroll: true,

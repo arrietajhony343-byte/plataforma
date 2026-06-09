@@ -65,6 +65,13 @@ interface Props {
     observacionesRecientes: ObservacionReciente[];
 }
 
+const formatFecha = (f: string | null) => {
+    if (!f) return '—';
+    const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+    if (Number.isNaN(d.getTime())) return f;
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 export default function Seguimiento({ padre, hijos, hijo, periodos, periodoSeleccionadoId, resumen, materias, observacionesRecientes }: Props) {
     const [selectedMateria, setSelectedMateria] = useState<MateriaRendimiento | null>(null);
 
@@ -91,20 +98,20 @@ export default function Seguimiento({ padre, hijos, hijo, periodos, periodoSelec
 
     return (
         <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
-            <Head title="Seguimiento Academico" />
+            <Head title="Seguimiento Académico" />
 
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                 {!hijo ? (
                     <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Seguimiento Academico</h1>
+                        <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Seguimiento Académico</h1>
                         <p className="text-gray-500 mt-2">No hay hijos vinculados a este acudiente.</p>
                     </div>
                 ) : (
                     <>
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                             <div>
-                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Seguimiento Academico</h1>
-                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} Seccion {hijo.seccion}</p>
+                                <h1 className="text-2xl font-extrabold text-gray-800" style={{ fontFamily: "'Inter', sans-serif" }}>Seguimiento Académico</h1>
+                                <p className="text-gray-600">{hijo.nombre} · {hijo.grado} Sección {hijo.seccion}</p>
                             </div>
                             <div className="flex flex-col sm:flex-row gap-2">
                                 {hijos.length > 1 && (
@@ -153,12 +160,12 @@ export default function Seguimiento({ padre, hijos, hijo, periodos, periodoSelec
 
                         {riesgos.length > 0 && (
                             <div className="bg-red-50 border-l-4 border-red-500 rounded-r-xl p-4">
-                                <h3 className="font-bold text-red-800 mb-2">Atencion Requerida</h3>
+                                <h3 className="font-bold text-red-800 mb-2">Atención Requerida</h3>
                                 <div className="space-y-1">
                                     {riesgos.map((m) => (
                                         <p key={m.materia} className="text-sm text-red-700">
                                             • {m.materia} — Promedio {m.promedioActual.toFixed(1)} · {getTendencia(m.tendencia).label}
-                                            {m.observaciones > 0 ? ` · ${m.observaciones} observacion(es)` : ''}
+                                            {m.observaciones > 0 ? ` · ${m.observaciones} observación(es)` : ''}
                                         </p>
                                     ))}
                                 </div>
@@ -203,7 +210,7 @@ export default function Seguimiento({ padre, hijos, hijo, periodos, periodoSelec
                                                     <p className="font-medium text-gray-800">{o.materia} - {o.profesor}</p>
                                                     <p className="text-sm text-gray-600 mt-1">{o.descripcion}</p>
                                                 </div>
-                                                <span className="text-xs text-gray-400 whitespace-nowrap">{o.fecha || '—'}</span>
+                                                <span className="text-xs text-gray-400 whitespace-nowrap">{formatFecha(o.fecha)}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -243,13 +250,13 @@ export default function Seguimiento({ padre, hijos, hijo, periodos, periodoSelec
                         <h3 className="font-semibold text-gray-700 mb-3">Desglose de Notas</h3>
                         <div className="space-y-2 mb-4">
                             {selectedMateria.notas.length === 0 ? (
-                                <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">Sin notas registradas en este periodo.</div>
+                                <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">Sin notas registradas en este período.</div>
                             ) : (
                                 selectedMateria.notas.map((n, i) => (
                                     <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
                                         <div>
                                             <p className="font-medium text-sm text-gray-800">{n.nombre}</p>
-                                            <p className="text-xs text-gray-500">{n.fecha || '—'}{n.peso !== null ? ` · Peso: ${n.peso}%` : ''}</p>
+                                            <p className="text-xs text-gray-500">{formatFecha(n.fecha)}{n.peso !== null ? ` · Peso: ${n.peso}%` : ''}</p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-lg font-bold text-sm ${n.nota >= 4.0 ? 'bg-green-100 text-green-700' : n.nota >= 3.0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{n.nota.toFixed(1)}</span>
                                     </div>

@@ -194,8 +194,9 @@ export default function Actividades({ profesor, actividades, cursoMaterias, curs
     // ── Handlers ──
     const openCreate = () => {
         setEditando(null);
+        const defaultCm = materiasCursoSeleccionado[0] ?? cursoMaterias[0];
         setForm({
-            curso_materia_id: cursoMaterias[0]?.id.toString() ?? '',
+            curso_materia_id: defaultCm?.id.toString() ?? '',
             titulo: '', descripcion: '', tipo: 'tarea',
             fecha_entrega: '', porcentaje: '', activa: true,
         });

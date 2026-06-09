@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { adminMenuItems } from '@/Config/adminMenu';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { cargarPrimerLogoDisponible, PDF_INSTITUCION } from '@/utils/pdfUtils';
 
@@ -31,6 +32,7 @@ interface Curso {
     nombre: string;
     nivel: string;
     grado: string;
+    jornada?: string;
     sede_id: number | null;
 }
 
@@ -51,6 +53,7 @@ interface Certificado {
     nivel: string;
     curso_id: number | null;
     curso: string;
+    jornada: string;
     coordinadora: string;
     descripcion: string | null;
     archivo: string | null;
@@ -213,6 +216,217 @@ const renderRichParagraph = (
     return y;
 };
 
+/* ═══════════════════════ PDF PAGE RENDERER ═══════════════════════ */
+const generarPaginaCertificado = (
+    doc: jsPDF,
+    cert: Certificado,
+    logoHeader: string | null,
+    logoWatermark: string | null,
+): void => {
+    const W = 210;
+    const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
+    const { dia, mes, anio } = fechaLiteral();
+    const nombreEstudiante = cert.estudiante.toUpperCase();
+    const tipoDoc  = cert.estudiante_tipo_documento || 'T.I.';
+    const documento = cert.estudiante_documento
+        ? `${tipoDoc} N°${cert.estudiante_documento}`
+        : 'documento registrado en la institución';
+    const curso          = (cert.curso || '—').toUpperCase();
+    const jornadaStr     = cert.jornada ? `, JORNADA ${cert.jornada.toUpperCase()}` : '';
+    const nivelAcademico = getNivelAcademico(cert.nivel);
+    const detalleAdicional = sanitizarDetalleAdicional(cert.descripcion);
+
+    const LOGO_X = 7.5, LOGO_Y = 18, LOGO_W = 38, LOGO_H = 41;
+    const TRIANG_MAX = 50, TRIANG_MID = 33, TRIANG_MIN = 16;
+    const TEXT_RIGHT = W - TRIANG_MAX - 3;
+    const TEXT_CX = W / 2;
+
+    const drawHeader = () => {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, W, 297, 'F');
+        doc.setFillColor(188, 214, 242);
+        doc.triangle(W - TRIANG_MAX, 0, W, 0, W, TRIANG_MAX, 'F');
+        doc.setFillColor(80, 130, 205);
+        doc.triangle(W - TRIANG_MID, 0, W, 0, W, TRIANG_MID, 'F');
+        doc.setFillColor(22, 55, 148);
+        doc.triangle(W - TRIANG_MIN, 0, W, 0, W, TRIANG_MIN, 'F');
+        if (logoHeader) {
+            doc.addImage(logoHeader, 'JPEG', LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
+        } else {
+            const cx = LOGO_X + LOGO_W / 2;
+            const cy = LOGO_Y + LOGO_H / 2 - 2;
+            const r  = LOGO_W / 2 - 1;
+            doc.setDrawColor(10, 35, 90); doc.setLineWidth(1.2);
+            doc.circle(cx, cy, r, 'S'); doc.setLineWidth(0.6);
+            doc.circle(cx, cy, r - 3, 'S');
+            doc.setFont('times', 'bold'); doc.setFontSize(14);
+            doc.setTextColor(10, 35, 90);
+            doc.text('I.P', cx, cy + 2, { align: 'center' });
+            doc.setFont('times', 'italic'); doc.setFontSize(4);
+            doc.text('Emprendedores del Saber', cx, cy + r + 3.5, { align: 'center' });
+        }
+        doc.setTextColor(10, 35, 90); doc.setFont('helvetica', 'bold');
+        doc.setFontSize(19); doc.text('INSTITUTO PEDAGOGICO', TEXT_CX, 25, { align: 'center' });
+        doc.setFontSize(17); doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 35, { align: 'center' });
+        doc.setTextColor(25, 25, 25); doc.setFont('times', 'italic'); doc.setFontSize(9);
+        doc.text('Ser, saber y emprender', TEXT_CX, 43, { align: 'center' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+        doc.text('Aprobado por Resolución No 9385 del 10 - 11 - 2025', TEXT_CX, 49, { align: 'center' });
+        doc.text('DANE 313001800093  –  NIT 73143410 - 6', TEXT_CX, 54, { align: 'center' });
+        const barX = LOGO_X + LOGO_W + 7;
+        const barW = Math.max(86, TEXT_RIGHT - barX - 1);
+        doc.setFillColor(10, 35, 90); doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.35);
+        doc.rect(barX, 59, barW, 2.1, 'FD');
+    };
+
+    const drawWatermark = () => {
+        if (logoWatermark) {
+            doc.addImage(logoWatermark, 'PNG', 47, 118, 116, 116);
+        } else {
+            doc.setTextColor(228, 230, 238); doc.setFont('times', 'bold'); doc.setFontSize(92);
+            doc.text('I.P', W / 2, 185, { align: 'center' });
+        }
+    };
+
+    const drawFooter = () => {
+        doc.setDrawColor(100, 100, 100); doc.setLineWidth(0.25);
+        doc.line(25, 280, 185, 280);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(35, 35, 35);
+        doc.text('Villas de la candelaria Mz. 44 Lt. 11  CEL: 3005257812 - 3006529540', W / 2, 284, { align: 'center' });
+        doc.setTextColor(0, 56, 168);
+        doc.text('EMAIL: emprendedores.sersaber2023@gmail.com', W / 2, 288.5, { align: 'center' });
+        doc.setTextColor(35, 35, 35);
+        doc.text('Cartagena de Indias - Colombia', W / 2, 293, { align: 'center' });
+    };
+
+    const coordinadoraNombre = (cert.coordinadora || PDF_INSTITUCION.firmaNombre).toUpperCase();
+    const drawFirma = (yLine: number) => {
+        doc.setDrawColor(30, 30, 30); doc.setLineWidth(0.3);
+        doc.line(75, yLine, 135, yLine);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(20, 20, 20);
+        doc.text(coordinadoraNombre, W / 2, yLine - 2, { align: 'center' });
+        doc.setFontSize(9); doc.text('COORDINADORA', W / 2, yLine + 6, { align: 'center' });
+    };
+
+    const drawTituloCertifica = () => {
+        doc.setTextColor(20, 20, 20); doc.setFont('times', 'bold'); doc.setFontSize(10.5);
+        doc.text('LA SUSCRITA COORDINADORA DEL', W / 2, 75, { align: 'center' });
+        doc.text('INSTITUTO PEDAGÓGICO EMPRENDEDORES DEL SABER', W / 2, 83, { align: 'center' });
+        doc.setFontSize(13); doc.text('CERTIFICA:', W / 2, 99, { align: 'center' });
+    };
+
+    drawHeader(); drawWatermark(); drawTituloCertifica();
+
+    const marX = 22, bodyW = W - marX * 2, fSize = 10.8, lH = 6.5;
+
+    if (codigo.includes('nota') || codigo.includes('calific')) {
+        const segs: RichSeg[] = [
+            { text: 'Que el estudiante ' },
+            { text: nombreEstudiante, bold: true },
+            { text: ' identificado con ' },
+            { text: documento, bold: true },
+            { text: ' cursó y aprobó en nuestro instituto durante el año lectivo ' },
+            { text: String(anio), bold: true },
+            { text: ', las áreas correspondientes a ' },
+            { text: curso + jornadaStr, bold: true },
+            { text: ' de ' },
+            { text: nivelAcademico, bold: true },
+            { text: '.' },
+        ];
+        let y = renderRichParagraph(doc, segs, marX, 120, bodyW, fSize, 'times', lH);
+
+        const notas = cert.notas?.length > 0
+            ? cert.notas.map(n => [
+                n.materia.toUpperCase(),
+                String(n.ih || 0),
+                n.definitiva.toFixed(1),
+                getEscalaValorativa(n.definitiva),
+            ])
+            : [['SIN REGISTROS ACADÉMICOS', '-', '-', '-']];
+
+        autoTable(doc, {
+            startY: y + 4,
+            margin: { left: marX, right: marX },
+            head: [['ÁREAS / ASIGNATURAS', 'I.H.', 'NOTA DEFINITIVA', 'ESCALA VALORATIVA']],
+            body: notas,
+            theme: 'grid',
+            styles: { font: 'times', fontSize: 7.8, cellPadding: 1.9, textColor: [10, 10, 10], lineColor: [40, 40, 40], lineWidth: 0.2 },
+            headStyles: { fillColor: [215, 215, 215], textColor: [10, 10, 10], fontStyle: 'bold', halign: 'center', fontSize: 7.8 },
+            columnStyles: {
+                0: { cellWidth: 74 },
+                1: { cellWidth: 14, halign: 'center' },
+                2: { cellWidth: 36, halign: 'center' },
+                3: { cellWidth: 42, halign: 'center' },
+            },
+        });
+
+        const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 202;
+        const cierreSegs: RichSeg[] = [
+            { text: `El presente certificado se expide en Cartagena de Indias D. T. y C. a los ${dia} días del mes de ${mes} del año ${anio}.` },
+        ];
+        const cY = renderRichParagraph(doc, cierreSegs, marX, finalY + 10, bodyW, fSize, 'times', lH);
+        drawFirma(Math.min(Math.max(cY + 6, 200), 256));
+        drawFooter();
+    } else {
+        let segs: RichSeg[] = [];
+
+        if (codigo.includes('paz')) {
+            segs = [
+                { text: 'Que el estudiante ' },
+                { text: nombreEstudiante, bold: true },
+                { text: ' identificado con ' },
+                { text: documento, bold: true },
+                { text: ' cursa en nuestro instituto ' },
+                { text: curso + jornadaStr, bold: true },
+                { text: ' de educación ' },
+                { text: nivelAcademico, bold: true },
+                { text: ', se encuentra a ' },
+                { text: 'PAZ Y SALVO', bold: true },
+                { text: ` por todo concepto hasta el mes de ${mes} del año ${anio}.` },
+            ];
+        } else if (codigo.includes('mat') || codigo.includes('estudio') || codigo.includes('constancia')) {
+            segs = [
+                { text: 'Que el estudiante ' },
+                { text: nombreEstudiante, bold: true },
+                { text: ' identificado con ' },
+                { text: documento, bold: true },
+                { text: ' cursa en nuestro instituto ' },
+                { text: curso + jornadaStr, bold: true },
+                { text: ' de ' },
+                { text: nivelAcademico, bold: true },
+                { text: ` en el año lectivo ` },
+                { text: String(anio), bold: true },
+                { text: '.' },
+            ];
+        } else {
+            segs = [
+                { text: 'Que el estudiante ' },
+                { text: nombreEstudiante, bold: true },
+                { text: ' identificado con ' },
+                { text: documento, bold: true },
+                { text: ' pertenece activamente a nuestro instituto y cursa ' },
+                { text: curso + jornadaStr, bold: true },
+                { text: ' de ' },
+                { text: nivelAcademico, bold: true },
+                { text: ` durante el año lectivo ` },
+                { text: String(anio), bold: true },
+                { text: '.' },
+            ];
+        }
+
+        let y = renderRichParagraph(doc, segs, marX, 120, bodyW, fSize, 'times', lH);
+
+        const cierreBase = detalleAdicional && !codigo.includes('paz')
+            ? `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. ${detalleAdicional}, a los ${dia} días del mes de ${mes} del año ${anio}.`
+            : `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. a los ${dia} días del mes de ${mes} del año ${anio}.`;
+
+        const cierreSegs: RichSeg[] = [{ text: cierreBase }];
+        const cY = renderRichParagraph(doc, cierreSegs, marX, y + 8, bodyW, fSize, 'times', lH);
+        drawFirma(Math.min(Math.max(cY + 6, 200), 256));
+        drawFooter();
+    }
+};
+
 /* ═══════════════════════════ COMPONENT ═══════════════════════════ */
 export default function Certificados({ certificados, tiposCertificado, estudiantes, cursos, niveles, sedes }: Props) {
     // ── Filter State ──
@@ -252,6 +466,9 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     const [processing, setProcessing] = useState(false);
     const [sendingNotif, setSendingNotif] = useState(false);
     const [generatingCertId, setGeneratingCertId] = useState<number | null>(null);
+    const [previewTipo, setPreviewTipo] = useState<TipoCertificado | null>(null);
+    const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
+    const [exportingPDF, setExportingPDF] = useState(false);
 
     // ── Buscador de estudiante en modal solicitud ──
     const [busquedaEst, setBusquedaEst] = useState('');
@@ -291,281 +508,12 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     // ── PDF Generation ──
     const generarPDF = useCallback(async (cert: Certificado, descargar = true) => {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const W   = 210;
-        const codigo = normalizarCodigoCertificado(cert.tipo_codigo);
-        const { dia, mes, anio } = fechaLiteral();
         const logoHeader    = await cargarPrimerLogoDisponible(1, 850);
-        // La marca de agua se imprime muy grande: se necesita más resolución para evitar pixelación.
         const logoWatermark = await cargarPrimerLogoDisponible(0.08, 1400);
-
-        const nombreEstudiante = cert.estudiante.toUpperCase();
-        const tipoDoc  = cert.estudiante_tipo_documento || 'T.I.';
-        const documento = cert.estudiante_documento
-            ? `${tipoDoc} N\u00b0${cert.estudiante_documento}`
-            : 'documento registrado en la instituci\u00f3n';
-        const curso          = (cert.curso || '\u2014').toUpperCase();
-        const nivelAcademico = getNivelAcademico(cert.nivel);
-        const detalleAdicional = sanitizarDetalleAdicional(cert.descripcion);
-
-        /* ─── Header ─── */
-        // Misma geometria de boletines para mantener consistencia visual.
-        const LOGO_X = 7.5, LOGO_Y = 18, LOGO_W = 38, LOGO_H = 41;
-        const TRIANG_MAX = 50;
-        const TRIANG_MID = 33;
-        const TRIANG_MIN = 16;
-        const TEXT_RIGHT = W - TRIANG_MAX - 3;
-        const TEXT_CX = W / 2;
-        const drawHeader = () => {
-            doc.setFillColor(255, 255, 255);
-            doc.rect(0, 0, W, 297, 'F');
-
-            // ── 3 stacked triangles from top-right corner (largest pale → smallest dark navy) ──
-            // All share apex at (W, 0); each drawn on top of the previous one
-            doc.setFillColor(188, 214, 242);          // pale blue — largest
-            doc.triangle(W - TRIANG_MAX, 0, W, 0, W, TRIANG_MAX, 'F');
-            doc.setFillColor(80, 130, 205);            // medium blue
-            doc.triangle(W - TRIANG_MID, 0, W, 0, W, TRIANG_MID, 'F');
-            doc.setFillColor(22, 55, 148);             // dark navy — smallest
-            doc.triangle(W - TRIANG_MIN, 0, W, 0, W, TRIANG_MIN, 'F');
-
-            // ── Logo ──
-            if (logoHeader) {
-                doc.addImage(logoHeader, 'JPEG', LOGO_X, LOGO_Y, LOGO_W, LOGO_H);
-            } else {
-                const cx = LOGO_X + LOGO_W / 2;
-                const cy = LOGO_Y + LOGO_H / 2 - 2;
-                const r  = LOGO_W / 2 - 1;
-                doc.setDrawColor(10, 35, 90);
-                doc.setLineWidth(1.2);
-                doc.circle(cx, cy, r, 'S');
-                doc.setLineWidth(0.6);
-                doc.circle(cx, cy, r - 3, 'S');
-                doc.setFont('times', 'bold');
-                doc.setFontSize(14);
-                doc.setTextColor(10, 35, 90);
-                doc.text('I.P', cx, cy + 2, { align: 'center' });
-                doc.setFont('times', 'italic');
-                doc.setFontSize(4);
-                doc.text('Emprendedores del Saber', cx, cy + r + 3.5, { align: 'center' });
-            }
-
-            // ── Institution name (bold, navy) ──
-            doc.setTextColor(10, 35, 90);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(19);
-            doc.text('INSTITUTO PEDAGOGICO', TEXT_CX, 25, { align: 'center' });
-            doc.setFontSize(17);
-            doc.text('EMPRENDEDORES DEL SABER', TEXT_CX, 35, { align: 'center' });
-
-            // ── Sub-lines ──
-            doc.setTextColor(25, 25, 25);
-            doc.setFont('times', 'italic');
-            doc.setFontSize(9);
-            doc.text('Ser, saber y emprender', TEXT_CX, 43, { align: 'center' });
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(7.5);
-            doc.text('Aprobado por Resoluci\u00f3n No 9385 del 10 - 11 - 2025', TEXT_CX, 49, { align: 'center' });
-            doc.text('DANE 313001800093  \u2013  NIT 73143410 - 6', TEXT_CX, 54, { align: 'center' });
-
-            // ── Navy divider bar under text block (filled + black border) ──
-            const barX = LOGO_X + LOGO_W + 7;
-            const barW = Math.max(86, TEXT_RIGHT - barX - 1);
-            doc.setFillColor(10, 35, 90);
-            doc.setDrawColor(0, 0, 0);
-            doc.setLineWidth(0.35);
-            doc.rect(barX, 59, barW, 2.1, 'FD');
-        };
-
-        /* ─── Watermark ─── */
-        const drawWatermark = () => {
-            if (logoWatermark) {
-                doc.addImage(logoWatermark, 'PNG', 47, 118, 116, 116);
-            } else {
-                doc.setTextColor(228, 230, 238);
-                doc.setFont('times', 'bold');
-                doc.setFontSize(92);
-                doc.text('I.P', W / 2, 185, { align: 'center' });
-            }
-        };
-
-        /* ─── Footer ─── */
-        const drawFooter = () => {
-            doc.setDrawColor(100, 100, 100);
-            doc.setLineWidth(0.25);
-            doc.line(25, 280, 185, 280);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6.5);
-            doc.setTextColor(35, 35, 35);
-            doc.text('Villas de la candelaria Mz. 44 Lt. 11  CEL: 3005257812 - 3006529540', W / 2, 284, { align: 'center' });
-            doc.setTextColor(0, 56, 168);
-            doc.text('EMAIL: emprendedores.sersaber2023@gmail.com', W / 2, 288.5, { align: 'center' });
-            doc.setTextColor(35, 35, 35);
-            doc.text('Cartagena de Indias - Colombia', W / 2, 293, { align: 'center' });
-        };
-
-        /* ─── Firma ─── */
-        const coordinadoraNombre = (cert.coordinadora || PDF_INSTITUCION.firmaNombre).toUpperCase();
-        const drawFirma = (yLine: number) => {
-            doc.setDrawColor(30, 30, 30);
-            doc.setLineWidth(0.3);
-            doc.line(75, yLine, 135, yLine);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(8.5);
-            doc.setTextColor(20, 20, 20);
-            doc.text(coordinadoraNombre, W / 2, yLine - 2, { align: 'center' });
-            doc.setFontSize(9);
-            doc.text('COORDINADORA', W / 2, yLine + 6, { align: 'center' });
-        };
-
-        /* ─── "Certifica" heading ─── */
-        const drawTituloCertifica = () => {
-            doc.setTextColor(20, 20, 20);
-            doc.setFont('times', 'bold');
-            doc.setFontSize(10.5);
-            doc.text('LA SUSCRITA COORDINADORA DEL', W / 2, 75, { align: 'center' });
-            doc.text('INSTITUTO PEDAG\u00d3GICO EMPRENDEDORES DEL SABER', W / 2, 83, { align: 'center' });
-            doc.setFontSize(13);
-            doc.text('CERTIFICA:', W / 2, 99, { align: 'center' });
-        };
-
-        /* ─── Assemble page ─── */
-        drawHeader();
-        drawWatermark();
-        drawTituloCertifica();
-
-        const marX  = 22;
-        const bodyW = W - marX * 2;
-        const fSize = 10.8;
-        const lH    = 6.5;
-
-        if (codigo.includes('nota') || codigo.includes('calific')) {
-            // ── Certificado de Notas ──
-            const segs: RichSeg[] = [
-                { text: 'Que el estudiante ' },
-                { text: nombreEstudiante, bold: true },
-                { text: ' identificado con ' },
-                { text: documento, bold: true },
-                { text: ' curs\u00f3 y aprob\u00f3 en nuestro instituto durante el a\u00f1o lectivo ' },
-                { text: String(anio), bold: true },
-                { text: ', las \u00e1reas correspondientes a ' },
-                { text: curso, bold: true },
-                { text: ' de ' },
-                { text: nivelAcademico, bold: true },
-                { text: '.' },
-            ];
-            let y = renderRichParagraph(doc, segs, marX, 120, bodyW, fSize, 'times', lH);
-
-            const notas = cert.notas?.length > 0
-                ? cert.notas.map(n => [
-                    n.materia.toUpperCase(),
-                    String(n.ih || 0),
-                    n.definitiva.toFixed(1),
-                    getEscalaValorativa(n.definitiva),
-                ])
-                : [['SIN REGISTROS ACAD\u00c9MICOS', '-', '-', '-']];
-
-            autoTable(doc, {
-                startY: y + 4,
-                margin: { left: marX, right: marX },
-                head: [['\u00c1REAS / ASIGNATURAS', 'I.H.', 'NOTA DEFINITIVA', 'ESCALA VALORATIVA']],
-                body: notas,
-                theme: 'grid',
-                styles: {
-                    font: 'times',
-                    fontSize: 7.8,
-                    cellPadding: 1.9,
-                    textColor: [10, 10, 10],
-                    lineColor: [40, 40, 40],
-                    lineWidth: 0.2,
-                },
-                headStyles: {
-                    fillColor: [215, 215, 215],
-                    textColor: [10, 10, 10],
-                    fontStyle: 'bold',
-                    halign: 'center',
-                    fontSize: 7.8,
-                },
-                columnStyles: {
-                    0: { cellWidth: 74 },
-                    1: { cellWidth: 14, halign: 'center' },
-                    2: { cellWidth: 36, halign: 'center' },
-                    3: { cellWidth: 42, halign: 'center' },
-                },
-            });
-
-            const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 202;
-            const cierreSegs: RichSeg[] = [
-                { text: `El presente certificado se expide en Cartagena de Indias D. T. y C. a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.` },
-            ];
-            const cY = renderRichParagraph(doc, cierreSegs, marX, finalY + 10, bodyW, fSize, 'times', lH);
-            drawFirma(Math.min(Math.max(cY + 6, 200), 256));
-            drawFooter();
-        } else {
-            // ── Paz y Salvo / Estudio / Matrícula ──
-            let segs: RichSeg[] = [];
-
-            if (codigo.includes('paz')) {
-                segs = [
-                    { text: 'Que el estudiante ' },
-                    { text: nombreEstudiante, bold: true },
-                    { text: ' identificado con ' },
-                    { text: documento, bold: true },
-                    { text: ' cursa en nuestro instituto ' },
-                    { text: curso, bold: true },
-                    { text: ' de educaci\u00f3n ' },
-                    { text: nivelAcademico, bold: true },
-                    { text: ', se encuentra a ' },
-                    { text: 'PAZ Y SALVO', bold: true },
-                    { text: ` por todo concepto hasta el mes de ${mes} del a\u00f1o ${anio}.` },
-                ];
-            } else if (codigo.includes('mat') || codigo.includes('estudio') || codigo.includes('constancia')) {
-                segs = [
-                    { text: 'Que el estudiante ' },
-                    { text: nombreEstudiante, bold: true },
-                    { text: ' identificado con ' },
-                    { text: documento, bold: true },
-                    { text: ' cursa en nuestro instituto ' },
-                    { text: curso, bold: true },
-                    { text: ' de ' },
-                    { text: nivelAcademico, bold: true },
-                    { text: ` en el a\u00f1o lectivo ` },
-                    { text: String(anio), bold: true },
-                    { text: '.' },
-                ];
-            } else {
-                segs = [
-                    { text: 'Que el estudiante ' },
-                    { text: nombreEstudiante, bold: true },
-                    { text: ' identificado con ' },
-                    { text: documento, bold: true },
-                    { text: ' pertenece activamente a nuestro instituto y cursa ' },
-                    { text: curso, bold: true },
-                    { text: ' de ' },
-                    { text: nivelAcademico, bold: true },
-                    { text: ` durante el a\u00f1o lectivo ` },
-                    { text: String(anio), bold: true },
-                    { text: '.' },
-                ];
-            }
-
-            let y = renderRichParagraph(doc, segs, marX, 120, bodyW, fSize, 'times', lH);
-
-            const cierreBase = detalleAdicional && !codigo.includes('paz')
-                ? `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. ${detalleAdicional}, a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.`
-                : `El presente certificado se expide a solicitud del interesado en Cartagena de Indias D. T. y C. a los ${dia} d\u00edas del mes de ${mes} del a\u00f1o ${anio}.`;
-
-            const cierreSegs: RichSeg[] = [{ text: cierreBase }];
-            const cY = renderRichParagraph(doc, cierreSegs, marX, y + 8, bodyW, fSize, 'times', lH);
-            drawFirma(Math.min(Math.max(cY + 6, 200), 256));
-            drawFooter();
-        }
-
+        generarPaginaCertificado(doc, cert, logoHeader, logoWatermark);
         const fileName = `${cert.tipo_nombre.replace(/\s+/g, '_')}_${cert.estudiante.replace(/\s+/g, '_')}.pdf`;
         const blob = doc.output('blob');
-        if (descargar) {
-            doc.save(fileName);
-        }
-
+        if (descargar) doc.save(fileName);
         return { blob, fileName };
     }, []);
 
@@ -614,6 +562,50 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
             onFinish: () => setSendingNotif(false),
         });
     }, []);
+
+    // ── Vista previa de tipo de certificado ──
+    const generarPreview = useCallback(async (tipo: TipoCertificado) => {
+        setPreviewTipo(tipo);
+        setPreviewUrl(null);
+        const dummy: Certificado = {
+            id: 0,
+            tipo_certificado_id: tipo.id,
+            tipo_nombre: tipo.nombre,
+            tipo_codigo: tipo.codigo,
+            estudiante_id: 0,
+            estudiante: '___________________________',
+            estudiante_documento: '______________',
+            estudiante_tipo_documento: 'T.I.',
+            nivel: 'primaria',
+            curso_id: null,
+            curso: '____° ____',
+            jornada: 'MAÑANA',
+            coordinadora: '',
+            descripcion: null,
+            archivo: null,
+            fecha_solicitud: new Date().toISOString().slice(0, 10),
+            fecha_entrega: null,
+            estado: 'solicitado',
+            pago_estado: null,
+            pago_confirmado: true,
+            requiere_pago: false,
+            padres: [],
+            notas: [
+                { materia: 'MATEMÁTICAS', ih: 4, definitiva: 4.5, escala: 'SUPERIOR' },
+                { materia: 'LENGUA CASTELLANA', ih: 4, definitiva: 4.2, escala: 'ALTO' },
+                { materia: 'CIENCIAS NATURALES', ih: 3, definitiva: 3.8, escala: 'BÁSICO' },
+            ],
+        };
+        const { blob } = await generarPDF(dummy, false);
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+    }, [generarPDF]);
+
+    const closePreview = useCallback(() => {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+        setPreviewTipo(null);
+    }, [previewUrl]);
 
     // ── Computed ──
     const tiposActivos = useMemo(() => tiposCertificado.filter(t => t.activo), [tiposCertificado]);
@@ -680,6 +672,54 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
     }), [certificadosFiltrados]);
 
     const hayFiltrosActivos = sedeSel !== 'todas' || nivelSeleccionado !== 'todos' || cursoSeleccionado !== 'todos' || tipoSeleccionado !== 'todos' || estadoSeleccionado !== 'todos' || busqueda !== '';
+
+    // ── Exportar PDF masivo (filtrados, una página por certificado) ──
+    const exportarPDFMasivo = useCallback(async () => {
+        if (certificadosFiltrados.length === 0) return;
+        setExportingPDF(true);
+        try {
+            const logoHeader    = await cargarPrimerLogoDisponible(1, 850);
+            const logoWatermark = await cargarPrimerLogoDisponible(0.08, 1400);
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            certificadosFiltrados.forEach((cert, i) => {
+                if (i > 0) doc.addPage();
+                generarPaginaCertificado(doc, cert, logoHeader, logoWatermark);
+            });
+            const fecha = new Date().toISOString().slice(0, 10);
+            doc.save(`certificados_${fecha}.pdf`);
+        } finally {
+            setExportingPDF(false);
+        }
+    }, [certificadosFiltrados]);
+
+    // ── Exportar Excel (hoja "Todos" + una hoja por tipo) ──
+    const exportarExcel = useCallback(() => {
+        if (certificadosFiltrados.length === 0) return;
+        const toRow = (cert: Certificado) => ({
+            'Estudiante':       cert.estudiante,
+            'Documento':        cert.estudiante_documento ?? '',
+            'Tipo Doc.':        cert.estudiante_tipo_documento ?? '',
+            'Nivel':            getNivelLabel(cert.nivel),
+            'Curso':            cert.curso,
+            'Jornada':          cert.jornada || '',
+            'Tipo Certificado': cert.tipo_nombre,
+            'Estado':           getEstadoLabel(cert.estado),
+            'Pago':             cert.requiere_pago ? (cert.pago_confirmado ? 'Pagado' : 'Pendiente') : 'N/A',
+            'Fecha Solicitud':  cert.fecha_solicitud ?? '',
+            'Fecha Entrega':    cert.fecha_entrega ?? '',
+            'Coordinadora':     cert.coordinadora,
+        });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(certificadosFiltrados.map(toRow)), 'Todos');
+        tiposCertificado.forEach(tipo => {
+            const certs = certificadosFiltrados.filter(c =>
+                c.tipo_certificado_id === tipo.id || c.tipo_codigo === tipo.codigo
+            );
+            if (certs.length === 0) return;
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(certs.map(toRow)), tipo.nombre.slice(0, 31));
+        });
+        XLSX.writeFile(wb, `certificados_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }, [certificadosFiltrados, tiposCertificado]);
 
     // ── Handlers ──
     const handleNivelChange = (nivel: string) => {
@@ -838,6 +878,16 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                 </div>
                                 <div className="flex items-center gap-2 ml-2 flex-shrink-0">
                                     <span className="text-sm font-bold text-green-600">{formatPrecio(tipo.precio)}</span>
+                                    <button
+                                        onClick={() => generarPreview(tipo)}
+                                        className="p-1 text-gray-400 hover:text-indigo-600"
+                                        title="Vista previa"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                        </svg>
+                                    </button>
                                     <button
                                         onClick={() => openModalTipo(tipo)}
                                         className="p-1 text-gray-400 hover:text-[#293577]"
@@ -1144,11 +1194,38 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                     )}
                 </div>
 
-                {/* Contador */}
-                <div className="text-center">
+                {/* Contador + Exportar */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-xs text-gray-400">
                         Mostrando {certificadosFiltrados.length} de {certificados.length} certificados
                     </p>
+                    {certificadosFiltrados.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={exportarExcel}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                </svg>
+                                Excel
+                            </button>
+                            <button
+                                onClick={exportarPDFMasivo}
+                                disabled={exportingPDF}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition-colors"
+                            >
+                                {exportingPDF ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                    </svg>
+                                )}
+                                PDF ({certificadosFiltrados.length})
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -1778,6 +1855,51 @@ export default function Certificados({ certificados, tiposCertificado, estudiant
                                     Cerrar
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ═══════════════════════════ MODAL VISTA PREVIA ═══════════════════════════ */}
+            {previewTipo && (
+                <div
+                    className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+                    onClick={closePreview}
+                >
+                    <div
+                        className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col"
+                        style={{ maxHeight: '92vh' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
+                            <div>
+                                <h3 className="font-bold text-gray-800 text-sm">Vista previa del certificado</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">{previewTipo.nombre} — campos con <span className="font-mono text-gray-500">________</span> se rellenan automáticamente</p>
+                            </div>
+                            <button
+                                onClick={closePreview}
+                                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-3" style={{ minHeight: 0 }}>
+                            {previewUrl ? (
+                                <iframe
+                                    src={previewUrl}
+                                    className="w-full rounded-lg border border-gray-200"
+                                    style={{ height: '72vh' }}
+                                    title={`Vista previa: ${previewTipo.nombre}`}
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center h-64">
+                                    <div className="text-center">
+                                        <div className="w-8 h-8 border-[3px] border-[#293577] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                        <p className="text-sm text-gray-500">Generando vista previa...</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

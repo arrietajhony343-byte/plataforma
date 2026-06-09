@@ -16,7 +16,7 @@ class CursoController extends Controller
 
     public function index(): Response
     {
-        $anio = Curso::max('anio') ?? now()->year;
+        $anio = Curso::max('anio') ?? now('America/Bogota')->year;
 
         $cursos = Curso::where('anio', $anio)
             ->when($this->sedeId(), fn($q, $sedeId) => $q->where('sede_id', $sedeId))
@@ -128,7 +128,7 @@ class CursoController extends Controller
             'imagen_file'        => 'nullable|image|max:4096',
         ]);
 
-        $anio = Curso::max('anio') ?? now()->year;
+        $anio = Curso::max('anio') ?? now('America/Bogota')->year;
         $materiasData = $data['materias_asignadas'] ?? [];
         unset($data['materias_asignadas']);
 

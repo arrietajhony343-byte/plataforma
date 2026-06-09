@@ -24,12 +24,12 @@ class DashboardController extends Controller
         $totalProfesores  = User::role('profesor')->activo()
             ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
             ->count();
-        $cursosActivos    = Curso::activo()->where('anio', now()->year)
+        $cursosActivos    = Curso::activo()->where('anio', now('America/Bogota')->year)
             ->when($sedeId, fn($q) => $q->where('sede_id', $sedeId))
             ->count();
 
         $diasRestantes = $periodoActivo
-            ? (int) now()->diffInDays($periodoActivo->fecha_fin, false)
+            ? (int) now('America/Bogota')->diffInDays($periodoActivo->fecha_fin, false)
             : 0;
 
         // Resumen financiero (solo admin ve pagos)
@@ -50,11 +50,13 @@ class DashboardController extends Controller
                     'name'        => $m->estudiante->name . ' (Estudiante)',
                     'description' => 'Matriculado en ' . $m->curso->nombre,
                     'time'        => $m->created_at->format('d/m H:i'),
+                    '_ts'         => $m->created_at->timestamp,
                 ]);
             });
 
-        // Últimas 3 observaciones
+        // Últimas 3 observaciones (filtradas por sede)
         Observacion::with('profesor', 'estudiante')
+            ->when($sedeId, fn($q) => $q->whereHas('estudiante', fn($eq) => $eq->where('sede_id', $sedeId)))
             ->latest()
             ->take(3)
             ->get()
@@ -64,6 +66,7 @@ class DashboardController extends Controller
                     'name'        => $o->profesor->name . ' (Profesor)',
                     'description' => "$tipo a {$o->estudiante->nombre_corto}",
                     'time'        => $o->created_at->format('d/m H:i'),
+                    '_ts'         => $o->created_at->timestamp,
                 ]);
             });
 
@@ -76,13 +79,17 @@ class DashboardController extends Controller
             ->each(function ($p) use (&$actividadReciente) {
                 $actividadReciente->push([
                     'name'        => $p->estudiante->nombre_corto . ' (Pago)',
-                    'description' => $p->conceptoPago->nombre . ' - $' . number_format($p->monto, 0, ',', '.'),
+                    'description' => ($p->conceptoPago?->nombre ?? 'Concepto') . ' - $' . number_format($p->monto, 0, ',', '.'),
                     'time'        => $p->fecha_pago?->format('d/m') ?? '',
+                    '_ts'         => $p->updated_at->timestamp,
                 ]);
             });
 
-        // Ordenar por tiempo y tomar 8
-        $actividadReciente = $actividadReciente->take(8)->values()->toArray();
+        // Ordenar por timestamp descendente y tomar 8
+        $actividadReciente = $actividadReciente->sortByDesc('_ts')->take(8)->map(function ($item) {
+            unset($item['_ts']);
+            return $item;
+        })->values()->toArray();
 
         return Inertia::render('Admin/Dashboard', [
             'stats' => [

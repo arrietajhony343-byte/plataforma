@@ -32,6 +32,13 @@ interface Props {
 export default function Boletines({ estudiante, periodoActual, boletines }: Props) {
     const nombre = estudiante?.nombre || 'Estudiante';
 
+    const formatFecha = (f: string | null | undefined) => {
+        if (!f) return '—';
+        const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+        if (Number.isNaN(d.getTime())) return f;
+        return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
     const getNotaColor = (n: number) => {
         if (n >= 4.0) return 'text-green-600';
         if (n >= 3.0) return 'text-amber-600';
@@ -58,15 +65,15 @@ export default function Boletines({ estudiante, periodoActual, boletines }: Prop
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div>
                         <p className="text-xs text-gray-400">Periodo</p>
-                        <p className="text-sm font-bold text-gray-800">{periodoActual?.nombre || 'Sin periodo activo'}</p>
+                        <p className="text-sm font-bold text-gray-800">{periodoActual?.nombre || 'Sin período activo'}</p>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400">Fecha Inicio</p>
-                        <p className="text-sm font-bold text-gray-800">{periodoActual?.fecha_inicio || '—'}</p>
+                        <p className="text-sm font-bold text-gray-800">{formatFecha(periodoActual?.fecha_inicio)}</p>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400">Fecha Fin</p>
-                        <p className="text-sm font-bold text-gray-800">{periodoActual?.fecha_fin || '—'}</p>
+                        <p className="text-sm font-bold text-gray-800">{formatFecha(periodoActual?.fecha_fin)}</p>
                     </div>
                     <div>
                         <p className="text-xs text-gray-400">Promedio Parcial</p>
@@ -76,7 +83,7 @@ export default function Boletines({ estudiante, periodoActual, boletines }: Prop
                     </div>
                 </div>
                 {!periodoActual?.boletin_generado && (
-                    <p className="text-xs text-gray-400 mt-3 italic">El boletin estara disponible cuando sea generado por administracion.</p>
+                    <p className="text-xs text-gray-400 mt-3 italic">El boletín estará disponible cuando sea generado por administración.</p>
                 )}
             </div>
 
@@ -84,8 +91,8 @@ export default function Boletines({ estudiante, periodoActual, boletines }: Prop
             <h3 className="font-bold text-gray-900 mb-3">Boletines Generados</h3>
             {boletines.length === 0 ? (
                 <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                    <p className="text-gray-700 font-semibold">Aun no tienes boletines generados.</p>
-                    <p className="text-gray-400 text-sm mt-1">Apareceran aqui en cuanto se publiquen oficialmente.</p>
+                    <p className="text-gray-700 font-semibold">Aún no tienes boletines generados.</p>
+                    <p className="text-gray-400 text-sm mt-1">Aparecerán aquí en cuanto se publiquen oficialmente.</p>
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -99,7 +106,7 @@ export default function Boletines({ estudiante, periodoActual, boletines }: Prop
                         <div className="flex-1 min-w-0">
                             <h4 className="font-bold text-gray-900 text-sm">{b.periodo} — {b.anio || ''}</h4>
                             <p className="text-xs text-gray-400">
-                                Puesto: {b.puesto ? `#${b.puesto}` : '—'} • {b.observacion || 'Sin observacion general'}
+                                Puesto: {b.puesto ? `#${b.puesto}` : '—'} • {b.observacion || 'Sin observación general'}
                             </p>
                         </div>
                         <div className="text-center flex-shrink-0">

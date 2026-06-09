@@ -23,6 +23,7 @@ interface PagoItem {
 }
 
 interface Props {
+    padre: { nombre: string };
     hijos: HijoOption[];
     hijo: { id: number; nombre: string } | null;
     pagos: PagoItem[];
@@ -33,10 +34,18 @@ interface Props {
     };
 }
 
-export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
+export default function Pagos({ padre, hijos, hijo, pagos, resumen }: Props) {
     const [selectedPago, setSelectedPago] = useState<PagoItem | null>(null);
     const [metodoPago, setMetodoPago] = useState<'tarjeta' | 'pse' | 'nequi' | 'transferencia' | 'efectivo'>('tarjeta');
     const [referencia, setReferencia] = useState('');
+    const [processing, setProcessing] = useState(false);
+
+    const formatFecha = (f: string | null) => {
+        if (!f) return '—';
+        const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+        if (Number.isNaN(d.getTime())) return f;
+        return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
 
     const formatMonto = (monto: number) => {
         return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(monto);
@@ -51,7 +60,8 @@ export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
     }, [pagos]);
 
     const procesarPago = () => {
-        if (!selectedPago) return;
+        if (!selectedPago || processing) return;
+        setProcessing(true);
 
         router.post(`/padre/pagos/${selectedPago.id}/pagar`, {
             metodo_pago: metodoPago,
@@ -63,11 +73,12 @@ export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
                 setReferencia('');
                 setMetodoPago('tarjeta');
             },
+            onFinish: () => setProcessing(false),
         });
     };
 
     return (
-        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: 'Padre', role: 'Padre' }}>
+        <SidebarLayout menuItems={padreMenuItems} userInfo={{ name: padre.nombre, role: 'Padre' }}>
             <Head title="Pagos" />
 
             <div className="space-y-6" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
@@ -119,9 +130,9 @@ export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
                             <div className={`rounded-xl shadow-sm p-5 ${proximoPago.estado === 'vencido' ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'}`}>
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                     <div>
-                                        <p className="font-bold text-gray-800">Proximo pago</p>
+                                        <p className="font-bold text-gray-800">Próximo pago</p>
                                         <p className="text-lg font-semibold mt-1">{proximoPago.concepto}</p>
-                                        <p className="text-sm text-gray-600">Vence: {proximoPago.fecha_vencimiento || '—'}</p>
+                                        <p className="text-sm text-gray-600">Vence: {formatFecha(proximoPago.fecha_vencimiento)}</p>
                                         {proximoPago.detalle && <p className="text-xs text-gray-500 mt-1">{proximoPago.detalle}</p>}
                                     </div>
                                     <div className="text-right">
@@ -149,14 +160,14 @@ export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
                                     <div key={p.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                         <div>
                                             <p className="font-medium text-gray-800">{p.concepto}</p>
-                                            <p className="text-xs text-gray-500">{p.periodo || 'Sin periodo'} · Vence: {p.fecha_vencimiento || '—'}</p>
-                                            {p.detalle && <p className="text-xs text-gray-500 mt-1">{p.detalle}</p>}
+                                            <p className="text-xs text-gray-500">{p.periodo || 'Sin período'} · Vence: {formatFecha(p.fecha_vencimiento)}</p>
+                                            {p.detalle && !p.es_certificado && <p className="text-xs text-gray-500 mt-1">{p.detalle}</p>}
                                             {p.es_certificado && <span className="inline-block mt-2 px-2 py-0.5 bg-[#293577]/10 text-[#293577] text-xs rounded-full">Tramite de certificado</span>}
                                         </div>
 
                                         <div className="sm:text-right">
                                             <p className="font-bold text-gray-800">{formatMonto(p.monto)}</p>
-                                            <p className="text-xs text-gray-500 mt-1">{p.fecha_pago ? `Pagado: ${p.fecha_pago}` : `Estado: ${p.estado}`}</p>
+                                            <p className="text-xs text-gray-500 mt-1">{p.fecha_pago ? `Pagado: ${formatFecha(p.fecha_pago)}` : `Estado: ${p.estado}`}</p>
                                         </div>
 
                                         <div>
@@ -202,7 +213,7 @@ export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
 
                         <div className="space-y-3">
                             <div>
-                                <label className="text-sm text-gray-600">Metodo de pago</label>
+                                <label className="text-sm text-gray-600">Método de pago</label>
                                 <select
                                     value={metodoPago}
                                     onChange={(e) => setMetodoPago(e.target.value as typeof metodoPago)}
@@ -228,9 +239,10 @@ export default function Pagos({ hijos, hijo, pagos, resumen }: Props) {
 
                         <button
                             onClick={procesarPago}
-                            className="mt-5 w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold"
+                            disabled={processing}
+                            className="mt-5 w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold disabled:opacity-60"
                         >
-                            Confirmar pago
+                            {processing ? 'Procesando...' : 'Confirmar pago'}
                         </button>
                     </div>
                 </div>

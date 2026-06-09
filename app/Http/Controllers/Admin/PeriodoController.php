@@ -17,7 +17,7 @@ class PeriodoController extends Controller
     {
         // Años disponibles
         $anios = Periodo::select('anio')->distinct()->orderByDesc('anio')->pluck('anio')->toArray();
-        $anioActual = (int) ($request->query('anio') ?? ($anios[0] ?? now()->year));
+        $anioActual = (int) ($request->query('anio') ?? ($anios[0] ?? now('America/Bogota')->year));
 
         // Asegurar que el año seleccionado esté en la lista
         if (!in_array($anioActual, $anios) && count($anios) > 0) {

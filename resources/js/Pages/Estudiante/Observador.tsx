@@ -21,6 +21,13 @@ interface Props {
     observaciones: ObservacionItem[];
 }
 
+const formatFecha = (f: string | null | undefined) => {
+    if (!f) return '—';
+    const d = new Date(f.length === 10 ? f + 'T12:00:00' : f);
+    if (Number.isNaN(d.getTime())) return f;
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 export default function Observador({ estudiante, disponible, observaciones }: Props) {
     const nombre = estudiante?.nombre || 'Estudiante';
     const [filtroTipo, setFiltroTipo] = useState('todos');
@@ -38,15 +45,15 @@ export default function Observador({ estudiante, disponible, observaciones }: Pr
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900" style={{ fontFamily: "'Inter', sans-serif" }}>Mi Observador</h1>
                 <p className="text-gray-500 mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                     {disponible
-                        ? 'Registro de observaciones academicas y de convivencia'
-                        : 'Las observaciones apareceran cuando los docentes registren comentarios para ti'}
+                        ? 'Registro de observaciones académicas y de convivencia'
+                        : 'Las observaciones aparecerán cuando los docentes registren comentarios para ti'}
                 </p>
             </div>
 
             {!disponible ? (
                 <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-                    <p className="text-gray-700 font-semibold">Aun no hay observaciones generadas.</p>
-                    <p className="text-gray-400 text-sm mt-1">Cuando se registren observaciones positivas o negativas, podras consultarlas aqui.</p>
+                    <p className="text-gray-700 font-semibold">Aún no hay observaciones generadas.</p>
+                    <p className="text-gray-400 text-sm mt-1">Cuando se registren observaciones positivas o negativas, podrás consultarlas aquí.</p>
                 </div>
             ) : (
                 <>
@@ -97,7 +104,7 @@ export default function Observador({ estudiante, disponible, observaciones }: Pr
                                 <p className="text-sm text-gray-600 italic">"{obs.descripcion}"</p>
                                 <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
                                     <span>{obs.profesor}</span>
-                                    <span>{obs.fecha}</span>
+                                    <span>{formatFecha(obs.fecha)}</span>
                                 </div>
                             </div>
                         </div>
